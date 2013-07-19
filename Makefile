@@ -13,6 +13,9 @@ all: build
 
 build: $(TARGET)
 
+clean:
+	rm -f $(TARGET)
+
 install: build
 	install -d $(DESTDIR)/usr/bin/
 	install -s goproxy $(DESTDIR)/usr/bin/
@@ -22,9 +25,6 @@ install: build
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/
 	install -d $(DESTDIR)/etc/goproxy/
 	install -m 644 resolv.conf $(DESTDIR)/etc/goproxy/
-
-clean:
-	rm -f $(TARGET)
 
 goproxy: goproxy.go
 	go build -o $@ $^

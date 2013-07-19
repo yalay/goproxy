@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/shell909090/goproxy.png?branch=master)](https://travis-ci.org/shell909090/goproxy)
+
 # goproxy #
 
 goproxy是基于go写的隧道代理服务器。主要分为两个部分，客户端和服务器端。客户端使用http或socks5协议向其他程序提供一个标准代理。当客户端接受请求后，会加密连接服务器端，请求服务器端连接目标。双方通过预共享的密钥和加密算法通讯，通过用户名/密码验证身份。

@@ -19,15 +19,71 @@ type Session struct {
 	on_conn func (addr net.TCPAddr, streamid uint16) (s *Stream, err error)
 }
 
-func (s *Session) Dail (addr net.TCPAddr) (stream *Stream, err error) {
+func (s *Session) WriteFrame (f Frame) (err error) {
+	s.wlock.Lock()
+	defer s.wlock.Unlock()
+	return ft.WriteFrame(s.w)
+}
+
+func (s *Session) ReadFrame () (f Frame, err error) {
+	s.wlock.Lock()
+	defer s.wlock.Unlock()
+	f, err = ReadFrame(s.w)
+	return
+}
+
+func (s *Session) Dial (hostname string, port uint16) (stream *Stream, err error) {
+	err = s.WriteFrame(&FrameSyn{streamid: s.GetNextId(), port: port, target: hostname})
+	if err != nil { return }
+
+	switch f.(type) {
+	case *FrameOK:
+		stream := &Stream{
+			s: s, streamid: ft.streamid,
+			read_closed: false,
+			write_closed: false,
+			write_window: 65536, conn: nil}
+		return stream, nil
+	case *FrameFAILED:
+		return errors.New("connect failed")
+	default:
+		return errors.New("dail read type error")
+	}
 	return
 }
 
 func (s *Session) Auth (username string, password string) (err error) {
+	err = s.WriteFrame(&FrameAuth{streamid: 0, username: username, password: password})
+	if err != nil { return }
+
+	f, err := s.ReadFrame()
+	if err != nil { return }
+
+	switch f.(type) {
+	case *FrameOK:
+		return
+	case *FrameFAILED:
+		return errors.New("auth read failed")
+	default:
+		return errors.New("auth read type error")
+	}
 	return
 }
 
-func (s *Session) GetAuth (on_auth func (username string, password string) (bool)) (err error) {
+func (s *Session) OnAuth (on_auth func (username string, password string) (bool)) (err error) {
+	f, err := ReadFrame(s.r)
+	if err != nil { return }
+
+	fs, ok := f.(*FrameAuth)
+	if !ok { return errors.New("getauth read type error") }	
+
+	if on_auth(fs.username, fs.password) {
+		fr := &FrameOK{streamid: 0}
+		err = fr.WriteFrame(s.w)
+	} else {
+		fr := &FrameFAILED{streamid: 0}
+		err = fr.WriteFrame(s.w)
+	}
 	return
 }
 
@@ -60,12 +116,15 @@ func (s *Session) Run () {
 			panic("what the hell")
 		case *FrameOK:
 			// ??
+			panic("what the hell")
 		case *FrameFAILED:
 			// ??
+			panic("what the hell")
 		case *FrameData:
 			stream, ok := s.streams[ft.streamid]
 			if !ok {
 				// failed
+				panic("frame data stream id not exist")
 			}
 			_, err := stream.pw.Write(ft.data)
 			// write all?
@@ -75,15 +134,19 @@ func (s *Session) Run () {
 		case *FrameSyn:
 			stream, ok := s.streams[ft.streamid]
 			if !ok {
-				// failed
+				panic("frame sync stream id not exist")
 			}
-			addr, _ := ft.GetTcpAddr()
-			stream, err = s.on_conn(addr, ft.streamid)
+			conn, err := ft.Dial()
 			if err != nil {
-				// failed
-				// fr := new(FrameFAILED)
-				// fr.streamid = 
+				fr := new(FrameFAILED)
+				fr.streamid = ft.streamid
+				ft.WriteFrame(s.w)
 			} else {
+				stream := &Stream{
+					s: s, streamid: ft.streamid,
+					read_closed: false,
+					write_closed: false,
+					write_window: 65536, conn: conn}
 				s.streams[ft.streamid] = stream
 				fr := new(FrameOK)
 				fr.streamid = ft.streamid
@@ -92,7 +155,7 @@ func (s *Session) Run () {
 		case *FrameAck:
 			stream, ok := s.streams[ft.streamid]
 			if !ok {
-				// failed
+				panic("frame ack stream id not exist")
 			}
 			atomic.AddUint32(&stream.write_window, ft.move_window)
 		case *FrameFin:
@@ -124,6 +187,7 @@ type Stream struct {
 	write_window uint32
 	pr io.PipeReader // will this block?
 	pw io.PipeWriter
+	conn net.Conn
 }
 
 func (s *Stream) Read(p []byte) (n int, err error) {

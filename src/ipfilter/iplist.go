@@ -8,8 +8,8 @@ import (
 	"logging"
 	"net"
 	"os"
-	"qsocks"
 	"strings"
+	"sutils"
 )
 
 type IPList []net.IPNet
@@ -49,6 +49,7 @@ func ReadIPList(filename string) (iplist IPList, err error) {
 		iplist = append(iplist, ipnet)
 	}
 
+	logging.Info("blacklist loaded %d record(s).", len(iplist))
 	return
 }
 
@@ -62,8 +63,25 @@ func (iplist IPList) Contain(ip net.IP) bool {
 	return false
 }
 
-func (iplist IPList) Dial(hostname string, port uint16, white bool, dialer *qsocks.Dialer) (conn net.Conn, err error) {
-	if iplist == nil {
+type FilteredDialer struct {
+	dialer sutils.Dialer
+	iplist IPList
+	white  bool
+}
+
+func NewFilteredDialer(filename string, white bool, dialer sutils.Dialer) (
+	fd *FilteredDialer, err error) {
+	fd = &FilteredDialer{
+		dialer: dialer,
+		white:  white,
+	}
+
+	fd.iplist, err = ReadIPList(filename)
+	return
+}
+
+func (fd *FilteredDialer) Dial(hostname string, port uint16) (conn net.Conn, err error) {
+	if fd.iplist == nil {
 		return net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	}
 
@@ -72,17 +90,17 @@ func (iplist IPList) Dial(hostname string, port uint16, white bool, dialer *qsoc
 		return
 	}
 
-	if white {
-		if !iplist.Contain(addr) {
-			logging.Debug("ip %s in list, mode white.", addr)
+	if fd.white {
+		if !fd.iplist.Contain(addr) {
+			logging.Debug("ip %s not in list, mode white.", addr)
 			return net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 		}
 	} else {
-		if iplist.Contain(addr) {
+		if fd.iplist.Contain(addr) {
 			logging.Debug("ip %s in list, mode black.", addr)
 			return net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 		}
 	}
 
-	return dialer.Dial(hostname, port)
+	return fd.dialer.Dial(hostname, port)
 }

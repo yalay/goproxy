@@ -115,3 +115,23 @@ func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
 	}
 	return
 }
+
+func (qs *QsocksService) ServeTCP(listener net.Listener) (err error) {
+	var conn net.Conn
+
+	for {
+		conn, err = listener.Accept()
+		if err != nil {
+			logging.Err(err)
+			return
+		}
+		go func() {
+			defer conn.Close()
+			e := qs.QsocksHandler(conn)
+			if e != nil {
+				logging.Err(e)
+			}
+		}()
+	}
+	return
+}

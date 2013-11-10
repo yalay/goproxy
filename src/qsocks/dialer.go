@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-type Dialer struct {
+type QsocksDialer struct {
 	serveraddr   string
 	cryptWrapper func(net.Conn) (net.Conn, error)
 	username     string
@@ -13,8 +13,8 @@ type Dialer struct {
 }
 
 func NewDialer(serveraddr string, cryptWrapper func(net.Conn) (net.Conn, error),
-	username, password string) (d *Dialer) {
-	return &Dialer{
+	username, password string) (qd *QsocksDialer) {
+	return &QsocksDialer{
 		serveraddr:   serveraddr,
 		cryptWrapper: cryptWrapper,
 		username:     username,
@@ -22,7 +22,7 @@ func NewDialer(serveraddr string, cryptWrapper func(net.Conn) (net.Conn, error),
 	}
 }
 
-func (d *Dialer) Dial(hostname string, port uint16) (conn net.Conn, err error) {
+func (d *QsocksDialer) Dial(hostname string, port uint16) (conn net.Conn, err error) {
 	conn, err = net.Dial("tcp", d.serveraddr)
 	if err != nil {
 		return
@@ -62,13 +62,3 @@ func (d *Dialer) Dial(hostname string, port uint16) (conn net.Conn, err error) {
 	}
 	return
 }
-
-// func (d *Dialer) DialConn(network, addr string) (c net.Conn, err error) {
-// 	addrs := strings.Split(addr, ":")
-// 	hostname := addrs[0]
-// 	port, err := strconv.Atoi(addrs[1])
-// 	if err != nil {
-// 		return
-// 	}
-// 	return d.Dail(hostname, uint16(port))
-// }

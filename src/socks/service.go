@@ -5,9 +5,18 @@ import (
 	"errors"
 	"logging"
 	"net"
+	"sutils"
 )
 
-func SocksHandler(conn net.Conn) (hostname string, port uint16, err error) {
+type SocksService struct {
+	dialer sutils.Dialer
+}
+
+func NewService(dialer sutils.Dialer) (ss *SocksService) {
+	return &SocksService{dialer: dialer}
+}
+
+func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error) {
 	logging.Debug("connection comein")
 
 	reader := bufio.NewReader(conn)
@@ -32,7 +41,7 @@ func SocksHandler(conn net.Conn) (hostname string, port uint16, err error) {
 	}
 	logging.Debug("handshark ok")
 
-	hostname, port, err = GetConnect(reader)
+	hostname, port, err := GetConnect(reader)
 	if err != nil {
 		// general SOCKS server failure
 		SendConnectResponse(writer, 0x01)
@@ -40,5 +49,37 @@ func SocksHandler(conn net.Conn) (hostname string, port uint16, err error) {
 	}
 	logging.Debug("dst:", hostname, port)
 
-	return hostname, port, nil
+	dstconn, err = ss.dialer.Dial(hostname, port)
+	if err != nil {
+		// Connection refused
+		SendConnectResponse(writer, 0x05)
+		return
+	}
+	SendConnectResponse(writer, 0x00)
+
+	return dstconn, nil
+}
+
+func (ss *SocksService) ServeTCP(listener net.Listener) (err error) {
+	var conn net.Conn
+
+	for {
+		conn, err = listener.Accept()
+		if err != nil {
+			logging.Err(err)
+			return
+		}
+		go func() {
+			defer conn.Close()
+
+			dstconn, err := ss.SocksHandler(conn)
+			if err != nil {
+				return
+			}
+
+			sutils.CopyLink(conn, dstconn)
+			return
+		}()
+	}
+	return
 }

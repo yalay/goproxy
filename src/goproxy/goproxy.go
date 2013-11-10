@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"cryptconn"
 	"dns"
 	"flag"
@@ -65,11 +64,18 @@ func run_server() {
 		return
 	}
 
-	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
-		defer conn.Close()
-		qs.QsocksHandler(conn)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
+	if err != nil {
+		logging.Err(err)
 		return
-	})
+	}
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		logging.Err(err)
+		return
+	}
+
+	err = qs.ServeTCP(listener)
 	if err != nil {
 		logging.Err(err)
 	}
@@ -77,10 +83,6 @@ func run_server() {
 
 func run_client() {
 	var err error
-
-	if cryptWrapper == nil {
-		logging.Warning("client mode without keyfile")
-	}
 
 	if len(flag.Args()) < 1 {
 		panic("args not enough")
@@ -95,37 +97,35 @@ func run_client() {
 		}
 	}
 
-	var blacklist ipfilter.IPList
-	if blackfile != "" {
-		blacklist, err = ipfilter.ReadIPList(blackfile)
-		if err != nil {
-			return
-		}
-		logging.Info("blacklist loaded %d record(s).", len(blacklist))
+	var dialer sutils.Dialer
+	dialer = qsocks.NewDialer(
+		serveraddr, cryptWrapper, username, password)
+	if err != nil {
+		return
 	}
 
-	dialer := qsocks.NewDialer(serveraddr, cryptWrapper, username, password)
-
-	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
-		defer conn.Close()
-
-		writer := bufio.NewWriter(conn)
-		hostname, port, err := socks.SocksHandler(conn)
+	if blackfile != "" {
+		dialer, err = ipfilter.NewFilteredDialer(
+			blackfile, false, dialer)
 		if err != nil {
 			return
 		}
+	}
 
-		dstconn, err := blacklist.Dial(hostname, port, false, dialer)
-		if err != nil {
-			// Connection refused
-			socks.SendConnectResponse(writer, 0x05)
-			return
-		}
-		socks.SendConnectResponse(writer, 0x00)
+	ss := socks.NewService(dialer)
 
-		sutils.CopyLink(conn, dstconn)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
+	if err != nil {
+		logging.Err(err)
 		return
-	})
+	}
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		logging.Err(err)
+		return
+	}
+
+	err = ss.ServeTCP(listener)
 	if err != nil {
 		logging.Err(err)
 	}
@@ -233,6 +233,10 @@ func main() {
 			logging.Err("crypto not work, cipher or keyfile wrong.")
 			return
 		}
+	}
+
+	if cryptWrapper == nil {
+		logging.Warning("no vaild keyfile.")
 	}
 
 	logging.Infof("%s mode start", runmode)

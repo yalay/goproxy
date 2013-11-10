@@ -4,8 +4,8 @@ import (
 	"dns"
 	"flag"
 	"fmt"
+	"logging"
 	"socks"
-	"sutils"
 )
 
 func main() {
@@ -13,12 +13,12 @@ func main() {
 
 	blacklist, err := socks.ReadIPList("routes.list.gz")
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 		return
 	}
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 		return
 	}
 

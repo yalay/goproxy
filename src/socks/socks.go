@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"logging"
 	"net"
-	"sutils"
 )
 
 func readLeadByte(reader io.Reader) (b []byte, err error) {
@@ -105,7 +105,7 @@ func GetConnect(reader *bufio.Reader) (hostname string, port uint16, err error) 
 
 	switch c {
 	case 0x01: // IP V4 address
-		sutils.Debug("socks with ipaddr")
+		logging.Debug("socks with ipaddr")
 		ip := net.IP{}
 		_, err = io.ReadFull(reader, ip)
 		if err != nil {
@@ -113,7 +113,7 @@ func GetConnect(reader *bufio.Reader) (hostname string, port uint16, err error) 
 		}
 		hostname = ip.String()
 	case 0x03: // DOMAINNAME
-		sutils.Debug("socks with domain")
+		logging.Debug("socks with domain")
 		hostname, err = readString(reader)
 		if err != nil {
 			return

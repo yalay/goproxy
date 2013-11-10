@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"encoding/hex"
 	"io"
+	"logging"
 	"net"
 	"sutils"
 )
@@ -23,7 +24,7 @@ func (sc CryptConn) Read(b []byte) (n int, err error) {
 	}
 	sc.in.XORKeyStream(b[:n], b[:n])
 	if DEBUGOUTPUT {
-		sutils.Debug("recv\n", hex.Dump(b[:n]))
+		logging.Debug("recv\n", hex.Dump(b[:n]))
 	}
 	return
 }
@@ -33,13 +34,13 @@ type writerOnly struct {
 }
 
 func (sc CryptConn) ReadFrom(r io.Reader) (n int64, err error) {
-	sutils.Debug("cryptconn readfrom call")
+	logging.Debug("cryptconn readfrom call")
 	return sutils.CoreCopy(writerOnly{sc}, r)
 }
 
 func (sc CryptConn) Write(b []byte) (n int, err error) {
 	if DEBUGOUTPUT {
-		sutils.Debug("send\n", hex.Dump(b))
+		logging.Debug("send\n", hex.Dump(b))
 	}
 	sc.out.XORKeyStream(b[:], b[:])
 	return sc.TCPConn.Write(b)

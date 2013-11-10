@@ -17,9 +17,9 @@
 package dns
 
 import (
+	"logging"
 	"math/rand"
 	"net"
-	"sutils"
 	"time"
 )
 
@@ -36,11 +36,11 @@ func check_black(msg *dnsMsg, name string, qtype uint16) bool {
 		return false
 	}
 	if len(addrs) == 0 {
-		sutils.Debug("no such host recved")
+		logging.Debug("no such host recved")
 		return true
 	}
 	if cfg.CheckBlack(addrs) {
-		sutils.Debug("fake dns resolv hited.")
+		logging.Debug("fake dns resolv hited.")
 		return true
 	}
 	return false

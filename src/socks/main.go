@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"logging"
 	"net"
 	"os"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func SocksHandler(conn net.Conn) (srcconn net.Conn, dstconn net.Conn, err error) {
-	sutils.Debug("connection comein")
+	logging.Debug("connection comein")
 	srcconn = conn
 
 	reader := bufio.NewReader(conn)
@@ -32,7 +33,7 @@ func SocksHandler(conn net.Conn) (srcconn net.Conn, dstconn net.Conn, err error)
 	if method == 0xff {
 		return nil, nil, errors.New("auth method wrong")
 	}
-	sutils.Debug("handshark ok")
+	logging.Debug("handshark ok")
 
 	hostname, port, err := GetConnect(reader)
 	if err != nil {
@@ -40,7 +41,7 @@ func SocksHandler(conn net.Conn) (srcconn net.Conn, dstconn net.Conn, err error)
 		SendConnectResponse(writer, 0x01)
 		return
 	}
-	sutils.Debug("dst:", hostname, port)
+	logging.Debug("dst:", hostname, port)
 
 	dstconn, err = Dail(hostname, port)
 	if err != nil {
@@ -75,7 +76,7 @@ func LoadPassfile(filename string) (err error) {
 }
 
 func QsocksHandler(conn net.Conn) (err error) {
-	sutils.Debug("connection comein")
+	logging.Debug("connection comein")
 	if cryptWrapper != nil {
 		conn, err = cryptWrapper(conn)
 		if err != nil {
@@ -95,7 +96,7 @@ func QsocksHandler(conn net.Conn) (err error) {
 			return fmt.Errorf("failed with auth: %s:%s", username, password)
 		}
 	}
-	sutils.Debug("qsocks auth passed")
+	logging.Debug("qsocks auth passed")
 
 	req, err := GetReq(conn)
 	if err != nil {
@@ -109,7 +110,7 @@ func QsocksHandler(conn net.Conn) (err error) {
 		if err != nil {
 			return
 		}
-		sutils.Debug("try connect to", hostname, port)
+		logging.Debug("try connect to", hostname, port)
 		var dstconn net.Conn
 		dstconn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 		if err != nil {

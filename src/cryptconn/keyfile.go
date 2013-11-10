@@ -6,9 +6,9 @@ import (
 	"crypto/des"
 	"crypto/rc4"
 	"io"
+	"logging"
 	"net"
 	"os"
-	"sutils"
 )
 
 func ReadKey(keyfile string, keysize int, ivsize int) (key []byte, iv []byte, err error) {
@@ -34,7 +34,7 @@ func NewCryptWrapper(method string, keyfile string) (f func(net.Conn) (net.Conn,
 	var keylen int
 	var ivlen int
 
-	sutils.Debug("Crypt Wrapper with", method, "preparing")
+	logging.Debug("Crypt Wrapper with", method, "preparing")
 	switch method {
 	case "aes":
 		keylen = 16

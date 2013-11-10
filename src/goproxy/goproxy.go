@@ -4,6 +4,7 @@ import (
 	"cryptconn"
 	"dns"
 	"flag"
+	"logging"
 	"net"
 	"net/http"
 	"socks"
@@ -19,7 +20,7 @@ var password string
 var passfile string
 var blackfile string
 var runmode string
-var logger *sutils.Logger
+var logger *logging.Logger
 
 func init() {
 	var logfile string
@@ -38,16 +39,16 @@ func init() {
 	flag.StringVar(&loglevel, "loglevel", "WARNING", "log level")
 	flag.Parse()
 
-	lv, err := sutils.GetLevelByName(loglevel)
+	lv, err := logging.GetLevelByName(loglevel)
 	if err != nil {
 		panic(err.Error())
 	}
-	err = sutils.SetupLog(logfile, lv, 16)
+	err = logging.SetupLog(logfile, lv, 16)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	logger = sutils.NewLogger("goproxy")
+	logger = logging.NewLogger("goproxy")
 }
 
 var cryptWrapper func(net.Conn) (net.Conn, error) = nil
@@ -66,12 +67,12 @@ func run_server() {
 		defer conn.Close()
 		err = socks.QsocksHandler(conn)
 		if err != nil {
-			sutils.Err(err)
+			logging.Err(err)
 		}
 		return nil
 	})
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 	}
 }
 
@@ -79,7 +80,7 @@ func run_client() {
 	var err error
 
 	if cryptWrapper == nil {
-		sutils.Warning("client mode without keyfile")
+		logging.Warning("client mode without keyfile")
 	}
 
 	if len(flag.Args()) < 1 {
@@ -108,7 +109,7 @@ func run_client() {
 		return
 	})
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 	}
 }
 
@@ -117,7 +118,7 @@ var tspt http.Transport
 type Proxy struct{}
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sutils.Info(r.Method, r.URL)
+	logging.Info(r.Method, r.URL)
 
 	if r.Method == "CONNECT" {
 		p.Connect(w, r)
@@ -131,7 +132,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := tspt.RoundTrip(r)
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 		return
 	}
 	defer resp.Body.Close()
@@ -145,7 +146,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 		return
 	}
 	return
@@ -154,12 +155,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	hij, ok := w.(http.Hijacker)
 	if !ok {
-		sutils.Err("httpserver does not support hijacking")
+		logging.Err("httpserver does not support hijacking")
 		return
 	}
 	srcconn, _, err := hij.Hijack()
 	if err != nil {
-		sutils.Err("Cannot hijack connection ", err)
+		logging.Err("Cannot hijack connection ", err)
 		return
 	}
 	defer srcconn.Close()
@@ -170,7 +171,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 	dstconn, err := socks.DialConn("tcp", host)
 	if err != nil {
-		sutils.Err(err)
+		logging.Err(err)
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}
@@ -183,7 +184,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 
 func run_httproxy() {
 	if cryptWrapper == nil {
-		sutils.Warning("client mode without keyfile")
+		logging.Warning("client mode without keyfile")
 	}
 
 	if len(flag.Args()) < 1 {
@@ -211,20 +212,20 @@ func main() {
 	if len(keyfile) > 0 {
 		cryptWrapper, err = cryptconn.NewCryptWrapper(cipher, keyfile)
 		if err != nil {
-			sutils.Err("crypto not work, cipher or keyfile wrong.")
+			logging.Err("crypto not work, cipher or keyfile wrong.")
 			return
 		}
 	}
 
 	switch runmode {
 	case "server":
-		sutils.Info("server mode")
+		logging.Info("server mode")
 		run_server()
 	case "client":
-		sutils.Info("client mode")
+		logging.Info("client mode")
 		run_client()
 	case "httproxy":
-		sutils.Info("httproxy mode")
+		logging.Info("httproxy mode")
 		run_httproxy()
 	}
 }

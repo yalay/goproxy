@@ -5,6 +5,7 @@ import (
 	"dns"
 	"fmt"
 	"io"
+	"logging"
 	"net"
 	"os"
 	"strconv"
@@ -45,7 +46,7 @@ func ReadIPList(filename string) (iplist IPList, err error) {
 func (iplist IPList) Contain(ip net.IP) bool {
 	for _, ipnet := range iplist {
 		if ipnet.Contains(ip) {
-			sutils.Debug(ipnet, "matches")
+			logging.Debug(ipnet, "matches")
 			return true
 		}
 	}
@@ -70,14 +71,14 @@ func (dc DNSCache) free() {
 	for _, k := range dellist {
 		delete(dc, k)
 	}
-	sutils.Info(len(dellist), "dnscache records deleted.")
+	logging.Info(len(dellist), "dnscache records deleted.")
 	return
 }
 
 func (dc DNSCache) Lookup(hostname string) (ip net.IP, err error) {
 	ipe, ok := dc[hostname]
 	if ok {
-		sutils.Debug("hostname", hostname, "cached")
+		logging.Debug("hostname", hostname, "cached")
 		return ipe.ip, nil
 	}
 
@@ -112,7 +113,7 @@ func InitDail(blackfile string, serveraddr_ string,
 	if blackfile != "" {
 		var err error
 		blacklist, err = ReadIPList(blackfile)
-		sutils.Info("blacklist loaded,", len(blacklist), "record(s).")
+		logging.Info("blacklist loaded,", len(blacklist), "record(s).")
 		if err != nil {
 			panic(err.Error())
 		}
@@ -139,7 +140,7 @@ func Dail(hostname string, port uint16) (c net.Conn, err error) {
 	}
 	switch {
 	case blacklist.Contain(addr):
-		sutils.Debug("ip", addr, "in black list.")
+		logging.Debug("ip", addr, "in black list.")
 		return net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	}
 	return connect_qsocks(serveraddr, username, password, hostname, port)

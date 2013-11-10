@@ -22,18 +22,29 @@ type Session struct {
 func (s *Session) WriteFrame(f Frame) (err error) {
 	s.wlock.Lock()
 	defer s.wlock.Unlock()
-	return ft.WriteFrame(s.w)
+	return f.WriteFrame(s.w)
 }
 
 func (s *Session) ReadFrame() (f Frame, err error) {
 	s.wlock.Lock()
 	defer s.wlock.Unlock()
-	f, err = ReadFrame(s.w)
+	f, err = ReadFrame(s.r)
 	return
 }
 
 func (s *Session) Dial(hostname string, port uint16) (stream *Stream, err error) {
-	err = s.WriteFrame(&FrameSyn{streamid: s.GetNextId(), port: port, target: hostname})
+	streamid, err := s.GetNextId()
+	if err != nil {
+		return
+	}
+
+	err = s.WriteFrame(&FrameSyn{streamid: streamid,
+		port: port, target: hostname})
+	if err != nil {
+		return
+	}
+
+	f, err := s.ReadFrame()
 	if err != nil {
 		return
 	}
@@ -41,15 +52,15 @@ func (s *Session) Dial(hostname string, port uint16) (stream *Stream, err error)
 	switch f.(type) {
 	case *FrameOK:
 		stream := &Stream{
-			s: s, streamid: ft.streamid,
+			s: s, streamid: streamid,
 			read_closed:  false,
 			write_closed: false,
 			write_window: 65536, conn: nil}
 		return stream, nil
 	case *FrameFAILED:
-		return errors.New("connect failed")
+		return nil, errors.New("connect failed")
 	default:
-		return errors.New("dail read type error")
+		return nil, errors.New("dail read type error")
 	}
 	return
 }
@@ -116,8 +127,6 @@ func (s *Session) GetNextId() (id uint16, err error) {
 }
 
 func (s *Session) Run() {
-	var err error
-
 	for {
 		f, _ := ReadFrame(s.r)
 
@@ -142,7 +151,7 @@ func (s *Session) Run() {
 				panic(err)
 			}
 		case *FrameSyn:
-			stream, ok := s.streams[ft.streamid]
+			_, ok := s.streams[ft.streamid]
 			if !ok {
 				panic("frame sync stream id not exist")
 			}

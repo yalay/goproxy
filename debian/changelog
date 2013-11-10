@@ -1,3 +1,10 @@
+goproxy (1.8) unstable; urgency=low
+
+  * re-struct code.
+  - remove daemonized.
+
+ -- Shell Xu <shell909090@gmail.com>  Sun, 10 Nov 2013 12:26:46 +0800
+
 goproxy (1.7) unstable; urgency=low
 
   * Use DNS over goproxy, not udp drop.

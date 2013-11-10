@@ -11,7 +11,7 @@ all: build
 	markdown $^ > $@
 
 build:
-	go install ./...
+	export GOPATH=$$GOPATH:$(shell pwd); go install ./...
 
 build-doc: README.html
 
@@ -22,7 +22,6 @@ install: build README.html
 	install -d $(DESTDIR)/usr/bin/
 	install -s bin/goproxy $(DESTDIR)/usr/bin/
 	install -s bin/glookup $(DESTDIR)/usr/bin/
-# install daemonized $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/usr/share/goproxy/
 	install -m 644 routes.list.gz $(DESTDIR)/usr/share/goproxy/
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/

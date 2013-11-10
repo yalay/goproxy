@@ -281,7 +281,7 @@ func (f *FrameSyn) WriteFrame(w io.Writer) (err error) {
 }
 
 func (f *FrameSyn) Dial() (conn *net.TCPConn, err error) {
-	conn, err = net.Dial("tcp", fmt.Fprint("%s:%d", fs.target, fs.port))
+	// conn, err = net.Dial("tcp", fmt.Fprint("%s:%d", fs.target, fs.port))
 	return
 }
 

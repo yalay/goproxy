@@ -17,7 +17,6 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC=goproxy             # Introduce a short description here
 NAME=goproxy             # Introduce the short server's name here
 DAEMON=/usr/bin/goproxy  # Introduce the server's location here
-DAEMON_ARGS=""           # Arguments to run the daemon with
 PIDFILE=/var/run/$NAME.pid
 LOGFILE=/var/log/$NAME.log
 SCRIPTNAME=/etc/init.d/$NAME
@@ -27,6 +26,8 @@ SCRIPTNAME=/etc/init.d/$NAME
 
 # Read configuration variable file if it is present
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+DAEMON_ARGS="-mode=$RUNMODE -keyfile=$KEYFILE" # Arguments to run the daemon with
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
@@ -52,8 +53,8 @@ do_start()
 	fi
 	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec /usr/bin/daemonized -- \
-	        -p $PIDFILE -l $LOGFILE $DAEMON	$DAEMON_ARGS $DAEMON_OPTS \
+	start-stop-daemon -S -q -p $PIDFILE -x $DAEMON -b -m --no-close -- \
+	    $DAEMON_ARGS $DAEMON_OPTS >> $LOGFILE 2>&1 \
 		|| return 2
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend

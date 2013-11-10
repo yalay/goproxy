@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Shell Xu <shell909090@gmail.com>
 Build-Depends: debhelper (>= 8.0.0), golang, markdown
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Homepage: https://github.com/shell909090/goproxy
 
 Package: goproxy

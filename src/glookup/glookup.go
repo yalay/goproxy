@@ -4,14 +4,14 @@ import (
 	"dns"
 	"flag"
 	"fmt"
+	"ipfilter"
 	"logging"
-	"socks"
 )
 
 func main() {
 	flag.Parse()
 
-	blacklist, err := socks.ReadIPList("routes.list.gz")
+	blacklist, err := ipfilter.ReadIPList("routes.list.gz")
 	if err != nil {
 		logging.Err(err)
 		return

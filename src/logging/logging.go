@@ -3,9 +3,11 @@ package logging
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,13 +35,7 @@ const (
 	LOG_DEBUG
 )
 
-var console bool
-var loglv int
-var logconn *net.UDPConn
-var facility int
-var output *os.File
-var outchan chan string
-var hostname string
+var Default *Logger
 
 func GetLevelByName(name string) (lv int, err error) {
 	for k, v := range lvname {
@@ -50,185 +46,229 @@ func GetLevelByName(name string) (lv int, err error) {
 	return -1, fmt.Errorf("unknown loglevel")
 }
 
+type Logger struct {
+	name     string
+	m        sync.Mutex
+	out      io.Writer
+	loglevel int
+}
+
 // logfile is empty string: use console
-// udp address: syslog format, use f as facility
 // buf:filename: buffered file
 // filename: output to file
-func SetupLog(logfile string, loglevel int, f int) (err error) {
-	loglv = loglevel
-	facility = f
-
+func NewLogger(logfile string, loglevel int, name string) (l *Logger, err error) {
 	if len(logfile) == 0 {
-		console = true
-		return
+		return &Logger{name: name, out: os.Stderr, loglevel: loglevel}, nil
 	}
 
-	addr, e := net.ResolveUDPAddr("udp", logfile)
-	if e == nil {
-		logconn, err = net.DialUDP("udp", nil, addr)
-		if err != nil {
-			return
-		}
-		hostname, err = os.Hostname()
-		return
+	if loglevel < 0 {
+		loglevel = Default.loglevel
 	}
 
+	var out io.Writer
+	buffed := false
 	if strings.HasPrefix(logfile, "buf:") {
 		logfile = logfile[4:]
+		buffed = true
 	}
-	output, err = os.OpenFile(logfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if strings.HasPrefix(logfile, "buf:") {
-		outchan = make(chan string, 1000)
-		go outchan_main()
+	out, err = os.OpenFile(logfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return
 	}
-	return
+
+	if buffed {
+		out = bufio.NewWriterSize(out, 1024)
+	}
+
+	return &Logger{name: name, out: out, loglevel: loglevel}, nil
 }
 
-func outchan_main() {
-	bufout := bufio.NewWriterSize(output, 512)
-	bufout.Write([]byte("buffered\n"))
-	for {
-		s := <-outchan
-		bufout.WriteString(s)
+func (l *Logger) Output(lv int, s string) {
+	if l.loglevel < lv {
+		return
 	}
-}
 
-func WriteLog(name string, lv int, a []interface{}) {
-	switch {
-	case console:
-		h := fmt.Sprintf("%s %s[%s] ", time.Now().Format(TIMEFMT), name, lvname[lv])
-		fmt.Print(h + fmt.Sprintln(a...))
-	case logconn != nil:
-		// <facility * 8 + pri>version timestamp hostname app-name procid msgid
-		// <facility * 8 + pri>timestamp hostname procid msgid
-		h := fmt.Sprintf("<%d>%s %s %d %s[]: ", facility*8+lv,
-			time.Now().Format(TIMEFMT), hostname, os.Getpid(), name)
-		logconn.Write([]byte(h + fmt.Sprintln(a...) + "\n"))
-	case outchan != nil:
-		h := fmt.Sprintf("%s %s[%s] ", time.Now().Format(TIMEFMT), name, lvname[lv])
-		outchan <- (h + fmt.Sprintln(a...))
-	case output != nil:
-		h := fmt.Sprintf("%s %s[%s] ", time.Now().Format(TIMEFMT), name, lvname[lv])
-		output.Write([]byte(h + fmt.Sprintln(a...)))
-	}
-}
+	timestr := time.Now().Format(TIMEFMT)
+	buf := fmt.Sprintf("%s %s[%s]: %s\n", timestr, l.name, lvname[lv], s)
 
-type Logger struct {
-	name string
-}
-
-func NewLogger(name string) (logger *Logger) {
-	return &Logger{name}
+	l.m.Lock()
+	defer l.m.Unlock()
+	l.out.Write([]byte(buf))
 }
 
 func (l *Logger) Alert(a ...interface{}) {
-	if loglv < LOG_ALERT {
-		return
-	}
-	WriteLog(l.name, LOG_ALERT, a)
+	l.Output(LOG_ALERT, fmt.Sprintln(a))
+}
+
+func (l *Logger) Alertf(format string, a ...interface{}) {
+	l.Output(LOG_ALERT, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Crit(a ...interface{}) {
-	if loglv < LOG_CRIT {
-		return
-	}
-	WriteLog(l.name, LOG_CRIT, a)
+	l.Output(LOG_CRIT, fmt.Sprintln(a))
+}
+
+func (l *Logger) Critf(format string, a ...interface{}) {
+	l.Output(LOG_ALERT, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Debug(a ...interface{}) {
-	if loglv < LOG_DEBUG {
-		return
-	}
-	WriteLog(l.name, LOG_DEBUG, a)
+	l.Output(LOG_DEBUG, fmt.Sprintln(a))
+}
+
+func (l *Logger) Debugf(format string, a ...interface{}) {
+	l.Output(LOG_DEBUG, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Emerg(a ...interface{}) {
-	if loglv < LOG_EMERG {
-		return
-	}
-	WriteLog(l.name, LOG_EMERG, a)
+	l.Output(LOG_EMERG, fmt.Sprintln(a))
+}
+
+func (l *Logger) Emergf(format string, a ...interface{}) {
+	l.Output(LOG_EMERG, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Err(a ...interface{}) {
-	if loglv < LOG_ERR {
-		return
-	}
-	WriteLog(l.name, LOG_ERR, a)
+	l.Output(LOG_ERR, fmt.Sprintln(a))
+}
+
+func (l *Logger) Errf(format string, a ...interface{}) {
+	l.Output(LOG_ERR, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Info(a ...interface{}) {
-	if loglv < LOG_INFO {
-		return
-	}
-	WriteLog(l.name, LOG_INFO, a)
+	l.Output(LOG_INFO, fmt.Sprintln(a))
+}
+
+func (l *Logger) Infof(format string, a ...interface{}) {
+	l.Output(LOG_INFO, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Notice(a ...interface{}) {
-	if loglv < LOG_NOTICE {
-		return
-	}
-	WriteLog(l.name, LOG_NOTICE, a)
+	l.Output(LOG_NOTICE, fmt.Sprintln(a))
+}
+
+func (l *Logger) Noticef(format string, a ...interface{}) {
+	l.Output(LOG_NOTICE, fmt.Sprintf(format, a))
 }
 
 func (l *Logger) Warning(a ...interface{}) {
-	if loglv < LOG_WARNING {
+	l.Output(LOG_WARNING, fmt.Sprintln(a))
+}
+
+func (l *Logger) Warningf(format string, a ...interface{}) {
+	l.Output(LOG_WARNING, fmt.Sprintf(format, a))
+}
+
+type SysLogger struct {
+	Logger
+	facility int
+	hostname string
+}
+
+// udp address: syslog format, use f as facility
+func NewSysLogger(logfile string, loglevel int, name string, facility int) (l *SysLogger, err error) {
+	addr, e := net.ResolveUDPAddr("udp", logfile)
+	if e != nil {
 		return
 	}
-	WriteLog(l.name, LOG_WARNING, a)
+	out, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		return
+	}
+	hostname, err := os.Hostname()
+	return &SysLogger{
+		Logger: Logger{
+			name:     name,
+			out:      out,
+			loglevel: loglevel,
+		},
+		facility: facility,
+		hostname: hostname,
+	}, nil
+}
+
+func (l *SysLogger) Output(lv int, s string) {
+	if l.loglevel < lv {
+		return
+	}
+
+	// <facility * 8 + pri>version timestamp hostname app-name procid msgid
+	// <facility * 8 + pri>timestamp hostname procid msgid
+	timestr := time.Now().Format(TIMEFMT)
+	buf := fmt.Sprintf("<%d>%s %s %d %s[]: %s\n", l.facility*8+lv,
+		timestr, l.hostname, os.Getpid(), l.name, s)
+
+	l.m.Lock()
+	defer l.m.Unlock()
+	l.out.Write([]byte(buf))
 }
 
 func Alert(a ...interface{}) {
-	if loglv < LOG_ALERT {
-		return
-	}
-	WriteLog("", LOG_ALERT, a)
+	Default.Output(LOG_ALERT, fmt.Sprintln(a))
+}
+
+func Alertf(format string, a ...interface{}) {
+	Default.Output(LOG_ALERT, fmt.Sprintf(format, a))
 }
 
 func Crit(a ...interface{}) {
-	if loglv < LOG_CRIT {
-		return
-	}
-	WriteLog("", LOG_CRIT, a)
+	Default.Output(LOG_CRIT, fmt.Sprintln(a))
+}
+
+func Critf(format string, a ...interface{}) {
+	Default.Output(LOG_ALERT, fmt.Sprintf(format, a))
 }
 
 func Debug(a ...interface{}) {
-	if loglv < LOG_DEBUG {
-		return
-	}
-	WriteLog("", LOG_DEBUG, a)
+	Default.Output(LOG_DEBUG, fmt.Sprintln(a))
+}
+
+func Debugf(format string, a ...interface{}) {
+	Default.Output(LOG_DEBUG, fmt.Sprintf(format, a))
 }
 
 func Emerg(a ...interface{}) {
-	if loglv < LOG_EMERG {
-		return
-	}
-	WriteLog("", LOG_EMERG, a)
+	Default.Output(LOG_EMERG, fmt.Sprintln(a))
+}
+
+func Emergf(format string, a ...interface{}) {
+	Default.Output(LOG_EMERG, fmt.Sprintf(format, a))
 }
 
 func Err(a ...interface{}) {
-	if loglv < LOG_ERR {
-		return
-	}
-	WriteLog("", LOG_ERR, a)
+	Default.Output(LOG_ERR, fmt.Sprintln(a))
+}
+
+func Errf(format string, a ...interface{}) {
+	Default.Output(LOG_ERR, fmt.Sprintf(format, a))
 }
 
 func Info(a ...interface{}) {
-	if loglv < LOG_INFO {
-		return
-	}
-	WriteLog("", LOG_INFO, a)
+	Default.Output(LOG_INFO, fmt.Sprintln(a))
+}
+
+func Infof(format string, a ...interface{}) {
+	Default.Output(LOG_INFO, fmt.Sprintf(format, a))
 }
 
 func Notice(a ...interface{}) {
-	if loglv < LOG_NOTICE {
-		return
-	}
-	WriteLog("", LOG_NOTICE, a)
+	Default.Output(LOG_NOTICE, fmt.Sprintln(a))
+}
+
+func Noticef(format string, a ...interface{}) {
+	Default.Output(LOG_NOTICE, fmt.Sprintf(format, a))
 }
 
 func Warning(a ...interface{}) {
-	if loglv < LOG_WARNING {
-		return
-	}
-	WriteLog("", LOG_WARNING, a)
+	Default.Output(LOG_WARNING, fmt.Sprintln(a))
+}
+
+func Warningf(format string, a ...interface{}) {
+	Default.Output(LOG_WARNING, fmt.Sprintf(format, a))
+}
+
+func SetupDefault(logfile string, loglevel int) (err error) {
+	Default, err = NewLogger(logfile, loglevel, "")
+	return
 }

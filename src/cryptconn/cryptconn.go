@@ -31,33 +31,28 @@ func ReadKey(keyfile string, keysize int, ivsize int) (key []byte, iv []byte, er
 
 func NewCryptWrapper(method string, keyfile string) (f func(net.Conn) (net.Conn, error), err error) {
 	var g func(net.Conn, []byte, []byte) (net.Conn, error)
-	var keylen int
-	var ivlen int
+	var key []byte
+	var iv []byte
 
 	logging.Debug("Crypt Wrapper with", method, "preparing")
 	switch method {
 	case "aes":
-		keylen = 16
-		ivlen = 16
+		key, iv, err = ReadKey(keyfile, 16, 16)
 		g = NewAesConn
 	case "des":
-		keylen = 16
-		ivlen = 8
+		key, iv, err = ReadKey(keyfile, 16, 8)
 		g = NewDesConn
 	case "tripledes":
-		keylen = 16
-		ivlen = 8
+		key, iv, err = ReadKey(keyfile, 16, 8)
 		g = NewTripleDesConn
 	case "rc4":
-		keylen = 16
-		ivlen = 0
+		key, iv, err = ReadKey(keyfile, 16, 0)
 		g = NewRC4Conn
 	}
-
-	key, iv, err := ReadKey(keyfile, keylen, ivlen)
 	if err != nil {
 		return
 	}
+
 	return func(conn net.Conn) (sc net.Conn, err error) {
 		return g(conn, key, iv)
 	}, nil
@@ -70,7 +65,7 @@ func NewAesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
 	}
 	in := cipher.NewCFBDecrypter(block, iv)
 	out := cipher.NewCFBEncrypter(block, iv)
-	return CryptConn{conn.(*net.TCPConn), in, out}, nil
+	return CryptConn{conn, in, out}, nil
 }
 
 func NewDesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
@@ -80,7 +75,7 @@ func NewDesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
 	}
 	in := cipher.NewCFBDecrypter(block, iv)
 	out := cipher.NewCFBEncrypter(block, iv)
-	return CryptConn{conn.(*net.TCPConn), in, out}, nil
+	return CryptConn{conn, in, out}, nil
 }
 
 func NewTripleDesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
@@ -90,7 +85,7 @@ func NewTripleDesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err er
 	}
 	in := cipher.NewCFBDecrypter(block, iv)
 	out := cipher.NewCFBEncrypter(block, iv)
-	return CryptConn{conn.(*net.TCPConn), in, out}, nil
+	return CryptConn{conn, in, out}, nil
 }
 
 func NewRC4Conn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
@@ -102,5 +97,5 @@ func NewRC4Conn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
 	if err != nil {
 		return
 	}
-	return CryptConn{conn.(*net.TCPConn), in, out}, nil
+	return CryptConn{conn, in, out}, nil
 }

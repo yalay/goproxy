@@ -3,22 +3,20 @@ package cryptconn
 import (
 	"crypto/cipher"
 	"encoding/hex"
-	"io"
 	"logging"
 	"net"
-	"sutils"
 )
 
 const DEBUGOUTPUT bool = false
 
 type CryptConn struct {
-	*net.TCPConn
+	net.Conn
 	in  cipher.Stream
 	out cipher.Stream
 }
 
 func (sc CryptConn) Read(b []byte) (n int, err error) {
-	n, err = sc.TCPConn.Read(b)
+	n, err = sc.Conn.Read(b)
 	if err != nil {
 		return
 	}
@@ -29,19 +27,10 @@ func (sc CryptConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-type writerOnly struct {
-	io.Writer
-}
-
-func (sc CryptConn) ReadFrom(r io.Reader) (n int64, err error) {
-	logging.Debug("cryptconn readfrom call")
-	return sutils.CoreCopy(writerOnly{sc}, r)
-}
-
 func (sc CryptConn) Write(b []byte) (n int, err error) {
 	if DEBUGOUTPUT {
 		logging.Debug("send\n", hex.Dump(b))
 	}
 	sc.out.XORKeyStream(b[:], b[:])
-	return sc.TCPConn.Write(b)
+	return sc.Conn.Write(b)
 }

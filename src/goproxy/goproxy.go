@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"cryptconn"
 	"dns"
 	"flag"
+	"ipfilter"
 	"logging"
 	"net"
-	"net/http"
+	"qsocks"
 	"socks"
-	"strings"
 	"sutils"
 )
 
@@ -43,12 +44,15 @@ func init() {
 	if err != nil {
 		panic(err.Error())
 	}
-	err = logging.SetupLog(logfile, lv, 16)
+	err = logging.SetupDefault(logfile, lv)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	logger = logging.NewLogger("goproxy")
+	logger, err = logging.NewLogger("", -1, "goproxy")
+	if err != nil {
+		panic(err.Error())
+	}
 }
 
 var cryptWrapper func(net.Conn) (net.Conn, error) = nil
@@ -56,20 +60,15 @@ var cryptWrapper func(net.Conn) (net.Conn, error) = nil
 func run_server() {
 	var err error
 
-	if passfile != "" {
-		err = socks.LoadPassfile(passfile)
-		if err != nil {
-			panic(err.Error())
-		}
+	qs, err := qsocks.NewService(passfile, cryptWrapper)
+	if err != nil {
+		return
 	}
 
 	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
 		defer conn.Close()
-		err = socks.QsocksHandler(conn)
-		if err != nil {
-			logging.Err(err)
-		}
-		return nil
+		qs.QsocksHandler(conn)
+		return
 	})
 	if err != nil {
 		logging.Err(err)
@@ -92,20 +91,39 @@ func run_client() {
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
 		if err != nil {
-			panic(err.Error())
+			return
 		}
 	}
 
-	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
+	var blacklist ipfilter.IPList
+	if blackfile != "" {
+		blacklist, err = ipfilter.ReadIPList(blackfile)
+		if err != nil {
+			return
+		}
+		logging.Info("blacklist loaded %d record(s).", len(blacklist))
+	}
+
+	dialer := qsocks.NewDialer(serveraddr, cryptWrapper, username, password)
 
 	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
 		defer conn.Close()
-		srcconn, dstconn, err := socks.SocksHandler(conn)
+
+		writer := bufio.NewWriter(conn)
+		hostname, port, err := socks.SocksHandler(conn)
 		if err != nil {
 			return
 		}
 
-		sutils.CopyLink(srcconn, dstconn)
+		dstconn, err := blacklist.Dial(hostname, port, false, dialer)
+		if err != nil {
+			// Connection refused
+			socks.SendConnectResponse(writer, 0x05)
+			return
+		}
+		socks.SendConnectResponse(writer, 0x00)
+
+		sutils.CopyLink(conn, dstconn)
 		return
 	})
 	if err != nil {
@@ -113,98 +131,98 @@ func run_client() {
 	}
 }
 
-var tspt http.Transport
+// var tspt http.Transport
 
-type Proxy struct{}
+// type Proxy struct{}
 
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logging.Info(r.Method, r.URL)
+// func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// 	logging.Info(r.Method, r.URL)
 
-	if r.Method == "CONNECT" {
-		p.Connect(w, r)
-		return
-	}
+// 	if r.Method == "CONNECT" {
+// 		p.Connect(w, r)
+// 		return
+// 	}
 
-	r.RequestURI = ""
-	r.Header.Del("Accept-Encoding")
-	r.Header.Del("Proxy-Connection")
-	r.Header.Del("Connection")
+// 	r.RequestURI = ""
+// 	r.Header.Del("Accept-Encoding")
+// 	r.Header.Del("Proxy-Connection")
+// 	r.Header.Del("Connection")
 
-	resp, err := tspt.RoundTrip(r)
-	if err != nil {
-		logging.Err(err)
-		return
-	}
-	defer resp.Body.Close()
+// 	resp, err := tspt.RoundTrip(r)
+// 	if err != nil {
+// 		logging.Err(err)
+// 		return
+// 	}
+// 	defer resp.Body.Close()
 
-	resp.Header.Del("Content-Length")
-	for k, vv := range resp.Header {
-		for _, v := range vv {
-			w.Header().Add(k, v)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, err = sutils.CoreCopy(w, resp.Body)
-	if err != nil {
-		logging.Err(err)
-		return
-	}
-	return
-}
+// 	resp.Header.Del("Content-Length")
+// 	for k, vv := range resp.Header {
+// 		for _, v := range vv {
+// 			w.Header().Add(k, v)
+// 		}
+// 	}
+// 	w.WriteHeader(resp.StatusCode)
+// 	_, err = sutils.CoreCopy(w, resp.Body)
+// 	if err != nil {
+// 		logging.Err(err)
+// 		return
+// 	}
+// 	return
+// }
 
-func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
-	hij, ok := w.(http.Hijacker)
-	if !ok {
-		logging.Err("httpserver does not support hijacking")
-		return
-	}
-	srcconn, _, err := hij.Hijack()
-	if err != nil {
-		logging.Err("Cannot hijack connection ", err)
-		return
-	}
-	defer srcconn.Close()
+// func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
+// 	hij, ok := w.(http.Hijacker)
+// 	if !ok {
+// 		logging.Err("httpserver does not support hijacking")
+// 		return
+// 	}
+// 	srcconn, _, err := hij.Hijack()
+// 	if err != nil {
+// 		logging.Err("Cannot hijack connection ", err)
+// 		return
+// 	}
+// 	defer srcconn.Close()
 
-	host := r.URL.Host
-	if !strings.Contains(host, ":") {
-		host += ":80"
-	}
-	dstconn, err := socks.DialConn("tcp", host)
-	if err != nil {
-		logging.Err(err)
-		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
-		return
-	}
-	defer dstconn.Close()
-	srcconn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+// 	host := r.URL.Host
+// 	if !strings.Contains(host, ":") {
+// 		host += ":80"
+// 	}
+// 	dstconn, err := socks.DialConn("tcp", host)
+// 	if err != nil {
+// 		logging.Err(err)
+// 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
+// 		return
+// 	}
+// 	defer dstconn.Close()
+// 	srcconn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-	sutils.CopyLink(srcconn, dstconn)
-	return
-}
+// 	sutils.CopyLink(srcconn, dstconn)
+// 	return
+// }
 
-func run_httproxy() {
-	if cryptWrapper == nil {
-		logging.Warning("client mode without keyfile")
-	}
+// func run_httproxy() {
+// 	if cryptWrapper == nil {
+// 		logging.Warning("client mode without keyfile")
+// 	}
 
-	if len(flag.Args()) < 1 {
-		panic("args not enough")
-	}
-	serveraddr := flag.Args()[0]
+// 	if len(flag.Args()) < 1 {
+// 		panic("args not enough")
+// 	}
+// 	serveraddr := flag.Args()[0]
 
-	err := dns.LoadConfig("resolv.conf")
-	if err != nil {
-		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-		if err != nil {
-			panic(err.Error())
-		}
-	}
+// 	err := dns.LoadConfig("resolv.conf")
+// 	if err != nil {
+// 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
+// 		if err != nil {
+// 			panic(err.Error())
+// 		}
+// 	}
 
-	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
+// 	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
 
-	tspt = http.Transport{Dial: socks.DialConn}
-	http.ListenAndServe(listenaddr, &Proxy{})
-}
+// 	tspt = http.Transport{Dial: socks.DialConn}
+// 	http.ListenAndServe(listenaddr, &Proxy{})
+// }
 
 func main() {
 	var err error
@@ -217,15 +235,14 @@ func main() {
 		}
 	}
 
+	logging.Infof("%s mode start", runmode)
 	switch runmode {
 	case "server":
-		logging.Info("server mode")
 		run_server()
 	case "client":
-		logging.Info("client mode")
 		run_client()
-	case "httproxy":
-		logging.Info("httproxy mode")
-		run_httproxy()
+		// case "httproxy":
+		// 	run_httproxy()
 	}
+	logging.Info("server stopped")
 }

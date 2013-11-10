@@ -1,6 +1,7 @@
 *.exe
 
-goproxy
+bin
+pkg
 *.key
 *.log
 *.pyc

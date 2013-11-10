@@ -1,13 +1,13 @@
-package src
+package socks
 
 import (
-	"../sutils"
 	"bufio"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strings"
+	"sutils"
 )
 
 func SocksHandler(conn net.Conn) (srcconn net.Conn, dstconn net.Conn, err error) {

@@ -1,15 +1,15 @@
-package src
+package socks
 
 import (
-	"../dns"
-	"../sutils"
 	"compress/gzip"
+	"dns"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"sutils"
 	"time"
 )
 

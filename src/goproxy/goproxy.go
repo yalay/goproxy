@@ -1,14 +1,14 @@
 package main
 
 import (
+	"cryptconn"
+	"dns"
 	"flag"
 	"net"
 	"net/http"
+	"socks"
 	"strings"
-	"./dns"
-	"./src"
-	"./sutils"
-	"./cryptconn"
+	"sutils"
 )
 
 var cipher string
@@ -39,33 +39,43 @@ func init() {
 	flag.Parse()
 
 	lv, err := sutils.GetLevelByName(loglevel)
-	if err != nil { panic(err.Error()) }
+	if err != nil {
+		panic(err.Error())
+	}
 	err = sutils.SetupLog(logfile, lv, 16)
-	if err != nil { panic(err.Error()) }
+	if err != nil {
+		panic(err.Error())
+	}
 
 	logger = sutils.NewLogger("goproxy")
 }
 
-var cryptWrapper func (net.Conn) (net.Conn, error) = nil
+var cryptWrapper func(net.Conn) (net.Conn, error) = nil
 
-func run_server () {
+func run_server() {
 	var err error
 
 	if passfile != "" {
-		err = src.LoadPassfile(passfile)
-		if err != nil { panic(err.Error()) }
+		err = socks.LoadPassfile(passfile)
+		if err != nil {
+			panic(err.Error())
+		}
 	}
-		
-	err = sutils.TcpServer(listenaddr, func (conn net.Conn) (err error) {
+
+	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
 		defer conn.Close()
-		err = src.QsocksHandler(conn)
-		if err != nil { sutils.Err(err) }
+		err = socks.QsocksHandler(conn)
+		if err != nil {
+			sutils.Err(err)
+		}
 		return nil
 	})
-	if err != nil { sutils.Err(err) }
+	if err != nil {
+		sutils.Err(err)
+	}
 }
 
-func run_client () {
+func run_client() {
 	var err error
 
 	if cryptWrapper == nil {
@@ -80,25 +90,31 @@ func run_client () {
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-		if err != nil { panic(err.Error()) }
+		if err != nil {
+			panic(err.Error())
+		}
 	}
 
-	src.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
+	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
 
-	err = sutils.TcpServer(listenaddr, func (conn net.Conn) (err error) {
+	err = sutils.TcpServer(listenaddr, func(conn net.Conn) (err error) {
 		defer conn.Close()
-		srcconn, dstconn, err := src.SocksHandler(conn)
-		if err != nil { return }
+		srcconn, dstconn, err := socks.SocksHandler(conn)
+		if err != nil {
+			return
+		}
 
 		sutils.CopyLink(srcconn, dstconn)
 		return
 	})
-	if err != nil { sutils.Err(err) }
+	if err != nil {
+		sutils.Err(err)
+	}
 }
 
 var tspt http.Transport
 
-type Proxy struct {}
+type Proxy struct{}
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sutils.Info(r.Method, r.URL)
@@ -122,7 +138,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp.Header.Del("Content-Length")
 	for k, vv := range resp.Header {
-		for _, v := range vv { w.Header().Add(k, v) }
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, err = sutils.CoreCopy(w, resp.Body)
@@ -150,7 +168,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(host, ":") {
 		host += ":80"
 	}
-	dstconn, err := src.DialConn("tcp", host)
+	dstconn, err := socks.DialConn("tcp", host)
 	if err != nil {
 		sutils.Err(err)
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
@@ -176,12 +194,14 @@ func run_httproxy() {
 	err := dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-		if err != nil { panic(err.Error()) }
+		if err != nil {
+			panic(err.Error())
+		}
 	}
 
-	src.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
+	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
 
-	tspt = http.Transport{Dial: src.DialConn}
+	tspt = http.Transport{Dial: socks.DialConn}
 	http.ListenAndServe(listenaddr, &Proxy{})
 }
 

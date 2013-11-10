@@ -1,11 +1,11 @@
-package src
+package reusetcp
 
 import (
 	"bytes"
 	"testing"
 )
 
-func TestFrameOKRead (t *testing.T) {
+func TestFrameOKRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x00, 0x00, 0x00, 0x0A, 0x0A})
 
 	f, err := ReadFrame(buf)
@@ -19,7 +19,7 @@ func TestFrameOKRead (t *testing.T) {
 	}
 }
 
-func TestFrameOKWrite (t *testing.T) {
+func TestFrameOKWrite(t *testing.T) {
 	f := new(FrameOK)
 	f.streamid = 10
 
@@ -31,7 +31,7 @@ func TestFrameOKWrite (t *testing.T) {
 	}
 }
 
-func TestFrameFailedRead (t *testing.T) {
+func TestFrameFailedRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x01, 0x00, 0x04, 0x0A, 0x0A,
 		0x00, 0x00, 0x00, 0x01})
 
@@ -50,7 +50,7 @@ func TestFrameFailedRead (t *testing.T) {
 	}
 }
 
-func TestFrameFailedWrite (t *testing.T) {
+func TestFrameFailedWrite(t *testing.T) {
 	f := new(FrameFAILED)
 	f.streamid = 10
 	f.errno = 32
@@ -63,7 +63,7 @@ func TestFrameFailedWrite (t *testing.T) {
 	}
 }
 
-func TestFrameAuthRead (t *testing.T) {
+func TestFrameAuthRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x02, 0x00, 0x08, 0x0A, 0x0A,
 		0x00, 0x02, 0x61, 0x62, 0x00, 0x02, 0x63, 0x64})
 
@@ -82,7 +82,7 @@ func TestFrameAuthRead (t *testing.T) {
 	}
 }
 
-func TestFrameAuthWrite (t *testing.T) {
+func TestFrameAuthWrite(t *testing.T) {
 	f := new(FrameAuth)
 	f.streamid = 10
 	f.username = "username"
@@ -98,7 +98,7 @@ func TestFrameAuthWrite (t *testing.T) {
 	}
 }
 
-func TestFrameDataRead (t *testing.T) {
+func TestFrameDataRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x03, 0x00, 0x03, 0x0A, 0x0A,
 		0x01, 0x05, 0x07})
 
@@ -117,7 +117,7 @@ func TestFrameDataRead (t *testing.T) {
 	}
 }
 
-func TestFrameDataWrite (t *testing.T) {
+func TestFrameDataWrite(t *testing.T) {
 	f := new(FrameData)
 	f.streamid = 10
 	f.data = []byte{0x01, 0x02, 0x03}
@@ -131,7 +131,7 @@ func TestFrameDataWrite (t *testing.T) {
 	}
 }
 
-func TestFrameSynRead (t *testing.T) {
+func TestFrameSynRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x04, 0x00, 0x07, 0x0A, 0x0A,
 		0x0B, 0x0B, 0x00, 0x00, 0x02, 0x61, 0x62})
 
@@ -150,7 +150,7 @@ func TestFrameSynRead (t *testing.T) {
 	}
 }
 
-func TestFrameSynWrite (t *testing.T) {
+func TestFrameSynWrite(t *testing.T) {
 	f := new(FrameSyn)
 	f.streamid = 10
 	f.port = 100
@@ -165,7 +165,7 @@ func TestFrameSynWrite (t *testing.T) {
 	}
 }
 
-func TestFrameAckRead (t *testing.T) {
+func TestFrameAckRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x05, 0x00, 0x04, 0x0A, 0x0A,
 		0x01, 0x02, 0x03, 0x04})
 
@@ -184,7 +184,7 @@ func TestFrameAckRead (t *testing.T) {
 	}
 }
 
-func TestFrameAckWrite (t *testing.T) {
+func TestFrameAckWrite(t *testing.T) {
 	f := new(FrameAck)
 	f.streamid = 10
 	f.move_window = 0x04050607
@@ -198,7 +198,7 @@ func TestFrameAckWrite (t *testing.T) {
 	}
 }
 
-func TestFrameFinRead (t *testing.T) {
+func TestFrameFinRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x06, 0x00, 0x00, 0x0A, 0x0A})
 
 	f, err := ReadFrame(buf)
@@ -212,7 +212,7 @@ func TestFrameFinRead (t *testing.T) {
 	}
 }
 
-func TestFrameFinWrite (t *testing.T) {
+func TestFrameFinWrite(t *testing.T) {
 	f := new(FrameFin)
 	f.streamid = 10
 
@@ -224,7 +224,7 @@ func TestFrameFinWrite (t *testing.T) {
 	}
 }
 
-func TestFrameRstRead (t *testing.T) {
+func TestFrameRstRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x07, 0x00, 0x00, 0x0A, 0x0A})
 
 	f, err := ReadFrame(buf)
@@ -238,7 +238,7 @@ func TestFrameRstRead (t *testing.T) {
 	}
 }
 
-func TestFrameRstWrite (t *testing.T) {
+func TestFrameRstWrite(t *testing.T) {
 	f := new(FrameRst)
 	f.streamid = 10
 

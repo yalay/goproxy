@@ -5,25 +5,27 @@ import (
 	"encoding/hex"
 	"io"
 	"net"
-	"../sutils"
+	"sutils"
 )
 
 const DEBUGOUTPUT bool = false
 
 type CryptConn struct {
 	*net.TCPConn
-	in cipher.Stream
+	in  cipher.Stream
 	out cipher.Stream
 }
 
 func (sc CryptConn) Read(b []byte) (n int, err error) {
 	n, err = sc.TCPConn.Read(b)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	sc.in.XORKeyStream(b[:n], b[:n])
 	if DEBUGOUTPUT {
 		sutils.Debug("recv\n", hex.Dump(b[:n]))
 	}
-	return 
+	return
 }
 
 type writerOnly struct {

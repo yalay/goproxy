@@ -1,46 +1,48 @@
-package src
+package reusetcp
 
 import (
+	"errors"
 	"io"
 	"net"
 	"sync"
-	"errors"
 	"sync/atomic"
 )
 
 type Session struct {
-	r io.Reader
-	w io.Writer
+	r     io.Reader
+	w     io.Writer
 	wlock sync.Mutex
 
 	next_id uint16
 	streams map[uint16]*Stream
-	idlock sync.Mutex
-	on_conn func (addr net.TCPAddr, streamid uint16) (s *Stream, err error)
+	idlock  sync.Mutex
+	on_conn func(addr net.TCPAddr, streamid uint16) (s *Stream, err error)
 }
 
-func (s *Session) WriteFrame (f Frame) (err error) {
+func (s *Session) WriteFrame(f Frame) (err error) {
 	s.wlock.Lock()
 	defer s.wlock.Unlock()
 	return ft.WriteFrame(s.w)
 }
 
-func (s *Session) ReadFrame () (f Frame, err error) {
+func (s *Session) ReadFrame() (f Frame, err error) {
 	s.wlock.Lock()
 	defer s.wlock.Unlock()
 	f, err = ReadFrame(s.w)
 	return
 }
 
-func (s *Session) Dial (hostname string, port uint16) (stream *Stream, err error) {
+func (s *Session) Dial(hostname string, port uint16) (stream *Stream, err error) {
 	err = s.WriteFrame(&FrameSyn{streamid: s.GetNextId(), port: port, target: hostname})
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	switch f.(type) {
 	case *FrameOK:
 		stream := &Stream{
 			s: s, streamid: ft.streamid,
-			read_closed: false,
+			read_closed:  false,
 			write_closed: false,
 			write_window: 65536, conn: nil}
 		return stream, nil
@@ -52,12 +54,16 @@ func (s *Session) Dial (hostname string, port uint16) (stream *Stream, err error
 	return
 }
 
-func (s *Session) Auth (username string, password string) (err error) {
+func (s *Session) Auth(username string, password string) (err error) {
 	err = s.WriteFrame(&FrameAuth{streamid: 0, username: username, password: password})
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	f, err := s.ReadFrame()
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	switch f.(type) {
 	case *FrameOK:
@@ -70,12 +76,16 @@ func (s *Session) Auth (username string, password string) (err error) {
 	return
 }
 
-func (s *Session) OnAuth (on_auth func (username string, password string) (bool)) (err error) {
+func (s *Session) OnAuth(on_auth func(username string, password string) bool) (err error) {
 	f, err := ReadFrame(s.r)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	fs, ok := f.(*FrameAuth)
-	if !ok { return errors.New("getauth read type error") }	
+	if !ok {
+		return errors.New("getauth read type error")
+	}
 
 	if on_auth(fs.username, fs.password) {
 		fr := &FrameOK{streamid: 0}
@@ -87,11 +97,11 @@ func (s *Session) OnAuth (on_auth func (username string, password string) (bool)
 	return
 }
 
-func (s *Session) GetNextId () (id uint16, err error) {
+func (s *Session) GetNextId() (id uint16, err error) {
 	s.idlock.Lock()
 	defer s.idlock.Unlock()
 
-	startid := s.next_id;
+	startid := s.next_id
 	_, ok := s.streams[s.next_id]
 	for ok {
 		s.next_id += 1
@@ -105,9 +115,9 @@ func (s *Session) GetNextId () (id uint16, err error) {
 	return id, nil
 }
 
-func (s *Session) Run () {
+func (s *Session) Run() {
 	var err error
-	
+
 	for {
 		f, _ := ReadFrame(s.r)
 
@@ -144,7 +154,7 @@ func (s *Session) Run () {
 			} else {
 				stream := &Stream{
 					s: s, streamid: ft.streamid,
-					read_closed: false,
+					read_closed:  false,
 					write_closed: false,
 					write_window: 65536, conn: conn}
 				s.streams[ft.streamid] = stream
@@ -178,16 +188,16 @@ func (s *Session) Run () {
 }
 
 type Stream struct {
-	s *Session
+	s        *Session
 	streamid uint16
 
 	write_closed bool
-	read_closed bool
+	read_closed  bool
 
 	write_window uint32
-	pr io.PipeReader // will this block?
-	pw io.PipeWriter
-	conn net.Conn
+	pr           io.PipeReader // will this block?
+	pw           io.PipeWriter
+	conn         net.Conn
 }
 
 func (s *Stream) Read(p []byte) (n int, err error) {

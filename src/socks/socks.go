@@ -1,12 +1,12 @@
-package src
+package socks
 
 import (
-	"../sutils"
 	"bufio"
 	"encoding/binary"
 	"errors"
 	"io"
 	"net"
+	"sutils"
 )
 
 func readLeadByte(reader io.Reader) (b []byte, err error) {

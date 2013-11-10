@@ -18,17 +18,23 @@ package dns
 
 import (
 	"math/rand"
-	"time"
 	"net"
-	"../sutils"
+	"sutils"
+	"time"
 )
 
-func check_black(msg *dnsMsg, name string, qtype uint16) (bool) {
-	if qtype != dnsTypeA { return false }
+func check_black(msg *dnsMsg, name string, qtype uint16) bool {
+	if qtype != dnsTypeA {
+		return false
+	}
 	server := "8.8.8.8"
 	cname, addrs, err := answer(name, server, msg, qtype)
-	if err != nil { return false }
-	if cname != name { return false }
+	if err != nil {
+		return false
+	}
+	if cname != name {
+		return false
+	}
 	if len(addrs) == 0 {
 		sutils.Debug("no such host recved")
 		return true
@@ -69,7 +75,7 @@ func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, e
 			c.SetReadDeadline(time.Now().Add(time.Duration(cfg.timeout) * time.Second))
 		}
 
-Reread:
+	Reread:
 		buf := make([]byte, 2000) // More than enough.
 		n, err = c.Read(buf)
 		if err != nil {
@@ -84,7 +90,9 @@ Reread:
 			continue
 		}
 
-		if check_black(in, name, qtype) { goto Reread }
+		if check_black(in, name, qtype) {
+			goto Reread
+		}
 		return in, nil
 	}
 	var server string
@@ -120,7 +128,9 @@ func tryOneName(cfg *dnsConfig, name string, qtype uint16) (cname string, addrs 
 			continue
 		}
 		cname, addrs, err = answer(name, server, msg, qtype)
-		if err == nil { break }
+		if err == nil {
+			break
+		}
 		if len(addrs) == 0 {
 			err = &DNSError{Err: noSuchHost, Name: name, Server: server}
 			break

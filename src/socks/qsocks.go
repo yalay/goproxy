@@ -1,4 +1,4 @@
-package src
+package socks
 
 import (
 	"crypto/rand"

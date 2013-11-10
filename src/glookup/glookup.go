@@ -1,17 +1,17 @@
 package main
 
 import (
-	"fmt"
+	"dns"
 	"flag"
-	"./dns"
-	"./src"
-	"./sutils"
+	"fmt"
+	"socks"
+	"sutils"
 )
 
 func main() {
 	flag.Parse()
 
-	blacklist, err := src.ReadIPList("routes.list.gz")
+	blacklist, err := socks.ReadIPList("routes.list.gz")
 	if err != nil {
 		sutils.Err(err)
 		return

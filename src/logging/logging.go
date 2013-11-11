@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +36,7 @@ const (
 	LOG_DEBUG
 )
 
-var Default *Logger
+var Default *FileLogger
 
 func GetLevelByName(name string) (lv int, err error) {
 	for k, v := range lvname {
@@ -46,7 +47,26 @@ func GetLevelByName(name string) (lv int, err error) {
 	return -1, fmt.Errorf("unknown loglevel")
 }
 
-type Logger struct {
+type Logger interface {
+	Alert(a ...interface{})
+	Alertf(format string, a ...interface{})
+	Crit(a ...interface{})
+	Critf(format string, a ...interface{})
+	Debug(a ...interface{})
+	Debugf(format string, a ...interface{})
+	Emerg(a ...interface{})
+	Emergf(format string, a ...interface{})
+	Err(a ...interface{})
+	Errf(format string, a ...interface{})
+	Info(a ...interface{})
+	Infof(format string, a ...interface{})
+	Notice(a ...interface{})
+	Noticef(format string, a ...interface{})
+	Warning(a ...interface{})
+	Warningf(format string, a ...interface{})
+}
+
+type FileLogger struct {
 	name     string
 	m        sync.Mutex
 	out      io.Writer
@@ -56,112 +76,133 @@ type Logger struct {
 // logfile is empty string: use console
 // buf:filename: buffered file
 // filename: output to file
-func NewLogger(logfile string, loglevel int, name string) (l *Logger, err error) {
+func NewFileLogger(logfile string, loglevel int, name string) (l *FileLogger, err error) {
 	if len(logfile) == 0 {
-		return &Logger{name: name, out: os.Stderr, loglevel: loglevel}, nil
-	}
-
-	if loglevel < 0 {
-		loglevel = Default.loglevel
+		return &FileLogger{name: name, out: os.Stderr, loglevel: loglevel}, nil
 	}
 
 	var out io.Writer
-	buffed := false
-	if strings.HasPrefix(logfile, "buf:") {
-		logfile = logfile[4:]
-		buffed = true
-	}
-	out, err = os.OpenFile(logfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return
+	if logfile != "default" {
+		buffed := false
+		if strings.HasPrefix(logfile, "buf:") {
+			logfile = logfile[4:]
+			buffed = true
+		}
+
+		out, err = os.OpenFile(logfile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if err != nil {
+			return
+		}
+
+		if buffed {
+			out = bufio.NewWriterSize(out, 1024)
+		}
 	}
 
-	if buffed {
-		out = bufio.NewWriterSize(out, 1024)
-	}
-
-	return &Logger{name: name, out: out, loglevel: loglevel}, nil
+	return &FileLogger{name: name, out: out, loglevel: loglevel}, nil
 }
 
-func (l *Logger) Output(lv int, s string) {
-	if l.loglevel < lv {
+func (l *FileLogger) Output(lv int, s string) {
+
+	loglevel := l.loglevel
+	if l.loglevel == -1 {
+		loglevel = Default.loglevel
+	}
+	if loglevel < lv {
 		return
 	}
 
 	timestr := time.Now().Format(TIMEFMT)
-	buf := fmt.Sprintf("%s %s[%s]: %s\n", timestr, l.name, lvname[lv], s)
+	_, file, line, ok := runtime.Caller(2)
+	if !ok {
+		file = "???"
+		line = 0
+	}
+	idx := strings.LastIndex(file, "/")
+	if idx != -1 {
+		file = file[idx+1:]
+	}
+	buf := fmt.Sprintf("%s [%s](%s:%d) %s: %s\n",
+		timestr, lvname[lv], file, line, l.name, s)
+
+	if l.out == nil {
+		Default.m.Lock()
+		defer Default.m.Unlock()
+		Default.out.Write([]byte(buf))
+		return
+	}
 
 	l.m.Lock()
 	defer l.m.Unlock()
 	l.out.Write([]byte(buf))
 }
 
-func (l *Logger) Alert(a ...interface{}) {
-	l.Output(LOG_ALERT, fmt.Sprintln(a))
+func (l *FileLogger) Alert(a ...interface{}) {
+	l.Output(LOG_ALERT, fmt.Sprint(a...))
 }
 
-func (l *Logger) Alertf(format string, a ...interface{}) {
-	l.Output(LOG_ALERT, fmt.Sprintf(format, a))
+func (l *FileLogger) Alertf(format string, a ...interface{}) {
+	l.Output(LOG_ALERT, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Crit(a ...interface{}) {
-	l.Output(LOG_CRIT, fmt.Sprintln(a))
+func (l *FileLogger) Crit(a ...interface{}) {
+	l.Output(LOG_CRIT, fmt.Sprint(a...))
 }
 
-func (l *Logger) Critf(format string, a ...interface{}) {
-	l.Output(LOG_ALERT, fmt.Sprintf(format, a))
+func (l *FileLogger) Critf(format string, a ...interface{}) {
+	l.Output(LOG_ALERT, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Debug(a ...interface{}) {
-	l.Output(LOG_DEBUG, fmt.Sprintln(a))
+func (l *FileLogger) Debug(a ...interface{}) {
+	l.Output(LOG_DEBUG, fmt.Sprint(a...))
 }
 
-func (l *Logger) Debugf(format string, a ...interface{}) {
-	l.Output(LOG_DEBUG, fmt.Sprintf(format, a))
+func (l *FileLogger) Debugf(format string, a ...interface{}) {
+	l.Output(LOG_DEBUG, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Emerg(a ...interface{}) {
-	l.Output(LOG_EMERG, fmt.Sprintln(a))
+func (l *FileLogger) Emerg(a ...interface{}) {
+	l.Output(LOG_EMERG, fmt.Sprint(a...))
 }
 
-func (l *Logger) Emergf(format string, a ...interface{}) {
-	l.Output(LOG_EMERG, fmt.Sprintf(format, a))
+func (l *FileLogger) Emergf(format string, a ...interface{}) {
+	l.Output(LOG_EMERG, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Err(a ...interface{}) {
-	l.Output(LOG_ERR, fmt.Sprintln(a))
+func (l *FileLogger) Err(a ...interface{}) {
+	l.Output(LOG_ERR, fmt.Sprint(a...))
 }
 
-func (l *Logger) Errf(format string, a ...interface{}) {
-	l.Output(LOG_ERR, fmt.Sprintf(format, a))
+func (l *FileLogger) Errf(format string, a ...interface{}) {
+	l.Output(LOG_ERR, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Info(a ...interface{}) {
-	l.Output(LOG_INFO, fmt.Sprintln(a))
+func (l *FileLogger) Info(a ...interface{}) {
+	l.Output(LOG_INFO, fmt.Sprint(a...))
 }
 
-func (l *Logger) Infof(format string, a ...interface{}) {
-	l.Output(LOG_INFO, fmt.Sprintf(format, a))
+func (l *FileLogger) Infof(format string, a ...interface{}) {
+	l.Output(LOG_INFO, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Notice(a ...interface{}) {
-	l.Output(LOG_NOTICE, fmt.Sprintln(a))
+func (l *FileLogger) Notice(a ...interface{}) {
+	l.Output(LOG_NOTICE, fmt.Sprint(a...))
 }
 
-func (l *Logger) Noticef(format string, a ...interface{}) {
-	l.Output(LOG_NOTICE, fmt.Sprintf(format, a))
+func (l *FileLogger) Noticef(format string, a ...interface{}) {
+	l.Output(LOG_NOTICE, fmt.Sprintf(format, a...))
 }
 
-func (l *Logger) Warning(a ...interface{}) {
-	l.Output(LOG_WARNING, fmt.Sprintln(a))
+func (l *FileLogger) Warning(a ...interface{}) {
+	l.Output(LOG_WARNING, fmt.Sprint(a...))
 }
 
-func (l *Logger) Warningf(format string, a ...interface{}) {
-	l.Output(LOG_WARNING, fmt.Sprintf(format, a))
+func (l *FileLogger) Warningf(format string, a ...interface{}) {
+	l.Output(LOG_WARNING, fmt.Sprintf(format, a...))
 }
 
 type SysLogger struct {
-	Logger
+	FileLogger
 	facility int
 	hostname string
 }
@@ -178,7 +219,7 @@ func NewSysLogger(logfile string, loglevel int, name string, facility int) (l *S
 	}
 	hostname, err := os.Hostname()
 	return &SysLogger{
-		Logger: Logger{
+		FileLogger: FileLogger{
 			name:     name,
 			out:      out,
 			loglevel: loglevel,
@@ -205,70 +246,70 @@ func (l *SysLogger) Output(lv int, s string) {
 }
 
 func Alert(a ...interface{}) {
-	Default.Output(LOG_ALERT, fmt.Sprintln(a))
+	Default.Output(LOG_ALERT, fmt.Sprint(a...))
 }
 
 func Alertf(format string, a ...interface{}) {
-	Default.Output(LOG_ALERT, fmt.Sprintf(format, a))
+	Default.Output(LOG_ALERT, fmt.Sprintf(format, a...))
 }
 
 func Crit(a ...interface{}) {
-	Default.Output(LOG_CRIT, fmt.Sprintln(a))
+	Default.Output(LOG_CRIT, fmt.Sprint(a...))
 }
 
 func Critf(format string, a ...interface{}) {
-	Default.Output(LOG_ALERT, fmt.Sprintf(format, a))
+	Default.Output(LOG_ALERT, fmt.Sprintf(format, a...))
 }
 
 func Debug(a ...interface{}) {
-	Default.Output(LOG_DEBUG, fmt.Sprintln(a))
+	Default.Output(LOG_DEBUG, fmt.Sprint(a...))
 }
 
 func Debugf(format string, a ...interface{}) {
-	Default.Output(LOG_DEBUG, fmt.Sprintf(format, a))
+	Default.Output(LOG_DEBUG, fmt.Sprintf(format, a...))
 }
 
 func Emerg(a ...interface{}) {
-	Default.Output(LOG_EMERG, fmt.Sprintln(a))
+	Default.Output(LOG_EMERG, fmt.Sprint(a...))
 }
 
 func Emergf(format string, a ...interface{}) {
-	Default.Output(LOG_EMERG, fmt.Sprintf(format, a))
+	Default.Output(LOG_EMERG, fmt.Sprintf(format, a...))
 }
 
 func Err(a ...interface{}) {
-	Default.Output(LOG_ERR, fmt.Sprintln(a))
+	Default.Output(LOG_ERR, fmt.Sprint(a...))
 }
 
 func Errf(format string, a ...interface{}) {
-	Default.Output(LOG_ERR, fmt.Sprintf(format, a))
+	Default.Output(LOG_ERR, fmt.Sprintf(format, a...))
 }
 
 func Info(a ...interface{}) {
-	Default.Output(LOG_INFO, fmt.Sprintln(a))
+	Default.Output(LOG_INFO, fmt.Sprint(a...))
 }
 
 func Infof(format string, a ...interface{}) {
-	Default.Output(LOG_INFO, fmt.Sprintf(format, a))
+	Default.Output(LOG_INFO, fmt.Sprintf(format, a...))
 }
 
 func Notice(a ...interface{}) {
-	Default.Output(LOG_NOTICE, fmt.Sprintln(a))
+	Default.Output(LOG_NOTICE, fmt.Sprint(a...))
 }
 
 func Noticef(format string, a ...interface{}) {
-	Default.Output(LOG_NOTICE, fmt.Sprintf(format, a))
+	Default.Output(LOG_NOTICE, fmt.Sprintf(format, a...))
 }
 
 func Warning(a ...interface{}) {
-	Default.Output(LOG_WARNING, fmt.Sprintln(a))
+	Default.Output(LOG_WARNING, fmt.Sprint(a...))
 }
 
 func Warningf(format string, a ...interface{}) {
-	Default.Output(LOG_WARNING, fmt.Sprintf(format, a))
+	Default.Output(LOG_WARNING, fmt.Sprintf(format, a...))
 }
 
 func SetupDefault(logfile string, loglevel int) (err error) {
-	Default, err = NewLogger(logfile, loglevel, "")
+	Default, err = NewFileLogger(logfile, loglevel, "")
 	return
 }

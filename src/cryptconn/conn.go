@@ -3,7 +3,6 @@ package cryptconn
 import (
 	"crypto/cipher"
 	"encoding/hex"
-	"logging"
 	"net"
 )
 
@@ -22,14 +21,14 @@ func (sc CryptConn) Read(b []byte) (n int, err error) {
 	}
 	sc.in.XORKeyStream(b[:n], b[:n])
 	if DEBUGOUTPUT {
-		logging.Debug("recv\n", hex.Dump(b[:n]))
+		logger.Debug("recv\n", hex.Dump(b[:n]))
 	}
 	return
 }
 
 func (sc CryptConn) Write(b []byte) (n int, err error) {
 	if DEBUGOUTPUT {
-		logging.Debug("send\n", hex.Dump(b))
+		logger.Debug("send\n", hex.Dump(b))
 	}
 	sc.out.XORKeyStream(b[:], b[:])
 	return sc.Conn.Write(b)

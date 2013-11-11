@@ -3,7 +3,7 @@ package socks
 import (
 	"bufio"
 	"errors"
-	"logging"
+	"fmt"
 	"net"
 	"sutils"
 )
@@ -17,7 +17,8 @@ func NewService(dialer sutils.Dialer) (ss *SocksService) {
 }
 
 func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error) {
-	logging.Debug("connection comein")
+	logger.Debugf("connection come from: %s => %s",
+		conn.RemoteAddr(), conn.LocalAddr())
 
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
@@ -36,10 +37,10 @@ func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error
 	SendHandshakeResponse(writer, method)
 	if method == 0xff {
 		err = errors.New("auth method wrong")
-		logging.Err(err)
+		logger.Err(err)
 		return
 	}
-	logging.Debug("handshark ok")
+	logger.Debug("handshark ok")
 
 	hostname, port, err := GetConnect(reader)
 	if err != nil {
@@ -47,9 +48,9 @@ func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error
 		SendConnectResponse(writer, 0x01)
 		return
 	}
-	logging.Debug("dst:", hostname, port)
+	logger.Debugf("dst: %s:%d", hostname, port)
 
-	dstconn, err = ss.dialer.Dial(hostname, port)
+	dstconn, err = ss.dialer.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	if err != nil {
 		// Connection refused
 		SendConnectResponse(writer, 0x05)
@@ -66,7 +67,7 @@ func (ss *SocksService) ServeTCP(listener net.Listener) (err error) {
 	for {
 		conn, err = listener.Accept()
 		if err != nil {
-			logging.Err(err)
+			logger.Err(err)
 			return
 		}
 		go func() {

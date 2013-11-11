@@ -7,6 +7,7 @@ import (
 	"ipfilter"
 	"logging"
 	"net"
+	"net/http"
 	"qsocks"
 	"socks"
 	"sutils"
@@ -20,7 +21,7 @@ var password string
 var passfile string
 var blackfile string
 var runmode string
-var logger *logging.Logger
+var logger logging.Logger
 
 func init() {
 	var logfile string
@@ -48,47 +49,49 @@ func init() {
 		panic(err.Error())
 	}
 
-	logger, err = logging.NewLogger("", -1, "goproxy")
+	logger, err = logging.NewFileLogger("default", -1, "goproxy")
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
+
 }
 
-var cryptWrapper func(net.Conn) (net.Conn, error) = nil
-
 func run_server() {
-	var err error
-
-	qs, err := qsocks.NewService(passfile, cryptWrapper)
-	if err != nil {
-		return
-	}
-
 	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
 	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
 		return
 	}
-	listener, err := net.ListenTCP("tcp", tcpAddr)
+
+	var listener net.Listener
+	listener, err = net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
+		return
+	}
+
+	if len(keyfile) > 0 {
+		listener, err = cryptconn.NewListener(listener, cipher, keyfile)
+		if err != nil {
+			logger.Err("crypto not work, cipher or keyfile wrong.")
+			return
+		}
+	} else {
+		logger.Warning("no vaild keyfile.")
+	}
+
+	qs, err := qsocks.NewService(passfile)
+	if err != nil {
 		return
 	}
 
 	err = qs.ServeTCP(listener)
 	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
 	}
 }
 
-func run_client() {
-	var err error
-
-	if len(flag.Args()) < 1 {
-		panic("args not enough")
-	}
-	serveraddr := flag.Args()[0]
-
+func get_dialer(serveraddr string) (dialer sutils.Dialer, err error) {
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
@@ -97,156 +100,92 @@ func run_client() {
 		}
 	}
 
-	var dialer sutils.Dialer
-	dialer = qsocks.NewDialer(
-		serveraddr, cryptWrapper, username, password)
+	dialer = sutils.DefaultTcpDialer
+
+	if len(keyfile) > 0 {
+		dialer, err = cryptconn.NewDialer(dialer, cipher, keyfile)
+		if err != nil {
+			logger.Err("crypto not work, cipher or keyfile wrong.")
+			return
+		}
+	} else {
+		logger.Warning("no vaild keyfile.")
+	}
+
+	dialer = qsocks.NewDialer(dialer, serveraddr, username, password)
 	if err != nil {
 		return
 	}
 
 	if blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
-			blackfile, false, dialer)
+			sutils.DefaultTcpDialer, dialer, blackfile)
 		if err != nil {
 			return
 		}
 	}
 
-	ss := socks.NewService(dialer)
+	return
+}
+
+func run_client() {
+	if len(flag.Args()) < 1 {
+		logger.Err("args not enough")
+		return
+	}
+	serveraddr := flag.Args()[0]
+
+	dialer, err := get_dialer(serveraddr)
+	if err != nil {
+		return
+	}
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
 	if err != nil {
-		logging.Err(err)
-		return
-	}
-	listener, err := net.ListenTCP("tcp", tcpAddr)
-	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
 		return
 	}
 
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+
+	ss := socks.NewService(dialer)
 	err = ss.ServeTCP(listener)
 	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
 	}
 }
 
-// var tspt http.Transport
+func run_httproxy() {
+	if len(flag.Args()) < 1 {
+		logger.Err("args not enough")
+		return
+	}
+	serveraddr := flag.Args()[0]
 
-// type Proxy struct{}
+	dialer, err := get_dialer(serveraddr)
+	if err != nil {
+		return
+	}
 
-// func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-// 	logging.Info(r.Method, r.URL)
-
-// 	if r.Method == "CONNECT" {
-// 		p.Connect(w, r)
-// 		return
-// 	}
-
-// 	r.RequestURI = ""
-// 	r.Header.Del("Accept-Encoding")
-// 	r.Header.Del("Proxy-Connection")
-// 	r.Header.Del("Connection")
-
-// 	resp, err := tspt.RoundTrip(r)
-// 	if err != nil {
-// 		logging.Err(err)
-// 		return
-// 	}
-// 	defer resp.Body.Close()
-
-// 	resp.Header.Del("Content-Length")
-// 	for k, vv := range resp.Header {
-// 		for _, v := range vv {
-// 			w.Header().Add(k, v)
-// 		}
-// 	}
-// 	w.WriteHeader(resp.StatusCode)
-// 	_, err = sutils.CoreCopy(w, resp.Body)
-// 	if err != nil {
-// 		logging.Err(err)
-// 		return
-// 	}
-// 	return
-// }
-
-// func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
-// 	hij, ok := w.(http.Hijacker)
-// 	if !ok {
-// 		logging.Err("httpserver does not support hijacking")
-// 		return
-// 	}
-// 	srcconn, _, err := hij.Hijack()
-// 	if err != nil {
-// 		logging.Err("Cannot hijack connection ", err)
-// 		return
-// 	}
-// 	defer srcconn.Close()
-
-// 	host := r.URL.Host
-// 	if !strings.Contains(host, ":") {
-// 		host += ":80"
-// 	}
-// 	dstconn, err := socks.DialConn("tcp", host)
-// 	if err != nil {
-// 		logging.Err(err)
-// 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
-// 		return
-// 	}
-// 	defer dstconn.Close()
-// 	srcconn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-
-// 	sutils.CopyLink(srcconn, dstconn)
-// 	return
-// }
-
-// func run_httproxy() {
-// 	if cryptWrapper == nil {
-// 		logging.Warning("client mode without keyfile")
-// 	}
-
-// 	if len(flag.Args()) < 1 {
-// 		panic("args not enough")
-// 	}
-// 	serveraddr := flag.Args()[0]
-
-// 	err := dns.LoadConfig("resolv.conf")
-// 	if err != nil {
-// 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 	}
-
-// 	socks.InitDail(blackfile, serveraddr, cryptWrapper, username, password)
-
-// 	tspt = http.Transport{Dial: socks.DialConn}
-// 	http.ListenAndServe(listenaddr, &Proxy{})
-// }
+	http.ListenAndServe(listenaddr, &Proxy{
+		dialer: dialer,
+		tspt:   http.Transport{Dial: dialer.Dial},
+	})
+}
 
 func main() {
-	var err error
-
-	if len(keyfile) > 0 {
-		cryptWrapper, err = cryptconn.NewCryptWrapper(cipher, keyfile)
-		if err != nil {
-			logging.Err("crypto not work, cipher or keyfile wrong.")
-			return
-		}
-	}
-
-	if cryptWrapper == nil {
-		logging.Warning("no vaild keyfile.")
-	}
-
-	logging.Infof("%s mode start", runmode)
+	logger.Infof("%s mode start.", runmode)
 	switch runmode {
 	case "server":
 		run_server()
 	case "client":
 		run_client()
-		// case "httproxy":
-		// 	run_httproxy()
+	case "httproxy":
+		run_httproxy()
 	}
-	logging.Info("server stopped")
+	logger.Info("server stopped")
 }

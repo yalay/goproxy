@@ -1,38 +1,35 @@
 package qsocks
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
+	"sutils"
 )
 
 type QsocksDialer struct {
-	serveraddr   string
-	cryptWrapper func(net.Conn) (net.Conn, error)
-	username     string
-	password     string
+	sutils.Dialer
+	serveraddr string
+	username   string
+	password   string
 }
 
-func NewDialer(serveraddr string, cryptWrapper func(net.Conn) (net.Conn, error),
+func NewDialer(dialer sutils.Dialer, serveraddr string,
 	username, password string) (qd *QsocksDialer) {
 	return &QsocksDialer{
-		serveraddr:   serveraddr,
-		cryptWrapper: cryptWrapper,
-		username:     username,
-		password:     password,
+		Dialer:     dialer,
+		serveraddr: serveraddr,
+		username:   username,
+		password:   password,
 	}
 }
 
-func (d *QsocksDialer) Dial(hostname string, port uint16) (conn net.Conn, err error) {
-	conn, err = net.Dial("tcp", d.serveraddr)
+func (d *QsocksDialer) Dial(network, address string) (conn net.Conn, err error) {
+	conn, err = d.Dialer.Dial(network, d.serveraddr)
 	if err != nil {
 		return
-	}
-
-	if d.cryptWrapper != nil {
-		conn, err = d.cryptWrapper(conn)
-		if err != nil {
-			return
-		}
 	}
 
 	bufAuth, err := Auth(d.username, d.password)
@@ -44,7 +41,21 @@ func (d *QsocksDialer) Dial(hostname string, port uint16) (conn net.Conn, err er
 		return
 	}
 
-	bufConn, err := Conn(hostname, port)
+	idx := strings.LastIndex(address, ":")
+	if idx == -1 {
+		err = errors.New("invaild address")
+		logger.Err(err)
+		return
+	}
+	hostname := address[:idx]
+	port, err := strconv.Atoi(address[idx+1:])
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	logger.Debugf("dialer %s => %s:%d", d.serveraddr, hostname, port)
+
+	bufConn, err := Conn(hostname, uint16(port))
 	if err != nil {
 		return
 	}
@@ -57,8 +68,16 @@ func (d *QsocksDialer) Dial(hostname string, port uint16) (conn net.Conn, err er
 	if err != nil {
 		return
 	}
-	if res != 0 {
-		return nil, fmt.Errorf("qsocks response %d", res)
+	switch res {
+	case 0:
+	case 1:
+		err = errors.New("auth failed.")
+		logger.Err(err)
+		return
+	default:
+		err = fmt.Errorf("response %d", res)
+		logger.Err(err)
+		return
 	}
 	return
 }

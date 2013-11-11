@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"logging"
 	"net"
 )
 
@@ -14,6 +15,16 @@ const (
 	REQ_CONN = iota
 	REQ_DNS
 )
+
+var logger logging.Logger
+
+func init() {
+	var err error
+	logger, err = logging.NewFileLogger("default", -1, "qsocks")
+	if err != nil {
+		panic(err)
+	}
+}
 
 func fillString(b []byte, s string) (r []byte) {
 	b[0] = byte(len(s))

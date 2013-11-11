@@ -2,6 +2,7 @@
 
 bin
 pkg
+key
 *.key
 *.log
 *.pyc

@@ -11,6 +11,16 @@ import (
 	"os"
 )
 
+var logger logging.Logger
+
+func init() {
+	var err error
+	logger, err = logging.NewFileLogger("default", -1, "crypt")
+	if err != nil {
+		panic(err)
+	}
+}
+
 func ReadKey(keyfile string, keysize int, ivsize int) (key []byte, iv []byte, err error) {
 	file, err := os.Open(keyfile)
 	if err != nil {
@@ -27,35 +37,6 @@ func ReadKey(keyfile string, keysize int, ivsize int) (key []byte, iv []byte, er
 	iv = make([]byte, ivsize)
 	_, err = io.ReadFull(file, iv)
 	return
-}
-
-func NewCryptWrapper(method string, keyfile string) (f func(net.Conn) (net.Conn, error), err error) {
-	var g func(net.Conn, []byte, []byte) (net.Conn, error)
-	var key []byte
-	var iv []byte
-
-	logging.Debug("Crypt Wrapper with", method, "preparing")
-	switch method {
-	case "aes":
-		key, iv, err = ReadKey(keyfile, 16, 16)
-		g = NewAesConn
-	case "des":
-		key, iv, err = ReadKey(keyfile, 16, 8)
-		g = NewDesConn
-	case "tripledes":
-		key, iv, err = ReadKey(keyfile, 16, 8)
-		g = NewTripleDesConn
-	case "rc4":
-		key, iv, err = ReadKey(keyfile, 16, 0)
-		g = NewRC4Conn
-	}
-	if err != nil {
-		return
-	}
-
-	return func(conn net.Conn) (sc net.Conn, err error) {
-		return g(conn, key, iv)
-	}, nil
 }
 
 func NewAesConn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
@@ -98,4 +79,33 @@ func NewRC4Conn(conn net.Conn, key []byte, iv []byte) (sc net.Conn, err error) {
 		return
 	}
 	return CryptConn{conn, in, out}, nil
+}
+
+func New(method string, keyfile string) (
+	wrapper func(net.Conn) (net.Conn, error), err error) {
+	logger.Debugf("Crypt Wrapper with %s preparing.", method)
+
+	var key, iv []byte
+	var g func(net.Conn, []byte, []byte) (net.Conn, error)
+	switch method {
+	case "aes":
+		g = NewAesConn
+		key, iv, err = ReadKey(keyfile, 16, 16)
+	case "des":
+		g = NewDesConn
+		key, iv, err = ReadKey(keyfile, 16, 8)
+	case "tripledes":
+		g = NewTripleDesConn
+		key, iv, err = ReadKey(keyfile, 16, 8)
+	case "rc4":
+		g = NewRC4Conn
+		key, iv, err = ReadKey(keyfile, 16, 0)
+	}
+	if err != nil {
+		return
+	}
+
+	return func(c net.Conn) (net.Conn, error) {
+		return g(c, key, iv)
+	}, nil
 }

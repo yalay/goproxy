@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"logging"
 	"net"
 	"os"
 	"strings"
@@ -13,26 +12,28 @@ import (
 )
 
 type QsocksService struct {
-	userpass     map[string]string
-	cryptWrapper func(net.Conn) (net.Conn, error)
+	userpass map[string]string
 }
 
 func LoadPassfile(filename string) (userpass map[string]string, err error) {
+	logger.Infof("load passfile from file %s.", filename)
+
 	file, err := os.Open(filename)
 	if err != nil {
-		logging.Err(err)
+		logger.Err(err)
 		return
 	}
 	defer file.Close()
 	userpass = make(map[string]string, 0)
 
 	reader := bufio.NewReader(file)
+QUIT:
 	for {
 		line, err := reader.ReadString('\n')
 		switch err {
 		case io.EOF:
 			if len(line) == 0 {
-				return nil, nil
+				break QUIT
 			}
 		case nil:
 		default:
@@ -41,17 +42,18 @@ func LoadPassfile(filename string) (userpass map[string]string, err error) {
 		f := strings.SplitN(line, ":", 2)
 		if len(f) < 2 {
 			err = fmt.Errorf("format wrong: %s", line)
-			logging.Err(err)
+			logger.Err(err)
 			return nil, err
 		}
 		userpass[strings.Trim(f[0], "\r\n ")] = strings.Trim(f[1], "\r\n ")
 	}
 
+	logger.Infof("userinfo loaded %d record(s).", len(userpass))
 	return
 }
 
-func NewService(passfile string, cryptWrapper func(net.Conn) (net.Conn, error)) (qs *QsocksService, err error) {
-	qs = &QsocksService{cryptWrapper: cryptWrapper}
+func NewService(passfile string) (qs *QsocksService, err error) {
+	qs = &QsocksService{}
 	if passfile == "" {
 		return qs, nil
 	}
@@ -60,30 +62,25 @@ func NewService(passfile string, cryptWrapper func(net.Conn) (net.Conn, error)) 
 }
 
 func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
-	logging.Debug("connection comein")
-
-	if qs.cryptWrapper != nil {
-		conn, err = qs.cryptWrapper(conn)
-		if err != nil {
-			return
-		}
-	}
+	logger.Debugf("connection come from: %s => %s",
+		conn.RemoteAddr(), conn.LocalAddr())
 
 	username, password, err := GetAuth(conn)
 	if err != nil {
 		return
 	}
 
+	logger.Debugf("auth with username: %s, password: %s.", username, password)
 	if qs.userpass != nil {
 		password1, ok := qs.userpass[username]
 		if !ok || (password != password1) {
 			SendResponse(conn, 0x01)
 			err = fmt.Errorf("failed with auth: %s:%s", username, password)
-			logging.Err(err)
+			logger.Err(err)
 			return
 		}
 	}
-	logging.Debug("qsocks auth passed")
+	logger.Infof("auth passed with username: %s, password: %s.", username, password)
 
 	req, err := GetReq(conn)
 	if err != nil {
@@ -97,10 +94,10 @@ func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
 			return err
 		}
 
-		logging.Debugf("try connect to %s:%d", hostname, port)
+		logger.Debugf("try connect to: %s:%d", hostname, port)
 		dstconn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 		if err != nil {
-			logging.Err(err)
+			logger.Err(err)
 			return err
 		}
 
@@ -110,7 +107,7 @@ func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
 	case REQ_DNS:
 		SendResponse(conn, 0xff)
 		err = errors.New("require DNS not support yet")
-		logging.Err(err)
+		logger.Err(err)
 		return
 	}
 	return
@@ -122,15 +119,12 @@ func (qs *QsocksService) ServeTCP(listener net.Listener) (err error) {
 	for {
 		conn, err = listener.Accept()
 		if err != nil {
-			logging.Err(err)
+			logger.Err(err)
 			return
 		}
 		go func() {
 			defer conn.Close()
-			e := qs.QsocksHandler(conn)
-			if e != nil {
-				logging.Err(e)
-			}
+			qs.QsocksHandler(conn)
 		}()
 	}
 	return

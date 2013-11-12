@@ -1,4 +1,4 @@
-package reusetcp
+package msocks
 
 import (
 	"bytes"

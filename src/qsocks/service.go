@@ -61,12 +61,13 @@ func NewService(passfile string) (qs *QsocksService, err error) {
 	return
 }
 
-func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
+func (qs *QsocksService) Handler(conn net.Conn) {
 	logger.Debugf("connection come from: %s => %s",
 		conn.RemoteAddr(), conn.LocalAddr())
 
 	username, password, err := GetAuth(conn)
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 
@@ -91,19 +92,21 @@ func (qs *QsocksService) QsocksHandler(conn net.Conn) (err error) {
 	case REQ_CONN:
 		hostname, port, err := GetConn(conn)
 		if err != nil {
-			return err
+			logger.Err(err)
+			return
 		}
 
 		logger.Debugf("try connect to: %s:%d", hostname, port)
 		dstconn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 		if err != nil {
 			logger.Err(err)
-			return err
+			return
 		}
 
 		SendResponse(conn, 0)
 		sutils.CopyLink(conn, dstconn)
-		return err
+		logger.Err(err)
+		return
 	case REQ_DNS:
 		SendResponse(conn, 0xff)
 		err = errors.New("require DNS not support yet")
@@ -124,7 +127,7 @@ func (qs *QsocksService) ServeTCP(listener net.Listener) (err error) {
 		}
 		go func() {
 			defer conn.Close()
-			qs.QsocksHandler(conn)
+			qs.Handler(conn)
 		}()
 	}
 	return

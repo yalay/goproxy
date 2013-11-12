@@ -1,11 +1,10 @@
-package reusetcp
+package msocks
 
 import (
 	"bufio"
 	"encoding/binary"
 	"errors"
 	"io"
-	"net"
 )
 
 const (
@@ -19,6 +18,12 @@ const (
 	MSG_RST
 )
 
+const (
+	ERR_AUTH = iota
+	ERR_IDEXIST
+	ERR_CONNFAILED
+)
+
 type Frame interface {
 	ReadFrame(length uint16, streamid uint16, r io.Reader) (err error)
 	WriteFrame(w io.Writer) (err error)
@@ -28,18 +33,21 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 	var buf [2]byte
 	_, err = r.Read(buf[:1])
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	msgtype := uint8(buf[0])
 
 	_, err = r.Read(buf[:])
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	length := binary.BigEndian.Uint16(buf[:])
 
 	_, err = r.Read(buf[:])
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	streamid := binary.BigEndian.Uint16(buf[:])
@@ -70,14 +78,17 @@ func GetFrameBuf(w io.Writer, msgtype uint8, length uint16, streamid uint16) (bu
 	buf = bufio.NewWriterSize(w, int(length+5))
 	err = binary.Write(buf, binary.BigEndian, msgtype)
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	err = binary.Write(buf, binary.BigEndian, length)
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	err = binary.Write(buf, binary.BigEndian, streamid)
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	return
@@ -86,9 +97,14 @@ func GetFrameBuf(w io.Writer, msgtype uint8, length uint16, streamid uint16) (bu
 func ReadString(r io.Reader) (s string, err error) {
 	var length uint16
 	err = binary.Read(r, binary.BigEndian, &length)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
 	buf := make([]byte, length)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	return string(buf), nil
@@ -97,9 +113,13 @@ func ReadString(r io.Reader) (s string, err error) {
 func WriteString(w *bufio.Writer, s string) (err error) {
 	err = binary.Write(w, binary.BigEndian, uint16(len(s)))
 	if err != nil {
+		logger.Err(err)
 		return
 	}
 	_, err = w.Write([]byte(s))
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 
@@ -122,6 +142,11 @@ func (f *FrameOK) WriteFrame(w io.Writer) (err error) {
 	}
 	defer buf.Flush()
 	return
+}
+
+func SendOKFrame(w io.Writer, streamid uint16) (err error) {
+	f := &FrameOK{streamid: streamid}
+	return f.WriteFrame(w)
 }
 
 type FrameFAILED struct {
@@ -152,6 +177,11 @@ func (f *FrameFAILED) WriteFrame(w io.Writer) (err error) {
 	return
 }
 
+func SendFAILEDFrame(w io.Writer, streamid uint16, errno uint32) (err error) {
+	f := &FrameFAILED{streamid: streamid, errno: errno}
+	return f.WriteFrame(w)
+}
+
 type FrameAuth struct {
 	streamid uint16
 	username string
@@ -173,7 +203,6 @@ func (f *FrameAuth) ReadFrame(length uint16, streamid uint16, r io.Reader) (err 
 	if int(length) != len(f.username)+len(f.password)+4 {
 		return errors.New("frame auth length not match")
 	}
-
 	return
 }
 
@@ -188,8 +217,7 @@ func (f *FrameAuth) WriteFrame(w io.Writer) (err error) {
 	if err != nil {
 		return
 	}
-	err = WriteString(buf, f.password)
-	return
+	return WriteString(buf, f.password)
 }
 
 type FrameData struct {
@@ -199,7 +227,6 @@ type FrameData struct {
 
 func (f *FrameData) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
 	f.streamid = streamid
-
 	f.data = make([]byte, length)
 	_, err = io.ReadFull(r, f.data)
 	return
@@ -215,79 +242,38 @@ func (f *FrameData) WriteFrame(w io.Writer) (err error) {
 	return
 }
 
-const (
-	ADDR_HOSTNAME = iota
-	ADDR_IPV4
-	ADDR_IPV6
-)
-
 type FrameSyn struct {
 	streamid uint16
-	port     uint16
-	target   string
+	address  string
 }
 
 func (f *FrameSyn) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
 	f.streamid = streamid
 
-	err = binary.Read(r, binary.BigEndian, &f.port)
+	f.address, err = ReadString(r)
 	if err != nil {
 		return
 	}
-
-	var addrtype uint8
-	err = binary.Read(r, binary.BigEndian, &addrtype)
-	if err != nil {
-		return
-	}
-
-	switch addrtype {
-	case ADDR_IPV4:
-		panic("addr ipv4 not support yet")
-	case ADDR_IPV6:
-		panic("addr ipv6 not support yet")
-	case ADDR_HOSTNAME:
-		f.target, err = ReadString(r)
-		if err != nil {
-			return
-		}
-
-		if len(f.target)+5 != int(length) {
-			return errors.New("frame syn length not match")
-		}
+	if int(length) != len(f.address)+2 {
+		return errors.New("frame syn length not match")
 	}
 
 	return
 }
 
 func (f *FrameSyn) WriteFrame(w io.Writer) (err error) {
-	buf, err := GetFrameBuf(w, MSG_SYN, uint16(len(f.target)+5), f.streamid)
+	buf, err := GetFrameBuf(w, MSG_SYN, uint16(len(f.address)+2), f.streamid)
 	if err != nil {
 		return
 	}
 	defer buf.Flush()
 
-	err = binary.Write(buf, binary.BigEndian, f.port)
-	if err != nil {
-		return
-	}
-	err = binary.Write(buf, binary.BigEndian, uint8(ADDR_HOSTNAME))
-	if err != nil {
-		return
-	}
-
-	err = WriteString(buf, f.target)
-	return
-}
-
-func (f *FrameSyn) Dial() (conn *net.TCPConn, err error) {
-	// conn, err = net.Dial("tcp", fmt.Fprint("%s:%d", fs.target, fs.port))
-	return
+	return WriteString(buf, f.address)
 }
 
 type FrameAck struct {
-	streamid    uint16
-	move_window uint32
+	streamid uint16
+	window   uint32
 }
 
 func (f *FrameAck) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
@@ -295,7 +281,7 @@ func (f *FrameAck) ReadFrame(length uint16, streamid uint16, r io.Reader) (err e
 		return errors.New("frame fin with length not 4")
 	}
 	f.streamid = streamid
-	err = binary.Read(r, binary.BigEndian, &f.move_window)
+	err = binary.Read(r, binary.BigEndian, &f.window)
 	return
 }
 
@@ -305,7 +291,8 @@ func (f *FrameAck) WriteFrame(w io.Writer) (err error) {
 		return
 	}
 	defer buf.Flush()
-	err = binary.Write(buf, binary.BigEndian, f.move_window)
+	err = binary.Write(buf, binary.BigEndian, f.window)
+	logger.Err(err)
 	return
 }
 

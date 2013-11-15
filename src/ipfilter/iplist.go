@@ -24,26 +24,9 @@ func init() {
 	}
 }
 
-func ReadIPList(filename string) (iplist IPList, err error) {
-	logger.Infof("load iplist from file %s.", filename)
-
-	var f io.ReadCloser
-	f, err = os.Open(filename)
-	if err != nil {
-		logger.Err(err)
-		return
-	}
-	defer f.Close()
-
-	if strings.HasSuffix(filename, ".gz") {
-		f, err = gzip.NewReader(f)
-		if err != nil {
-			logger.Err(err)
-			return
-		}
-	}
-
+func ReadIPList(f io.Reader) (iplist IPList, err error) {
 	reader := bufio.NewReader(f)
+
 QUIT:
 	for {
 		line, err := reader.ReadString('\n')
@@ -67,6 +50,28 @@ QUIT:
 
 	logger.Infof("blacklist loaded %d record(s).", len(iplist))
 	return
+}
+
+func ReadIPListFile(filename string) (iplist IPList, err error) {
+	logger.Infof("load iplist from file %s.", filename)
+
+	var f io.ReadCloser
+	f, err = os.Open(filename)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	defer f.Close()
+
+	if strings.HasSuffix(filename, ".gz") {
+		f, err = gzip.NewReader(f)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+	}
+
+	return ReadIPList(f)
 }
 
 func (iplist IPList) Contain(ip net.IP) bool {
@@ -93,7 +98,7 @@ func NewFilteredDialer(dialer1 sutils.Dialer, dialer2 sutils.Dialer,
 		dialer: dialer2,
 	}
 
-	fd.iplist, err = ReadIPList(filename)
+	fd.iplist, err = ReadIPListFile(filename)
 	return
 }
 

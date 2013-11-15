@@ -3,62 +3,97 @@ package msocks
 import (
 	"io"
 	"net"
+	"sutils"
 	"time"
 )
 
-type Stream interface {
-	OnRecv([]byte) (int, error)
-	OnClose() error
-	OnRead(uint32)
-}
-
-type ServiceStream struct {
-	streamid uint16
-	window   uint32
+type Conn struct {
 	sess     *Session
-	closed   bool
+	streamid uint16
+	rclosed  bool
+	wclosed  bool
+	window   *sutils.WaitNum
+	buf      chan *FrameData
+	bufhead  *FrameData
+	bufpos   int
 }
 
-func (ss *ServiceStream) Read(data []byte) (n int, err error) {
-	if ss.closed {
+func NewConn(streamid uint16, sess *Session) (c *Conn) {
+	// use 1024 as default channel length, 1024 * 1024 = 1M
+	// that is the buffer before read
+	// and it's the maxmium length of write window.
+	// BTW, default value of write window is 256K.
+	c = &Conn{
+		streamid: streamid,
+		sess:     sess,
+		rclosed:  false,
+		wclosed:  false,
+		window:   sutils.NewWaitNum(256 * 1024),
+		buf:      make(chan *FrameData, 1024),
+		bufpos:   0,
+	}
+	return
+}
+
+func (c *Conn) Read(data []byte) (n int, err error) {
+	if c.rclosed {
 		return 0, io.EOF
 	}
-	// TODO: read from buf
-	// send (max_window - bufsize) back
-	err = ss.sess.OnRead(ss.streamid, 0)
+
+	if c.bufhead == nil {
+		c.bufhead = <-c.buf
+		c.bufpos = 0
+	}
+
+	n = len(c.bufhead.data) - c.bufpos
+	if n > len(data) {
+		n = len(data)
+		copy(data, c.bufhead.data[c.bufpos:c.bufpos+n])
+		logger.Debugf("read %d of head chunk at %d.",
+			n, c.bufpos)
+		c.bufpos += n
+	} else {
+		copy(data, c.bufhead.data[c.bufpos:])
+		logger.Debugf("read all of head chunk.")
+		c.bufhead.Free()
+		c.bufhead = nil
+
+	}
+
+	// TODO: silly window symptom
+	// send readed bytes back
+	ft := &FrameAck{
+		streamid: c.streamid,
+		window:   uint32(n),
+	}
+	err = c.sess.WriteFrame(ft)
 	return
 }
 
-func (ss *ServiceStream) writeData(data []byte) (err error) {
-	ft := &FrameData{
-		streamid: ss.streamid,
-		data:     data,
-	}
-	err = ss.sess.WriteFrame(ft)
-	if err != nil {
-		return
-	}
-
-	ss.window -= uint32(len(data))
-	return
-}
-
-func (ss *ServiceStream) Write(data []byte) (n int, err error) {
+func (c *Conn) Write(data []byte) (n int, err error) {
 	for len(data) > 0 {
-		// check for window
-		// if window <= 0, wait for window
-
-		if ss.closed {
+		if c.wclosed {
 			return n, io.EOF
 		}
 
 		size := uint32(len(data))
-		if ss.window < size {
-			size = ss.window
+		// use 1024 as a chunk coz leakbuf 1k
+		if size > 1024 {
+			size = 1024
+		}
+		// check for window
+		// if window <= 0, wait for window
+		size = c.window.Acquire(size)
+
+		logger.Debugf("send chunk size %d at %d.", size, n)
+		ft := &FrameData{
+			streamid: c.streamid,
+			data:     data[:size],
 		}
 
-		err = ss.writeData(data[:size])
+		err = c.sess.WriteFrame(ft)
 		if err != nil {
+			// TODO: we are in big trouble, should break link.
 			return
 		}
 
@@ -68,129 +103,81 @@ func (ss *ServiceStream) Write(data []byte) (n int, err error) {
 	return
 }
 
-func (ss *ServiceStream) Close() (err error) {
-	if ss.closed {
+func (c *Conn) MarkClose() {
+	c.wclosed = true
+	c.rclosed = true
+}
+
+func (c *Conn) Close() (err error) {
+	if c.rclosed && c.wclosed {
 		return
 	}
 
-	f := &FrameFin{streamid: ss.streamid}
-	err = ss.sess.WriteFrame(f)
+	logger.Debugf("connection %x(%d) closing from local.", c, c.streamid)
+	f := &FrameFin{streamid: c.streamid}
+	err = c.sess.WriteFrame(f)
 	if err != nil {
 		logger.Err(err)
+	}
+
+	c.wclosed = true
+	if c.rclosed && c.wclosed {
+		err = c.sess.ClosePort(c.streamid)
+		if err != nil {
+			logger.Err(err)
+		}
 	}
 	return
 }
 
-func (ss *ServiceStream) OnRecv(data []byte) (n int, err error) {
-	// TODO: write to buf
+func (c *Conn) OnRecv(f *FrameData) (err error) {
+	if c.rclosed {
+		return
+	}
+	if len(f.data) == 0 {
+		return nil
+	}
+
+	logger.Debugf("recved %d bytes from remote.", len(f.data))
+	c.buf <- f
+	return nil
+}
+
+func (c *Conn) OnClose() (err error) {
+	logger.Debugf("connection %x(%d) closed from remote.", c, c.streamid)
+	c.rclosed = true
+	if c.rclosed && c.wclosed {
+		err = c.sess.ClosePort(c.streamid)
+		if err != nil {
+			logger.Err(err)
+		}
+	}
 	return
 }
 
-func (ss *ServiceStream) OnClose() (err error) {
-	ss.closed = true
+func (c *Conn) OnRead(window uint32) {
+	logger.Debugf("remote readed %d bytes.", window)
+	c.window.Release(window)
 	return
 }
 
-func (ss *ServiceStream) OnRead(window uint32) {
-	// TODO:
-	// notice reader
-	ss.window = window
-	return
+// TODO: use user defined addr
+func (c *Conn) LocalAddr() net.Addr {
+	return c.sess.LocalAddr()
 }
 
-func (ss *ServiceStream) LocalAddr() net.Addr {
+func (c *Conn) RemoteAddr() net.Addr {
+	return c.sess.RemoteAddr()
+}
+
+func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (ss *ServiceStream) RemoteAddr() net.Addr {
+func (c *Conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (ss *ServiceStream) SetDeadline(t time.Time) error {
+func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
-
-func (ss *ServiceStream) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (ss *ServiceStream) SetWriteDeadline(t time.Time) error {
-	return nil
-}
-
-// type Conn struct {
-// 	s        *Session
-// 	streamid uint16
-
-// 	write_closed bool
-// 	read_closed  bool
-
-// 	write_window uint32
-// 	pr           io.PipeReader // will this block?
-// 	pw           io.PipeWriter
-// 	conn         net.Conn
-// }
-
-// func (c *Conn) Read(p []byte) (n int, err error) {
-// 	if c.read_closed {
-// 		return 0, io.EOF
-// 	}
-
-// 	n, err = c.pr.Read(p)
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	c.write_window += n
-// 	// c.c.Write()
-// 	// read data
-// 	// send msg_ack back
-// 	return
-// }
-
-// func (c *Conn) Write(p []byte) (n int, err error) {
-// 	if c.write_closed {
-// 		return 0, io.EOF
-// 	}
-
-// 	// check c.write_window
-// 	f := &FrameData{streamid: c.streamid, data: p}
-// 	err = c.s.WriteFrame(f)
-// 	return
-// }
-
-// func (c *Conn) Close() error {
-// 	c.write_closed = true
-// 	f := &FrameFin{streamid: c.streamid}
-// 	f.WriteFrame(c.s.w)
-// 	if c.read_closed {
-// 		c.on_close()
-// 	}
-// 	return nil
-// }
-
-// func (c *Conn) on_close() {
-// 	c.idlock.Lock()
-// 	defer c.idlock.Unlock()
-// 	delete(c.s.streams, c.streamid)
-// }
-
-// func (c *Conn) LocalAddr() Addr {
-
-// }
-
-// func (c *Conn) RemoteAddr() Addr {
-
-// }
-
-// func (c *Conn) SetDeadline(t time.Time) error {
-
-// }
-
-// func (c *Conn) SetReadDeadline(t time.Time) error {
-
-// }
-
-// func (c *Conn) SetWriteDeadline(t time.Time) error {
-
-// }

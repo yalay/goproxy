@@ -11,7 +11,7 @@ import (
 func main() {
 	flag.Parse()
 
-	blacklist, err := ipfilter.ReadIPList("routes.list.gz")
+	blacklist, err := ipfilter.ReadIPListFile("routes.list.gz")
 	if err != nil {
 		logging.Err(err)
 		return

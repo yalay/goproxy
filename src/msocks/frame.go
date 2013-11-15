@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"sutils"
 )
 
 const (
@@ -223,11 +224,18 @@ func (f *FrameAuth) WriteFrame(w io.Writer) (err error) {
 type FrameData struct {
 	streamid uint16
 	data     []byte
+	buf      []byte
 }
 
 func (f *FrameData) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
 	f.streamid = streamid
-	f.data = make([]byte, length)
+	if length <= 1024 {
+		f.buf = sutils.Klb.Get()
+		f.data = f.buf[:length]
+	} else {
+		f.buf = make([]byte, length)
+		f.data = f.buf
+	}
 	_, err = io.ReadFull(r, f.data)
 	return
 }
@@ -240,6 +248,12 @@ func (f *FrameData) WriteFrame(w io.Writer) (err error) {
 	defer buf.Flush()
 	_, err = buf.Write(f.data)
 	return
+}
+
+func (f *FrameData) Free() {
+	if len(f.buf) == 1024 {
+		sutils.Klb.Free(f.buf)
+	}
 }
 
 type FrameSyn struct {
@@ -292,7 +306,9 @@ func (f *FrameAck) WriteFrame(w io.Writer) (err error) {
 	}
 	defer buf.Flush()
 	err = binary.Write(buf, binary.BigEndian, f.window)
-	logger.Err(err)
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 

@@ -69,22 +69,18 @@ func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err e
 	return
 }
 
-func (ms *MsocksService) on_conn(network, address string, streamid uint16) (s Stream, err error) {
+func (ms *MsocksService) on_conn(network, address string, streamid uint16) (c *Conn, err error) {
 	conn, err := ms.dialer.Dial("tcp", address)
 	if err != nil {
 		logger.Err(err)
 		return
 	}
 
-	ss := &ServiceStream{
-		streamid: streamid,
-		sess:     ms.sess,
-		closed:   false,
-	}
+	c = NewConn(streamid, ms.sess)
 	go func() {
-		sutils.CopyLink(conn, ss)
+		sutils.CopyLink(conn, c)
 	}()
-	return ss, nil
+	return c, nil
 }
 
 func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
@@ -94,30 +90,29 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		return false
 	}
 
-	switch ft := f.(type) {
-	default:
+	ft, ok := f.(*FrameAuth)
+	if !ok {
 		logger.Err("unexpected package type")
 		return false
-	case *FrameAuth:
-		logger.Debugf("auth with username: %s, password: %s.", ft.username, ft.password)
-		if ms.userpass != nil {
-			password1, ok := ms.userpass[ft.username]
-			if !ok || (ft.password != password1) {
-				SendFAILEDFrame(stream, ft.streamid, ERR_AUTH)
-				logger.Err("failed with auth")
-				return false
-			}
-		}
-		err = SendOKFrame(stream, ft.streamid)
-		if err != nil {
-			logger.Err(err)
-			return false
-		}
-
-		logger.Infof("auth passed with username: %s, password: %s.",
-			ft.username, ft.password)
 	}
 
+	logger.Debugf("auth with username: %s, password: %s.", ft.username, ft.password)
+	if ms.userpass != nil {
+		password1, ok := ms.userpass[ft.username]
+		if !ok || (ft.password != password1) {
+			SendFAILEDFrame(stream, ft.streamid, ERR_AUTH)
+			logger.Err("failed with auth")
+			return false
+		}
+	}
+	err = SendOKFrame(stream, ft.streamid)
+	if err != nil {
+		logger.Err(err)
+		return false
+	}
+
+	logger.Infof("auth passed with username: %s, password: %s.",
+		ft.username, ft.password)
 	return true
 }
 
@@ -130,8 +125,7 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 		return
 	}
 
-	ms.sess = NewSession()
-	ms.sess.conn = conn
+	ms.sess = NewSession(conn)
 	ms.sess.on_conn = ms.on_conn
 	ms.sess.Run()
 }

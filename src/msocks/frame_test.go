@@ -2,8 +2,13 @@ package msocks
 
 import (
 	"bytes"
+	"logging"
 	"testing"
 )
+
+func init() {
+	logging.SetupDefault("", logging.LOG_INFO)
+}
 
 func TestFrameOKRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{0x00, 0x00, 0x00, 0x0A, 0x0A})
@@ -132,8 +137,8 @@ func TestFrameDataWrite(t *testing.T) {
 }
 
 func TestFrameSynRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{0x04, 0x00, 0x07, 0x0A, 0x0A,
-		0x0B, 0x0B, 0x00, 0x00, 0x02, 0x61, 0x62})
+	buf := bytes.NewBuffer([]byte{0x04, 0x00, 0x04, 0x0A, 0x0A,
+		0x00, 0x02, 0x61, 0x62})
 
 	f, err := ReadFrame(buf)
 	if err != nil {
@@ -145,7 +150,7 @@ func TestFrameSynRead(t *testing.T) {
 		t.Fatalf("FrameSyn format wrong")
 	}
 
-	if ft.port != 0x0b0b || ft.target != "ab" {
+	if ft.address != "ab" {
 		t.Fatalf("FrameSyn body wrong")
 	}
 }
@@ -153,14 +158,13 @@ func TestFrameSynRead(t *testing.T) {
 func TestFrameSynWrite(t *testing.T) {
 	f := new(FrameSyn)
 	f.streamid = 10
-	f.port = 100
-	f.target = "cd"
+	f.address = "cd"
 
 	buf := bytes.NewBuffer(nil)
 	f.WriteFrame(buf)
 
-	if bytes.Compare(buf.Bytes(), []byte{0x04, 0x00, 0x07, 0x00, 0x0A,
-		0x00, 0x64, 0x00, 0x00, 0x02, 0x63, 0x64}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{0x04, 0x00, 0x04, 0x00, 0x0A,
+		0x00, 0x02, 0x63, 0x64}) != 0 {
 		t.Fatalf("FrameSyn write wrong")
 	}
 }
@@ -179,15 +183,16 @@ func TestFrameAckRead(t *testing.T) {
 		t.Fatalf("FrameAck format wrong")
 	}
 
-	if ft.move_window != 0x01020304 {
+	if ft.window != 0x01020304 {
 		t.Fatalf("FrameAck body wrong")
 	}
 }
 
 func TestFrameAckWrite(t *testing.T) {
-	f := new(FrameAck)
-	f.streamid = 10
-	f.move_window = 0x04050607
+	f := &FrameAck{
+		streamid: 10,
+		window:   0x04050607,
+	}
 
 	buf := bytes.NewBuffer(nil)
 	f.WriteFrame(buf)

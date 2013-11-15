@@ -8,7 +8,8 @@ import (
 	"logging"
 	"net"
 	"net/http"
-	"qsocks"
+	// qsocks to msocks
+	"msocks"
 	"socks"
 	"sutils"
 )
@@ -80,7 +81,8 @@ func run_server() {
 		logger.Warning("no vaild keyfile.")
 	}
 
-	qs, err := qsocks.NewService(passfile)
+	// qsocks to msocks
+	qs, err := msocks.NewService(passfile, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
 	}
@@ -112,7 +114,8 @@ func get_dialer(serveraddr string) (dialer sutils.Dialer, err error) {
 		logger.Warning("no vaild keyfile.")
 	}
 
-	dialer = qsocks.NewDialer(dialer, serveraddr, username, password)
+	// qsocks to msocks
+	dialer, err = msocks.NewDialer(dialer, serveraddr, username, password)
 	if err != nil {
 		return
 	}

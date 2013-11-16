@@ -72,7 +72,6 @@ func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err e
 func (ms *MsocksService) on_conn(network, address string, streamid uint16) (c *Conn, err error) {
 	conn, err := ms.dialer.Dial("tcp", address)
 	if err != nil {
-		logger.Err(err)
 		return
 	}
 

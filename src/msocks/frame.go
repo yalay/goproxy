@@ -72,7 +72,11 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = new(FrameRst)
 	}
 
-	return f, f.ReadFrame(length, streamid, r)
+	err = f.ReadFrame(length, streamid, r)
+	if err != nil {
+		logger.Err(err)
+	}
+	return f, err
 }
 
 func GetFrameBuf(w io.Writer, msgtype uint8, length uint16, streamid uint16) (buf *bufio.Writer, err error) {

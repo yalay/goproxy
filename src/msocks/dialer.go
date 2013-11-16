@@ -126,13 +126,18 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		logger.Err(err)
 		return
 	case 0: // FAILED
+		err = md.sess.ClosePort(streamid)
+		if err != nil {
+			logger.Err(err)
+			// big trouble
+		}
 		err = errors.New("connection failed")
 		logger.Err(err)
 		return
 	case 1: // OK
 		logger.Debugf("connect ok.")
+		c := NewConn(streamid, md.sess)
+		md.sess.PutIntoId(streamid, c)
+		return c, nil
 	}
-
-	c := NewConn(streamid, md.sess)
-	return c, nil
 }

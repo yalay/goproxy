@@ -69,6 +69,15 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 	return
 }
 
+func (s *Session) PutIntoId(id uint16, i interface{}) (err error) {
+	logger.Debugf("put into id(%d): %d.", id, i)
+	s.plock.Lock()
+	defer s.plock.Unlock()
+
+	s.ports[id] = i
+	return
+}
+
 func (s *Session) WriteFrame(f Frame) (err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
@@ -122,8 +131,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		logger.Infof("client try to connect: %s.", ft.address)
 		stream, err := s.on_conn("tcp", ft.address, ft.streamid)
 		if err != nil {
-			SendFAILEDFrame(s.conn, ft.streamid, ERR_CONNFAILED)
 			logger.Err(err)
+			SendFAILEDFrame(s.conn, ft.streamid, ERR_CONNFAILED)
 
 			s.ClosePort(ft.streamid)
 			return
@@ -186,7 +195,6 @@ func (s *Session) Run() {
 		f, err := ReadFrame(s.conn)
 		// EOF, in client mode, try reconnect
 		if err != nil {
-			logger.Err(err)
 			return
 		}
 

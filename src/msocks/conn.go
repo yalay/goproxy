@@ -106,6 +106,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 func (c *Conn) MarkClose() {
 	c.wclosed = true
 	c.rclosed = true
+	// FIXME: weakup reader and writer?
 }
 
 func (c *Conn) Close() (err error) {

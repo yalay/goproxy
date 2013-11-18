@@ -12,7 +12,7 @@ type Listener struct {
 }
 
 func NewListener(listener net.Listener, method string, keyfile string) (l *Listener, err error) {
-	logger.Debugf("Crypt Listener with %s preparing.", method)
+	logger.Infof("Crypt Listener with %s preparing.", method)
 	l = &Listener{
 		Listener: listener,
 	}

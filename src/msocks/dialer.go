@@ -52,7 +52,7 @@ func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
 	n := rand.Intn(len(md.dss))
 	ds := md.dss[n]
 
-	logger.Debugf("create connect, serveraddr: %s.",
+	logger.Infof("create connect, serveraddr: %s.",
 		ds.serveraddr)
 	conn, err = md.Dialer.Dial("tcp", ds.serveraddr)
 	if err != nil {
@@ -60,7 +60,7 @@ func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
 		return
 	}
 
-	logger.Debugf("auth with username: %s, password: %s.",
+	logger.Infof("auth with username: %s, password: %s.",
 		ds.username, ds.password)
 	fa := &FrameAuth{
 		username: ds.username,
@@ -82,7 +82,7 @@ func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
 		logger.Err(err)
 		return
 	case *FrameOK:
-		logger.Debugf("auth ok.")
+		logger.Infof("auth ok.")
 	case *FrameFAILED:
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
@@ -99,6 +99,10 @@ func (md *MsocksDialer) createSession() {
 	var conn net.Conn
 	md.sesslock.Lock()
 	defer md.sesslock.Unlock()
+
+	if len(md.sess) > 0 {
+		return
+	}
 
 	// retry
 	for i := 0; i < 3; i++ {
@@ -143,6 +147,7 @@ func (md *MsocksDialer) createSession() {
 }
 
 func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error) {
+	// TODO: new session when too many connections.
 	if len(md.sess) == 0 {
 		md.createSession()
 	}
@@ -169,7 +174,6 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 	}
 
 	st := <-ch
-	close(ch)
 	switch st {
 	default:
 		err = errors.New("unknown status")
@@ -183,11 +187,13 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		}
 		err = errors.New("connection failed")
 		logger.Err(err)
+		close(ch)
 		return
 	case 1: // OK
 		logger.Debugf("connect ok.")
 		c := NewConn(streamid, sess)
 		sess.PutIntoId(streamid, c)
+		close(ch)
 		return c, nil
 	}
 }

@@ -103,7 +103,7 @@ func NewFilteredDialer(dialer1 sutils.Dialer, dialer2 sutils.Dialer,
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
-	logger.Debugf("address: %s", address)
+	logger.Infof("address: %s", address)
 	if fd.iplist == nil {
 		return fd.Dialer.Dial(network, address)
 	}

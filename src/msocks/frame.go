@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sutils"
 )
@@ -56,6 +57,10 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 	streamid := binary.BigEndian.Uint16(buf[:])
 
 	switch msgtype {
+	default:
+		err = fmt.Errorf("unknown frame type: %d.", msgtype)
+		logger.Err(err)
+		return nil, err
 	case MSG_OK:
 		f = new(FrameOK)
 	case MSG_FAILED:
@@ -151,11 +156,6 @@ func (f *FrameOK) WriteFrame(w io.Writer) (err error) {
 	return
 }
 
-func SendOKFrame(w io.Writer, streamid uint16) (err error) {
-	f := &FrameOK{streamid: streamid}
-	return f.WriteFrame(w)
-}
-
 type FrameFAILED struct {
 	streamid uint16
 	errno    uint32
@@ -182,11 +182,6 @@ func (f *FrameFAILED) WriteFrame(w io.Writer) (err error) {
 	defer buf.Flush()
 	err = binary.Write(buf, binary.BigEndian, f.errno)
 	return
-}
-
-func SendFAILEDFrame(w io.Writer, streamid uint16, errno uint32) (err error) {
-	f := &FrameFAILED{streamid: streamid, errno: errno}
-	return f.WriteFrame(w)
 }
 
 type FrameAuth struct {

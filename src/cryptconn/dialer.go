@@ -11,7 +11,7 @@ type Dialer struct {
 }
 
 func NewDialer(dialer sutils.Dialer, method string, keyfile string) (d *Dialer, err error) {
-	logger.Debugf("Crypt Dialer with %s preparing.", method)
+	logger.Infof("Crypt Dialer with %s preparing.", method)
 	d = &Dialer{
 		Dialer: dialer,
 	}
@@ -21,7 +21,7 @@ func NewDialer(dialer sutils.Dialer, method string, keyfile string) (d *Dialer, 
 }
 
 func (d *Dialer) Dial(network, addr string) (conn net.Conn, err error) {
-	logger.Debugf("dailer connect: %s", addr)
+	logger.Infof("dailer connect: %s", addr)
 	conn, err = d.Dialer.Dial(network, addr)
 	if err != nil {
 		return

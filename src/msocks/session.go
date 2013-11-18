@@ -19,8 +19,8 @@ func init() {
 }
 
 type Session struct {
-	conn  net.Conn
 	flock sync.Mutex
+	conn  net.Conn
 
 	// lock ports before any ports op and id op
 	plock   sync.Mutex
@@ -85,7 +85,7 @@ func (s *Session) WriteFrame(f Frame) (err error) {
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
-	logger.Debugf("remove ports: %p(%d).", s, streamid)
+	logger.Infof("remove ports: %p(%d).", s, streamid)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 	_, ok := s.ports[streamid]
@@ -96,7 +96,7 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		logger.Err(err)
 	}
 	if len(s.ports) == 0 {
-		// TODO: close session?
+		// TODO: close session after 10 mins.
 	}
 	return
 }
@@ -123,7 +123,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.streamid]
 	if ok {
 		logger.Err("frame sync stream id exist.")
-		SendFAILEDFrame(s.conn, ft.streamid, ERR_IDEXIST)
+		fr := &FrameFAILED{streamid: ft.streamid, errno: ERR_IDEXIST}
+		s.WriteFrame(fr)
 		return false
 	}
 
@@ -135,7 +136,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		stream, err := s.on_conn("tcp", ft.address, ft.streamid)
 		if err != nil {
 			logger.Err(err)
-			SendFAILEDFrame(s.conn, ft.streamid, ERR_CONNFAILED)
+			fr := &FrameFAILED{streamid: ft.streamid, errno: ERR_CONNFAILED}
+			s.WriteFrame(fr)
 
 			s.RemovePorts(ft.streamid)
 			return
@@ -143,7 +145,12 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 
 		// update it, don't need to lock
 		s.ports[ft.streamid] = stream
-		SendOKFrame(s.conn, ft.streamid)
+		fr := &FrameOK{streamid: ft.streamid}
+		err = s.WriteFrame(fr)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
 		logger.Debug("connect successed.")
 		return
 	}()
@@ -233,7 +240,8 @@ func (s *Session) Run() {
 			}
 			ch <- 0
 		case *FrameData:
-			logger.Debugf("get package data: len(%d).", len(ft.data))
+			logger.Debugf("get package data: stream(%d), len(%d).",
+				ft.streamid, len(ft.data))
 			if !s.on_data(ft) {
 				return
 			}
@@ -248,7 +256,7 @@ func (s *Session) Run() {
 			i, ok := s.ports[ft.streamid]
 			if !ok {
 				logger.Err("frame ack stream id not exist")
-				return
+				continue
 			}
 			it, ok := i.(*Conn)
 			if !ok {

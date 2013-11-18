@@ -3,38 +3,41 @@ package msocks
 import (
 	"io"
 	"net"
-	"sutils"
 	"sync"
 	"time"
 )
 
 type Conn struct {
-	sess      *Session
-	streamid  uint16
-	rclosed   bool
-	wclosed   bool
-	window    *sutils.WaitNum
-	buf       chan *FrameData
-	bufhead   *FrameData
-	bufpos    int
+	sess     *Session
+	streamid uint16
+	rclosed  bool
+	wclosed  bool
+
+	ch_win  chan uint32
+	buf     chan *FrameData
+	bufhead *FrameData
+	bufpos  int
+
 	delaylock sync.Mutex
 	delayack  *time.Timer
 	delaycnt  int
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
-	// use 1024 as default channel length, 1024 * 1024 = 1M
-	// that is the buffer before read
-	// and it's the maxmium length of write window.
-	// BTW, default value of write window is 256K.
 	c = &Conn{
 		streamid: streamid,
 		sess:     sess,
 		rclosed:  false,
 		wclosed:  false,
-		window:   sutils.NewWaitNum(256 * 1024),
+		ch_win:   make(chan uint32, 3),
 		buf:      make(chan *FrameData, 1024),
+		// use 1024 as default channel length, 1024 * 1024 = 1M
+		// that is the buffer before read
+		// and it's the maxmium length of write window.
 	}
+	c.ch_win <- 256 * 1024
+	// default value of write window is 256K.
+	// that will be sent in 0.1s, so maxmium speed will be 2.56M/s = 20Mbps.
 	return
 }
 
@@ -47,7 +50,7 @@ func (c *Conn) SendAck(n int) {
 		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
 			c.delaylock.Lock()
 			defer c.delaylock.Unlock()
-			if c.rclosed {
+			if c.rclosed || c.wclosed {
 				return
 			}
 
@@ -114,6 +117,27 @@ func (c *Conn) OnRecv(f *FrameData) (err error) {
 	return nil
 }
 
+func (c *Conn) acquire(num uint32) (n uint32) {
+	n = <-c.ch_win
+	if n > num {
+		c.ch_win <- (n - num)
+		n = num
+	}
+	return
+}
+
+func (c *Conn) release(num uint32) (n uint32) {
+	select {
+	case n = <-c.ch_win:
+		n += num
+		c.ch_win <- n
+	default:
+		n = num
+		c.ch_win <- n
+	}
+	return
+}
+
 func (c *Conn) Write(data []byte) (n int, err error) {
 	for len(data) > 0 {
 		if c.wclosed {
@@ -127,7 +151,10 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		}
 		// check for window
 		// if window <= 0, wait for window
-		size = c.window.Acquire(size)
+		size = c.acquire(size)
+		if size == 0 {
+			return n, io.EOF
+		}
 
 		logger.Debugf("%p(%d) send chunk size %d at %d.",
 			c.sess, c.streamid, size, n)
@@ -150,18 +177,23 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 }
 
 func (c *Conn) OnRead(window uint32) {
-	c.window.Release(window)
-	logger.Debugf("remote readed %d bytes, window: %d.",
-		window, c.window.Number())
+	c.release(window)
+	// logger.Debugf("remote readed %d bytes, window: %d.",
+	// 	window, c.window.Number())
+	logger.Debugf("remote readed %d bytes.",
+		window)
 	return
 }
 
 func (c *Conn) MarkClose() {
 	c.wclosed = true
-	c.rclosed = true
+	// weakup writer
+	c.ch_win <- 0
 	// weakup reader
-	close(c.buf)
-	// FIXME: weakup writer
+	if !c.rclosed {
+		c.buf <- nil
+	}
+	c.rclosed = true
 }
 
 func (c *Conn) Close() (err error) {
@@ -188,8 +220,10 @@ func (c *Conn) Close() (err error) {
 
 func (c *Conn) OnClose() (err error) {
 	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
+	if !c.rclosed {
+		c.buf <- nil
+	}
 	c.rclosed = true
-	close(c.buf)
 
 	if c.rclosed && c.wclosed {
 		err = c.sess.RemovePorts(c.streamid)

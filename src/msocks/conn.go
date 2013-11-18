@@ -1,6 +1,7 @@
 package msocks
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -234,13 +235,18 @@ func (c *Conn) OnClose() (err error) {
 	return
 }
 
-// TODO: use user defined addr
 func (c *Conn) LocalAddr() net.Addr {
-	return c.sess.LocalAddr()
+	return &Addr{
+		c.sess.LocalAddr(),
+		c.streamid,
+	}
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
-	return c.sess.RemoteAddr()
+	return &Addr{
+		c.sess.RemoteAddr(),
+		c.streamid,
+	}
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {
@@ -253,4 +259,13 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+type Addr struct {
+	net.Addr
+	streamid uint16
+}
+
+func (a *Addr) String() (s string) {
+	return fmt.Sprintf("%s(%d)", a.Addr.String(), a.streamid)
 }

@@ -1,3 +1,9 @@
+goproxy (1.9) unstable; urgency=low
+
+  * pre-release for reusetcp.
+
+ -- Shell.Xu <shell909090@gmail.com>  Mon, 18 Nov 2013 15:11:12 +0800
+
 goproxy (1.8) unstable; urgency=low
 
   * re-struct code.

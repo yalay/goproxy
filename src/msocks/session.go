@@ -6,6 +6,7 @@ import (
 	"logging"
 	"net"
 	"sync"
+	"time"
 )
 
 var logger logging.Logger
@@ -28,6 +29,8 @@ type Session struct {
 	ports   map[uint16]interface{}
 
 	on_conn func(string, string, uint16) (*Conn, error)
+
+	delayclose *time.Timer
 }
 
 func NewSession(conn net.Conn) (s *Session) {
@@ -66,6 +69,10 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 	s.next_id += 1
 
 	s.ports[id] = i
+	// stop close
+	if s.delayclose != nil && s.delayclose.Stop() {
+		s.delayclose = nil
+	}
 	return
 }
 
@@ -95,10 +102,17 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		err = fmt.Errorf("streamid not exist: %d.", streamid)
 		logger.Err(err)
 	}
-	if len(s.ports) == 0 {
-		// TODO: close session after 10 mins.
+	if len(s.ports) == 0 && s.delayclose != nil {
+		// close session after 10 mins.
+		s.delayclose = time.AfterFunc(10*time.Minute, func() {
+			s.conn.Close()
+		})
 	}
 	return
+}
+
+func (s *Session) Number() (n int) {
+	return len(s.ports)
 }
 
 func (s *Session) Close() (err error) {

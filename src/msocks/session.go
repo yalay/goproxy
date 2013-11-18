@@ -70,7 +70,7 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 }
 
 func (s *Session) PutIntoId(id uint16, i interface{}) (err error) {
-	logger.Debugf("put into id(%d): %d.", id, i)
+	logger.Debugf("put into id(%d): %p.", id, i)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -84,8 +84,8 @@ func (s *Session) WriteFrame(f Frame) (err error) {
 	return f.WriteFrame(s.conn)
 }
 
-func (s *Session) ClosePort(streamid uint16) (err error) {
-	logger.Debugf("Close Port: %d.", streamid)
+func (s *Session) RemovePorts(streamid uint16) (err error) {
+	logger.Debugf("remove ports: %p(%d).", s, streamid)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 	_, ok := s.ports[streamid]
@@ -94,6 +94,9 @@ func (s *Session) ClosePort(streamid uint16) (err error) {
 	} else {
 		err = fmt.Errorf("streamid not exist: %d.", streamid)
 		logger.Err(err)
+	}
+	if len(s.ports) == 0 {
+		// TODO: close session?
 	}
 	return
 }
@@ -134,7 +137,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 			logger.Err(err)
 			SendFAILEDFrame(s.conn, ft.streamid, ERR_CONNFAILED)
 
-			s.ClosePort(ft.streamid)
+			s.RemovePorts(ft.streamid)
 			return
 		}
 
@@ -203,7 +206,7 @@ func (s *Session) Run() {
 			logger.Err("unexpected package")
 			return
 		case *FrameOK:
-			logger.Debugf("get package ok: %s.", ft)
+			logger.Debugf("get package ok: %d.", ft.streamid)
 			i, ok := s.ports[ft.streamid]
 			if !ok {
 				logger.Err("frame ack stream id not exist")
@@ -216,7 +219,8 @@ func (s *Session) Run() {
 			}
 			ch <- 1
 		case *FrameFAILED:
-			logger.Debugf("get package failed: %s.", ft)
+			logger.Debugf("get package failed: %d, errno: %d.",
+				ft.streamid, ft.errno)
 			i, ok := s.ports[ft.streamid]
 			if !ok {
 				logger.Err("frame ack stream id not exist")
@@ -229,17 +233,18 @@ func (s *Session) Run() {
 			}
 			ch <- 0
 		case *FrameData:
-			logger.Debugf("get package data: %s.", ft)
+			logger.Debugf("get package data: len(%d).", len(ft.data))
 			if !s.on_data(ft) {
 				return
 			}
 		case *FrameSyn:
-			logger.Debugf("get package syn: %s.", ft)
+			logger.Debugf("get package syn: %d => %s.", ft.streamid, ft.address)
 			if !s.on_syn(ft) {
 				return
 			}
 		case *FrameAck:
-			logger.Debugf("get package ack: %s.", ft)
+			logger.Debugf("get package ack: %d, window: %d.",
+				ft.streamid, ft.window)
 			i, ok := s.ports[ft.streamid]
 			if !ok {
 				logger.Err("frame ack stream id not exist")
@@ -252,7 +257,7 @@ func (s *Session) Run() {
 			}
 			it.OnRead(ft.window)
 		case *FrameFin:
-			logger.Debugf("get package fin: %s.", ft)
+			logger.Debugf("get package fin: %d.", ft.streamid)
 			if !s.on_fin(ft) {
 				return
 			}

@@ -20,6 +20,10 @@ func NewWaitNum(num uint32) (wn *WaitNum) {
 	return
 }
 
+func (wn *WaitNum) Number() (n uint32) {
+	return wn.num
+}
+
 func (wn *WaitNum) Acquire(num uint32) (n uint32) {
 	wn.l.Lock()
 	defer wn.l.Unlock()

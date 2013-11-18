@@ -8,6 +8,8 @@ import (
 	"sutils"
 )
 
+// TODO: compressed session?
+
 const (
 	MSG_OK = iota
 	MSG_FAILED

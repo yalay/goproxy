@@ -4,18 +4,22 @@ import (
 	"io"
 	"net"
 	"sutils"
+	"sync"
 	"time"
 )
 
 type Conn struct {
-	sess     *Session
-	streamid uint16
-	rclosed  bool
-	wclosed  bool
-	window   *sutils.WaitNum
-	buf      chan *FrameData
-	bufhead  *FrameData
-	bufpos   int
+	sess      *Session
+	streamid  uint16
+	rclosed   bool
+	wclosed   bool
+	window    *sutils.WaitNum
+	buf       chan *FrameData
+	bufhead   *FrameData
+	bufpos    int
+	delaylock sync.Mutex
+	delayack  *time.Timer
+	delaycnt  int
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
@@ -30,19 +34,51 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 		wclosed:  false,
 		window:   sutils.NewWaitNum(256 * 1024),
 		buf:      make(chan *FrameData, 1024),
-		bufpos:   0,
 	}
 	return
 }
 
-func (c *Conn) Read(data []byte) (n int, err error) {
-	if c.rclosed {
-		return 0, io.EOF
+func (c *Conn) SendAck(n int) {
+	c.delaylock.Lock()
+	defer c.delaylock.Unlock()
+
+	if c.delayack == nil {
+		// to avoid silly window symptom
+		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
+			c.delaylock.Lock()
+			defer c.delaylock.Unlock()
+			if c.rclosed {
+				return
+			}
+
+			logger.Debugf("%p(%d) send ack %d.",
+				c.sess, c.streamid, c.delaycnt)
+			// send readed bytes back
+			ft := &FrameAck{
+				streamid: c.streamid,
+				window:   uint32(c.delaycnt),
+			}
+			err := c.sess.WriteFrame(ft)
+			if err != nil {
+				logger.Err(err)
+				// big trouble
+			}
+			c.delayack = nil
+			c.delaycnt = 0
+		})
 	}
 
+	c.delaycnt += n
+	return
+}
+
+func (c *Conn) Read(data []byte) (n int, err error) {
 	if c.bufhead == nil {
 		c.bufhead = <-c.buf
 		c.bufpos = 0
+	}
+	if c.bufhead == nil {
+		return 0, io.EOF
 	}
 
 	n = len(c.bufhead.data) - c.bufpos
@@ -54,20 +90,28 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		c.bufpos += n
 	} else {
 		copy(data, c.bufhead.data[c.bufpos:])
-		logger.Debugf("read all of head chunk.")
+		logger.Debugf("read all.")
 		c.bufhead.Free()
 		c.bufhead = nil
 
 	}
 
-	// TODO: silly window symptom
-	// send readed bytes back
-	ft := &FrameAck{
-		streamid: c.streamid,
-		window:   uint32(n),
-	}
-	err = c.sess.WriteFrame(ft)
+	c.SendAck(n)
 	return
+}
+
+func (c *Conn) OnRecv(f *FrameData) (err error) {
+	if c.rclosed {
+		return
+	}
+	if len(f.data) == 0 {
+		return nil
+	}
+
+	logger.Debugf("%p(%d) recved %d bytes from remote.",
+		c.sess, f.streamid, len(f.data))
+	c.buf <- f
+	return nil
 }
 
 func (c *Conn) Write(data []byte) (n int, err error) {
@@ -85,7 +129,8 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		// if window <= 0, wait for window
 		size = c.window.Acquire(size)
 
-		logger.Debugf("send chunk size %d at %d.", size, n)
+		logger.Debugf("%p(%d) send chunk size %d at %d.",
+			c.sess, c.streamid, size, n)
 		ft := &FrameData{
 			streamid: c.streamid,
 			data:     data[:size],
@@ -100,65 +145,58 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		data = data[size:]
 		n += int(size)
 	}
+	logger.Infof("%p(%d) send size %d.", c.sess, c.streamid, n)
+	return
+}
+
+func (c *Conn) OnRead(window uint32) {
+	c.window.Release(window)
+	logger.Debugf("remote readed %d bytes, window: %d.",
+		window, c.window.Number())
 	return
 }
 
 func (c *Conn) MarkClose() {
 	c.wclosed = true
 	c.rclosed = true
-	// FIXME: weakup reader and writer?
+	// weakup reader
+	close(c.buf)
+	// FIXME: weakup writer
 }
 
 func (c *Conn) Close() (err error) {
-	if c.rclosed && c.wclosed {
+	if c.wclosed {
 		return
 	}
 
-	logger.Debugf("connection %x(%d) closing from local.", c, c.streamid)
+	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
 	f := &FrameFin{streamid: c.streamid}
 	err = c.sess.WriteFrame(f)
 	if err != nil {
 		logger.Err(err)
 	}
-
 	c.wclosed = true
+
 	if c.rclosed && c.wclosed {
-		err = c.sess.ClosePort(c.streamid)
+		err = c.sess.RemovePorts(c.streamid)
 		if err != nil {
 			logger.Err(err)
 		}
 	}
 	return
-}
-
-func (c *Conn) OnRecv(f *FrameData) (err error) {
-	if c.rclosed {
-		return
-	}
-	if len(f.data) == 0 {
-		return nil
-	}
-
-	logger.Debugf("recved %d bytes from remote.", len(f.data))
-	c.buf <- f
-	return nil
 }
 
 func (c *Conn) OnClose() (err error) {
-	logger.Debugf("connection %x(%d) closed from remote.", c, c.streamid)
+	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
 	c.rclosed = true
+	close(c.buf)
+
 	if c.rclosed && c.wclosed {
-		err = c.sess.ClosePort(c.streamid)
+		err = c.sess.RemovePorts(c.streamid)
 		if err != nil {
 			logger.Err(err)
 		}
 	}
-	return
-}
-
-func (c *Conn) OnRead(window uint32) {
-	logger.Debugf("remote readed %d bytes.", window)
-	c.window.Release(window)
 	return
 }
 

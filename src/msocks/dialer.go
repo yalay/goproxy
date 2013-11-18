@@ -3,73 +3,68 @@ package msocks
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"sutils"
+	"sync"
 )
 
-type MsocksDialer struct {
-	sutils.Dialer
+type DialerSetting struct {
 	serveraddr string
 	username   string
 	password   string
-	sess       *Session
+}
+
+type MsocksDialer struct {
+	sutils.Dialer
+	dss      []*DialerSetting
+	sesslock sync.Mutex
+	sess     []*Session
 }
 
 func NewDialer(dialer sutils.Dialer, serveraddr string,
 	username, password string) (md *MsocksDialer, err error) {
-	md = &MsocksDialer{
-		Dialer:     dialer,
+	ds := &DialerSetting{
 		serveraddr: serveraddr,
 		username:   username,
 		password:   password,
 	}
-
-	conn, err := md.createConn()
-	if err != nil {
-		return
+	md = &MsocksDialer{
+		Dialer: dialer,
 	}
-	md.sess = NewSession(conn)
+	md.dss = append(md.dss, ds)
 
-	go func() {
-		var err error
-		var conn net.Conn
+	return
+}
 
-		for {
-			md.sess.Run()
-			// that's mean session is dead
-			logger.Info("session runtime quit, reboot from connect.")
-
-			// retry
-			for i := 0; i < 3; i++ {
-				conn, err = md.createConn()
-				if err != nil {
-					logger.Err(err)
-					continue
-				}
-			}
-
-			if err != nil {
-				panic(err)
-			}
-			md.sess = NewSession(conn)
-		}
-	}()
+func (md *MsocksDialer) NewDialerSetting(serveraddr string,
+	username, password string) (err error) {
+	ds := &DialerSetting{
+		serveraddr: serveraddr,
+		username:   username,
+		password:   password,
+	}
+	md.dss = append(md.dss, ds)
 	return
 }
 
 func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
-	logger.Debugf("dailer create connect: %s.", md.serveraddr)
-	conn, err = md.Dialer.Dial("tcp", md.serveraddr)
+	n := rand.Intn(len(md.dss))
+	ds := md.dss[n]
+
+	logger.Debugf("create connect, serveraddr: %s.",
+		ds.serveraddr)
+	conn, err = md.Dialer.Dial("tcp", ds.serveraddr)
 	if err != nil {
 		logger.Err(err)
 		return
 	}
 
 	logger.Debugf("auth with username: %s, password: %s.",
-		md.username, md.password)
+		ds.username, ds.password)
 	fa := &FrameAuth{
-		username: md.username,
-		password: md.password,
+		username: ds.username,
+		password: ds.password,
 	}
 	err = fa.WriteFrame(conn)
 	if err != nil {
@@ -99,12 +94,67 @@ func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
 	return
 }
 
+func (md *MsocksDialer) createSession() {
+	var err error
+	var conn net.Conn
+	md.sesslock.Lock()
+	defer md.sesslock.Unlock()
+
+	// retry
+	for i := 0; i < 3; i++ {
+		conn, err = md.createConn()
+		if err != nil {
+			logger.Err(err)
+		} else {
+			break
+		}
+
+	}
+	if err != nil {
+		return
+	}
+
+	logger.Debugf("create session.")
+	sess := NewSession(conn)
+	md.sess = append(md.sess, sess)
+
+	go func() {
+		sess.Run()
+		// that's mean session is dead
+		logger.Info("session runtime quit, reboot from connect.")
+
+		idx := -1
+		for i, o := range md.sess {
+			if o == sess {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			logger.Err("sess %p not found.", sess)
+			return
+		}
+
+		copy(md.sess[idx:len(md.sess)-1], md.sess[idx+1:])
+		md.sess = md.sess[:len(md.sess)-1]
+
+		md.createSession()
+	}()
+}
+
 func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error) {
-	logger.Infof("dial to: %s.", address)
+	if len(md.sess) == 0 {
+		md.createSession()
+	}
+	n := rand.Intn(len(md.sess))
+	sess := md.sess[n]
+
+	logger.Infof("dial: %s => %s.",
+		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
 	ch := make(chan int, 0)
-	streamid, err := md.sess.PutIntoNextId(ch)
+	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
 	}
@@ -113,7 +163,7 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		streamid: streamid,
 		address:  address,
 	}
-	err = md.sess.WriteFrame(f)
+	err = sess.WriteFrame(f)
 	if err != nil {
 		return
 	}
@@ -126,7 +176,7 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		logger.Err(err)
 		return
 	case 0: // FAILED
-		err = md.sess.ClosePort(streamid)
+		err = sess.RemovePorts(streamid)
 		if err != nil {
 			logger.Err(err)
 			// big trouble
@@ -136,8 +186,8 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		return
 	case 1: // OK
 		logger.Debugf("connect ok.")
-		c := NewConn(streamid, md.sess)
-		md.sess.PutIntoId(streamid, c)
+		c := NewConn(streamid, sess)
+		sess.PutIntoId(streamid, c)
 		return c, nil
 	}
 }

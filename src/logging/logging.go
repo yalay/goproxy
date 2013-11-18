@@ -122,8 +122,8 @@ func (l *FileLogger) Output(lv int, s string) {
 	if idx != -1 {
 		file = file[idx+1:]
 	}
-	buf := fmt.Sprintf("%s(%d) [%s](%s:%d) %s: %s\n",
-		timestr, os.Getpid(), lvname[lv], file, line, l.name, s)
+	buf := fmt.Sprintf("%s (%d)[%s] %s(%s:%d): %s\n",
+		timestr, os.Getpid(), lvname[lv], l.name, file, line, s)
 
 	if l.out == nil {
 		Default.m.Lock()

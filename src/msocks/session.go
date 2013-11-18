@@ -122,8 +122,8 @@ func (s *Session) Close() (err error) {
 
 	for _, v := range s.ports {
 		switch vt := v.(type) {
-		case chan int:
-			vt <- 0
+		case chan Frame:
+			vt <- nil
 		case *Conn:
 			vt.MarkClose()
 		}
@@ -211,6 +211,36 @@ func (s *Session) on_data(ft *FrameData) bool {
 	return true
 }
 
+func (s *Session) on_dns(ft *FrameDns) {
+	ipaddr, err := net.LookupIP(ft.hostname)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+
+	fr := &FrameAddr{
+		streamid: ft.streamid,
+		ipaddr:   ipaddr,
+	}
+	s.WriteFrame(fr)
+	return
+}
+
+func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
+	i, ok := s.ports[streamid]
+	if !ok {
+		logger.Err("stream id not exist")
+		return false
+	}
+	ch, ok := i.(chan Frame)
+	if !ok {
+		logger.Err("unexpected ports type")
+		return false
+	}
+	ch <- f
+	return true
+}
+
 func (s *Session) Run() {
 	defer s.conn.Close()
 	defer s.Close()
@@ -228,31 +258,15 @@ func (s *Session) Run() {
 			return
 		case *FrameOK:
 			logger.Debugf("get package ok: %d.", ft.streamid)
-			i, ok := s.ports[ft.streamid]
-			if !ok {
-				logger.Err("frame ack stream id not exist")
+			if !s.sendFrameInChan(ft.streamid, f) {
 				return
 			}
-			ch, ok := i.(chan int)
-			if !ok {
-				logger.Err("unexpected ports type")
-				return
-			}
-			ch <- 1
 		case *FrameFAILED:
 			logger.Debugf("get package failed: %d, errno: %d.",
 				ft.streamid, ft.errno)
-			i, ok := s.ports[ft.streamid]
-			if !ok {
-				logger.Err("frame ack stream id not exist")
+			if !s.sendFrameInChan(ft.streamid, f) {
 				return
 			}
-			ch, ok := i.(chan int)
-			if !ok {
-				logger.Err("unexpected ports type")
-				return
-			}
-			ch <- 0
 		case *FrameData:
 			logger.Debugf("get package data: stream(%d), len(%d).",
 				ft.streamid, len(ft.data))
@@ -283,17 +297,15 @@ func (s *Session) Run() {
 			if !s.on_fin(ft) {
 				return
 			}
-		case *FrameRst:
-			logger.Err("not support yet")
-			return
-			// 	stream, ok := s.streams[ft.streamid]
-			// 	if !ok {
-			// 		// failed
-			// 		panic("frame rst stream id not exist")
-			// 	}
-			// 	stream.read_closed = true
-			// 	stream.write_closed = true
-			// 	stream.on_close()
+		case *FrameDns:
+			logger.Debugf("get package dns: %s, stream(%d).",
+				ft.hostname, ft.streamid)
+			go s.on_dns(ft)
+		case *FrameAddr:
+			logger.Debugf("get package addr: %d.", ft.streamid)
+			if !s.sendFrameInChan(ft.streamid, f) {
+				return
+			}
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"logging"
+	"msocks"
 	"net"
 	"os"
 	"strings"
@@ -86,19 +87,26 @@ func (iplist IPList) Contain(ip net.IP) bool {
 }
 
 type FilteredDialer struct {
-	sutils.Dialer
+	msocks.Dialer
 	dialer sutils.Dialer
 	iplist IPList
+	dns    *DNSCache
 }
 
-func NewFilteredDialer(dialer1 sutils.Dialer, dialer2 sutils.Dialer,
+func NewFilteredDialer(dialer *msocks.Dialer, dialer2 sutils.Dialer,
 	filename string) (fd *FilteredDialer, err error) {
 	fd = &FilteredDialer{
-		Dialer: dialer1,
+		Dialer: *dialer,
 		dialer: dialer2,
+		dns: &DNSCache{
+			cache:       make(map[string]*IPEntry, 0),
+			lookup_func: dialer.LookupIP,
+		},
 	}
 
-	fd.iplist, err = ReadIPListFile(filename)
+	if filename != "" {
+		fd.iplist, err = ReadIPListFile(filename)
+	}
 	return
 }
 
@@ -116,14 +124,14 @@ func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err erro
 	}
 	hostname := address[:idx]
 
-	addr, err := DefaultDNSCache.ParseIP(hostname)
+	addr, err := fd.dns.ParseIP(hostname)
 	if err != nil {
 		return
 	}
 
 	if fd.iplist.Contain(addr) {
-		return fd.Dialer.Dial(network, address)
+		return fd.dialer.Dial(network, address)
 	}
 
-	return fd.dialer.Dial(network, address)
+	return fd.Dialer.Dial(network, address)
 }

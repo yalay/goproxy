@@ -15,7 +15,7 @@ type DialerSetting struct {
 	password   string
 }
 
-type MsocksDialer struct {
+type Dialer struct {
 	sutils.Dialer
 	dss      []*DialerSetting
 	sesslock sync.Mutex
@@ -23,13 +23,13 @@ type MsocksDialer struct {
 }
 
 func NewDialer(dialer sutils.Dialer, serveraddr string,
-	username, password string) (md *MsocksDialer, err error) {
+	username, password string) (md *Dialer, err error) {
 	ds := &DialerSetting{
 		serveraddr: serveraddr,
 		username:   username,
 		password:   password,
 	}
-	md = &MsocksDialer{
+	md = &Dialer{
 		Dialer: dialer,
 	}
 	md.dss = append(md.dss, ds)
@@ -37,7 +37,7 @@ func NewDialer(dialer sutils.Dialer, serveraddr string,
 	return
 }
 
-func (md *MsocksDialer) NewDialerSetting(serveraddr string,
+func (md *Dialer) NewDialerSetting(serveraddr string,
 	username, password string) (err error) {
 	ds := &DialerSetting{
 		serveraddr: serveraddr,
@@ -48,7 +48,7 @@ func (md *MsocksDialer) NewDialerSetting(serveraddr string,
 	return
 }
 
-func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
+func (md *Dialer) createConn() (conn net.Conn, err error) {
 	n := rand.Intn(len(md.dss))
 	ds := md.dss[n]
 
@@ -94,7 +94,7 @@ func (md *MsocksDialer) createConn() (conn net.Conn, err error) {
 	return
 }
 
-func (md *MsocksDialer) createSession() {
+func (md *Dialer) createSession() {
 	var err error
 	var conn net.Conn
 	md.sesslock.Lock()
@@ -146,19 +146,23 @@ func (md *MsocksDialer) createSession() {
 	}()
 }
 
-func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error) {
+func (md *Dialer) GetSess() (sess *Session) {
 	// TODO: new session when too many connections.
 	if len(md.sess) == 0 {
 		md.createSession()
 	}
 	n := rand.Intn(len(md.sess))
-	sess := md.sess[n]
+	sess = md.sess[n]
+	return
+}
 
+func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
+	sess := md.GetSess()
 	logger.Infof("dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
-	ch := make(chan int, 0)
+	ch := make(chan Frame, 0)
 	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
@@ -173,27 +177,77 @@ func (md *MsocksDialer) Dial(network, address string) (conn net.Conn, err error)
 		return
 	}
 
-	st := <-ch
-	switch st {
+	fr := <-ch
+	switch fr.(type) {
 	default:
 		err = errors.New("unknown status")
 		logger.Err(err)
 		return
-	case 0: // FAILED
-		err = sess.RemovePorts(streamid)
-		if err != nil {
-			logger.Err(err)
-			// big trouble
-		}
-		err = errors.New("connection failed")
-		logger.Err(err)
-		close(ch)
-		return
-	case 1: // OK
+	case nil: // close all
+		break
+	case *FrameFAILED: // FAILED
+		break
+	case *FrameOK: // OK
 		logger.Debugf("connect ok.")
 		c := NewConn(streamid, sess)
 		sess.PutIntoId(streamid, c)
 		close(ch)
 		return c, nil
 	}
+
+	err = sess.RemovePorts(streamid)
+	if err != nil {
+		logger.Err(err)
+	}
+	err = errors.New("connection failed")
+	logger.Err(err)
+	close(ch)
+	return
+}
+
+func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
+	logger.Infof("lookup ip: %s", hostname)
+	sess := md.GetSess()
+
+	// lock streamid and put chan for it
+	ch := make(chan Frame, 0)
+	streamid, err := sess.PutIntoNextId(ch)
+	if err != nil {
+		return
+	}
+
+	f := &FrameDns{
+		streamid: streamid,
+		hostname: hostname,
+	}
+	err = sess.WriteFrame(f)
+	if err != nil {
+		return
+	}
+
+	fr := <-ch
+	switch frt := fr.(type) {
+	default:
+		err = errors.New("unknown status")
+		logger.Err(err)
+		return
+	case nil: // close all
+		break
+	case *FrameFAILED: // FAILED
+		break
+	case *FrameAddr: // OK
+		logger.Debugf("lookup ip ok.")
+		ipaddr = frt.ipaddr
+		close(ch)
+		return
+	}
+
+	err = sess.RemovePorts(streamid)
+	if err != nil {
+		logger.Err(err)
+	}
+	err = errors.New("lookup ip failed")
+	logger.Err(err)
+	close(ch)
+	return
 }

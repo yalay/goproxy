@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sutils"
 )
 
@@ -19,7 +20,8 @@ const (
 	MSG_SYN
 	MSG_ACK
 	MSG_FIN
-	MSG_RST
+	MSG_DNS
+	MSG_ADDR
 )
 
 const (
@@ -75,8 +77,10 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = new(FrameAck)
 	case MSG_FIN:
 		f = new(FrameFin)
-	case MSG_RST:
-		f = new(FrameRst)
+	case MSG_DNS:
+		f = new(FrameDns)
+	case MSG_ADDR:
+		f = new(FrameAddr)
 	}
 
 	err = f.ReadFrame(length, streamid, r)
@@ -203,7 +207,7 @@ func (f *FrameAuth) ReadFrame(length uint16, streamid uint16, r io.Reader) (err 
 	}
 
 	if int(length) != len(f.username)+len(f.password)+4 {
-		return errors.New("frame auth length not match")
+		return errors.New("frame auth length not match.")
 	}
 	return
 }
@@ -238,6 +242,9 @@ func (f *FrameData) ReadFrame(length uint16, streamid uint16, r io.Reader) (err 
 		f.data = f.buf
 	}
 	_, err = io.ReadFull(r, f.data)
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 
@@ -248,6 +255,9 @@ func (f *FrameData) WriteFrame(w io.Writer) (err error) {
 	}
 	defer buf.Flush()
 	_, err = buf.Write(f.data)
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 
@@ -334,23 +344,91 @@ func (f *FrameFin) WriteFrame(w io.Writer) (err error) {
 	return
 }
 
-type FrameRst struct {
+type FrameDns struct {
 	streamid uint16
+	hostname string
 }
 
-func (f *FrameRst) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
-	if length != 0 {
-		return errors.New("frame rst with length not 0")
-	}
+func (f *FrameDns) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
 	f.streamid = streamid
+
+	f.hostname, err = ReadString(r)
+	if err != nil {
+		return
+	}
+
+	if int(length) != len(f.hostname)+2 {
+		return errors.New("frame dns length not match.")
+	}
 	return
 }
 
-func (f *FrameRst) WriteFrame(w io.Writer) (err error) {
-	buf, err := GetFrameBuf(w, MSG_RST, 0, f.streamid)
+func (f *FrameDns) WriteFrame(w io.Writer) (err error) {
+	buf, err := GetFrameBuf(w, MSG_DNS,
+		uint16(len(f.hostname)+2), f.streamid)
 	if err != nil {
 		return
 	}
 	defer buf.Flush()
+	err = WriteString(buf, f.hostname)
+	return
+}
+
+type FrameAddr struct {
+	streamid uint16
+	ipaddr   []net.IP
+}
+
+func (f *FrameAddr) ReadFrame(length uint16, streamid uint16, r io.Reader) (err error) {
+	var n uint8
+	size := uint16(0)
+	f.streamid = streamid
+
+	for size < length {
+		err = binary.Read(r, binary.BigEndian, &n)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+
+		ip := make([]byte, n)
+		_, err = io.ReadFull(r, ip)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+
+		f.ipaddr = append(f.ipaddr, ip)
+		size += uint16(n + 1)
+	}
+
+	if length != size {
+		return errors.New("frame addr length not match.")
+	}
+	return
+}
+
+func (f *FrameAddr) WriteFrame(w io.Writer) (err error) {
+	size := uint16(0)
+	for _, o := range f.ipaddr {
+		size += uint16(len(o) + 1)
+	}
+	buf, err := GetFrameBuf(w, MSG_ADDR, size, f.streamid)
+	defer buf.Flush()
+
+	for _, o := range f.ipaddr {
+		n := uint8(len(o))
+		err = binary.Write(buf, binary.BigEndian, n)
+		if err != nil {
+			return
+		}
+
+		_, err = buf.Write(o)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+	}
+
 	return
 }

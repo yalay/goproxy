@@ -14,7 +14,6 @@ func init() {
 }
 
 func TestIPList(t *testing.T) {
-
 	buf := bytes.NewBufferString(iplist)
 	iplist, err := ReadIPList(buf)
 	if err != nil {

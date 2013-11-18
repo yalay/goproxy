@@ -2,7 +2,7 @@
 
 LEVEL=INFO
 
-rm server.log client.log httproxy.log
+rm -f server.log client.log httproxy.log
 
 make
 bin/goproxy -loglevel=$LEVEL -logfile=server.log -mode server -listen=:7000 -keyfile=key -passfile=users.pwd &

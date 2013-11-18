@@ -3,6 +3,7 @@ package msocks
 import (
 	"bytes"
 	"logging"
+	"net"
 	"testing"
 )
 
@@ -123,9 +124,10 @@ func TestFrameDataRead(t *testing.T) {
 }
 
 func TestFrameDataWrite(t *testing.T) {
-	f := new(FrameData)
-	f.streamid = 10
-	f.data = []byte{0x01, 0x02, 0x03}
+	f := &FrameData{
+		streamid: 10,
+		data:     []byte{0x01, 0x02, 0x03},
+	}
 
 	buf := bytes.NewBuffer(nil)
 	f.WriteFrame(buf)
@@ -229,28 +231,75 @@ func TestFrameFinWrite(t *testing.T) {
 	}
 }
 
-func TestFrameRstRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{0x07, 0x00, 0x00, 0x0A, 0x0A})
+func TestFrameDnsRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{0x07, 0x00, 0x04, 0x0A, 0x0A,
+		0x00, 0x02, 0x61, 0x62})
 
 	f, err := ReadFrame(buf)
 	if err != nil {
-		t.Fatalf("Read FrameRst failed")
+		t.Fatalf("Read FrameDns failed")
 	}
 
-	ft, ok := f.(*FrameRst)
+	ft, ok := f.(*FrameDns)
 	if !ok || ft.streamid != 0x0a0a {
-		t.Fatalf("FrameRst format wrong")
+		t.Fatalf("FrameDns format wrong")
+	}
+
+	if ft.hostname != "ab" {
+		t.Fatalf("FrameDns body wrong")
 	}
 }
 
-func TestFrameRstWrite(t *testing.T) {
-	f := new(FrameRst)
+func TestFrameDnsWrite(t *testing.T) {
+	f := new(FrameDns)
 	f.streamid = 10
+	f.hostname = "cd"
 
 	buf := bytes.NewBuffer(nil)
 	f.WriteFrame(buf)
 
-	if bytes.Compare(buf.Bytes(), []byte{0x07, 0x00, 0x00, 0x00, 0x0A}) != 0 {
-		t.Fatalf("FrameRst write wrong")
+	if bytes.Compare(buf.Bytes(), []byte{0x07, 0x00, 0x04, 0x00, 0x0A,
+		0x00, 0x02, 0x63, 0x64}) != 0 {
+		t.Fatalf("FrameDns write wrong")
+	}
+}
+
+func TestFrameAddrRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{0x08, 0x00, 0x05, 0x0A, 0x0A,
+		0x04, 0x01, 0x02, 0x03, 0x04})
+
+	f, err := ReadFrame(buf)
+	if err != nil {
+		t.Fatalf("Read FrameDns failed")
+	}
+
+	ft, ok := f.(*FrameAddr)
+	if !ok || ft.streamid != 0x0a0a {
+		t.Fatalf("FrameDns format wrong")
+	}
+
+	if len(ft.ipaddr) != 1 {
+		t.Fatalf("length of ipaddr not match")
+	}
+
+	if bytes.Compare(ft.ipaddr[0], []byte{0x01, 0x02, 0x03, 0x04}) != 0 {
+		t.Fatalf("FrameAddr body wrong")
+	}
+}
+
+func TestFrameAddrWrite(t *testing.T) {
+	f := &FrameAddr{
+		streamid: 10,
+		ipaddr: []net.IP{
+			[]byte{0x01, 0x02, 0x03, 0x04},
+		},
+	}
+
+	buf := bytes.NewBuffer(nil)
+	f.WriteFrame(buf)
+
+	if bytes.Compare(buf.Bytes(), []byte{0x08, 0x00, 0x05, 0x00, 0x0A,
+		0x04, 0x01, 0x02, 0x03, 0x04}) != 0 {
+		t.Fatalf("FrameAddr write wrong")
 	}
 }

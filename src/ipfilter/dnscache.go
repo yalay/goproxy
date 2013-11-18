@@ -1,7 +1,6 @@
 package ipfilter
 
 import (
-	"dns"
 	"logging"
 	"net"
 	"time"
@@ -12,41 +11,44 @@ type IPEntry struct {
 	ip net.IP
 }
 
-type DNSCache map[string]*IPEntry
+type DNSCache struct {
+	cache       map[string]*IPEntry
+	lookup_func func(string) ([]net.IP, error)
+}
 
 func (dc DNSCache) free() {
 	var dellist []string
 	n := time.Now()
-	for k, v := range dc {
+	for k, v := range dc.cache {
 		if n.Sub(v.t).Seconds() > 300 {
 			dellist = append(dellist, k)
 		}
 	}
 	for _, k := range dellist {
-		delete(dc, k)
+		delete(dc.cache, k)
 	}
 	logging.Infof("%d dnscache records freed.", len(dellist))
 	return
 }
 
 func (dc DNSCache) Lookup(hostname string) (ip net.IP, err error) {
-	ipe, ok := dc[hostname]
+	ipe, ok := dc.cache[hostname]
 	if ok {
 		logging.Debugf("hostname %s cached.", hostname)
 		return ipe.ip, nil
 	}
 
-	addrs, err := dns.LookupIP(hostname)
+	addrs, err := dc.lookup_func(hostname)
 	if err != nil {
 		return
 	}
 
 	ip = addrs[0]
 
-	if len(dc) > 256 {
+	if len(dc.cache) > 256 {
 		dc.free()
 	}
-	dc[hostname] = &IPEntry{
+	dc.cache[hostname] = &IPEntry{
 		t:  time.Now(),
 		ip: ip,
 	}
@@ -62,5 +64,3 @@ func (dc DNSCache) ParseIP(hostname string) (addr net.IP, err error) {
 	addr, err = dc.Lookup(hostname)
 	return
 }
-
-var DefaultDNSCache = make(DNSCache, 0)

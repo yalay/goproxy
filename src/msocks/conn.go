@@ -166,7 +166,6 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 		err = c.sess.WriteFrame(ft)
 		if err != nil {
-			// TODO: we are in big trouble, should break link.
 			return
 		}
 

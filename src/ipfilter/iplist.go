@@ -3,6 +3,7 @@ package ipfilter
 import (
 	"bufio"
 	"compress/gzip"
+	"dns"
 	"errors"
 	"io"
 	"logging"
@@ -95,12 +96,14 @@ type FilteredDialer struct {
 
 func NewFilteredDialer(dialer *msocks.Dialer, dialer2 sutils.Dialer,
 	filename string) (fd *FilteredDialer, err error) {
+
 	fd = &FilteredDialer{
 		Dialer: *dialer,
 		dialer: dialer2,
 		dns: &DNSCache{
 			cache:       make(map[string]*IPEntry, 0),
-			lookup_func: dialer.LookupIP,
+			lookup_func: dns.LookupIP,
+			// lookup_func: dialer.LookupIP,
 		},
 	}
 

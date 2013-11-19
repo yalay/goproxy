@@ -2,7 +2,7 @@ package main
 
 import (
 	"cryptconn"
-	// "dns"
+	"dns"
 	"flag"
 	"ipfilter"
 	"logging"
@@ -94,13 +94,13 @@ func run_server() {
 }
 
 func get_dialer(serveraddr string) (dialer sutils.Dialer, err error) {
-	// err = dns.LoadConfig("resolv.conf")
-	// if err != nil {
-	// 	err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-	// 	if err != nil {
-	// 		return
-	// 	}
-	// }
+	err = dns.LoadConfig("resolv.conf")
+	if err != nil {
+		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
+		if err != nil {
+			return
+		}
+	}
 
 	dialer = sutils.DefaultTcpDialer
 

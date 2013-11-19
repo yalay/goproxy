@@ -146,7 +146,11 @@ func (md *Dialer) createSession() {
 func (md *Dialer) GetSess() (sess *Session) {
 	// TODO: new session when too many connections.
 	if len(md.sess) == 0 {
-		md.createSession()
+		err = md.createSession()
+		if err != nil {
+			logger.Err(err)
+			panic(err)
+		}
 	}
 	n := rand.Intn(len(md.sess))
 	sess = md.sess[n]

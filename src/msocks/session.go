@@ -215,14 +215,17 @@ func (s *Session) on_dns(ft *FrameDns) {
 	ipaddr, err := net.LookupIP(ft.hostname)
 	if err != nil {
 		logger.Err(err)
-		return
+		ipaddr = make([]net.IP, 0)
 	}
 
 	fr := &FrameAddr{
 		streamid: ft.streamid,
 		ipaddr:   ipaddr,
 	}
-	s.WriteFrame(fr)
+	err = s.WriteFrame(fr)
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 

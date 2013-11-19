@@ -177,6 +177,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
+	// TODO: timeout?
 	fr := <-ch
 	switch fr.(type) {
 	default:
@@ -225,6 +226,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
+	// TODO: timeout?
 	fr := <-ch
 	switch frt := fr.(type) {
 	default:

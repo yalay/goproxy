@@ -17,6 +17,8 @@ var password string
 var blackfile string
 var logger logging.Logger
 
+// TODO: fit two mode
+
 func init() {
 	var logfile string
 	var loglevel string

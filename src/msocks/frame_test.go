@@ -20,17 +20,20 @@ func TestFrameOKRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameOK)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameOK format wrong")
 	}
 }
 
 func TestFrameOKWrite(t *testing.T) {
 	f := new(FrameOK)
-	f.streamid = 10
+	f.Streamid = 10
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x00, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameOK write wrong")
@@ -47,22 +50,23 @@ func TestFrameFailedRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameFAILED)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameFailed format wrong")
 	}
 
-	if ft.errno != 1 {
+	if ft.Errno != 1 {
 		t.Fatalf("FrameFailed body wrong")
 	}
 }
 
 func TestFrameFailedWrite(t *testing.T) {
-	f := new(FrameFAILED)
-	f.streamid = 10
-	f.errno = 32
+	f := NewFrameFAILED(10, 32)
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x01, 0x00, 0x04, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x20}) != 0 {
 		t.Fatalf("FrameFailed write wrong")
@@ -79,23 +83,23 @@ func TestFrameAuthRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameAuth)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameAuth format wrong")
 	}
 
-	if ft.username != "ab" || ft.password != "cd" {
+	if ft.Username != "ab" || ft.Password != "cd" {
 		t.Fatalf("FrameAuth body wrong")
 	}
 }
 
 func TestFrameAuthWrite(t *testing.T) {
-	f := new(FrameAuth)
-	f.streamid = 10
-	f.username = "username"
-	f.password = "password"
+	f := NewFrameAuth(10, "username", "password")
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x02, 0x00, 0x14, 0x00, 0x0A,
 		0x00, 0x08, 0x75, 0x73, 0x65, 0x72, 0x6e, 0x61, 0x6d, 0x65,
@@ -114,23 +118,23 @@ func TestFrameDataRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameData)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameData format wrong")
 	}
 
-	if bytes.Compare(ft.data, []byte{0x01, 0x05, 0x07}) != 0 {
+	if bytes.Compare(ft.Data, []byte{0x01, 0x05, 0x07}) != 0 {
 		t.Fatalf("FrameData body wrong")
 	}
 }
 
 func TestFrameDataWrite(t *testing.T) {
-	f := &FrameData{
-		streamid: 10,
-		data:     []byte{0x01, 0x02, 0x03},
-	}
+	f := NewFrameData(10, []byte{0x01, 0x02, 0x03})
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x03, 0x00, 0x03, 0x00, 0x0A,
 		0x01, 0x02, 0x03}) != 0 {
@@ -148,22 +152,23 @@ func TestFrameSynRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameSyn)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameSyn format wrong")
 	}
 
-	if ft.address != "ab" {
+	if ft.Address != "ab" {
 		t.Fatalf("FrameSyn body wrong")
 	}
 }
 
 func TestFrameSynWrite(t *testing.T) {
-	f := new(FrameSyn)
-	f.streamid = 10
-	f.address = "cd"
+	f := NewFrameSyn(10, "cd")
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x04, 0x00, 0x04, 0x00, 0x0A,
 		0x00, 0x02, 0x63, 0x64}) != 0 {
@@ -181,23 +186,23 @@ func TestFrameAckRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameAck)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameAck format wrong")
 	}
 
-	if ft.window != 0x01020304 {
+	if ft.Window != 0x01020304 {
 		t.Fatalf("FrameAck body wrong")
 	}
 }
 
 func TestFrameAckWrite(t *testing.T) {
-	f := &FrameAck{
-		streamid: 10,
-		window:   0x04050607,
-	}
+	f := NewFrameAck(10, 0x04050607)
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x05, 0x00, 0x04, 0x00, 0x0A,
 		0x04, 0x05, 0x06, 0x07}) != 0 {
@@ -214,17 +219,19 @@ func TestFrameFinRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameFin)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameFin format wrong")
 	}
 }
 
 func TestFrameFinWrite(t *testing.T) {
-	f := new(FrameFin)
-	f.streamid = 10
+	f := NewFrameFin(10)
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x06, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameFin write wrong")
@@ -241,22 +248,23 @@ func TestFrameDnsRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameDns)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameDns format wrong")
 	}
 
-	if ft.hostname != "ab" {
+	if ft.Hostname != "ab" {
 		t.Fatalf("FrameDns body wrong")
 	}
 }
 
 func TestFrameDnsWrite(t *testing.T) {
-	f := new(FrameDns)
-	f.streamid = 10
-	f.hostname = "cd"
+	f := NewFrameDns(10, "cd")
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x07, 0x00, 0x04, 0x00, 0x0A,
 		0x00, 0x02, 0x63, 0x64}) != 0 {
@@ -274,29 +282,27 @@ func TestFrameAddrRead(t *testing.T) {
 	}
 
 	ft, ok := f.(*FrameAddr)
-	if !ok || ft.streamid != 0x0a0a {
+	if !ok || ft.Streamid != 0x0a0a {
 		t.Fatalf("FrameDns format wrong")
 	}
 
-	if len(ft.ipaddr) != 1 {
+	if len(ft.Ipaddr) != 1 {
 		t.Fatalf("length of ipaddr not match")
 	}
 
-	if bytes.Compare(ft.ipaddr[0], []byte{0x01, 0x02, 0x03, 0x04}) != 0 {
+	if bytes.Compare(ft.Ipaddr[0], []byte{0x01, 0x02, 0x03, 0x04}) != 0 {
 		t.Fatalf("FrameAddr body wrong")
 	}
 }
 
 func TestFrameAddrWrite(t *testing.T) {
-	f := &FrameAddr{
-		streamid: 10,
-		ipaddr: []net.IP{
-			[]byte{0x01, 0x02, 0x03, 0x04},
-		},
-	}
+	f := NewFrameAddr(10, []net.IP{[]byte{0x01, 0x02, 0x03, 0x04}})
 
 	buf := bytes.NewBuffer(nil)
-	f.WriteFrame(buf)
+	err := WriteFrame(buf, f)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if bytes.Compare(buf.Bytes(), []byte{0x08, 0x00, 0x05, 0x00, 0x0A,
 		0x04, 0x01, 0x02, 0x03, 0x04}) != 0 {

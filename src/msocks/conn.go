@@ -58,10 +58,7 @@ func (c *Conn) SendAck(n int) {
 			logger.Debugf("%p(%d) send ack %d.",
 				c.sess, c.streamid, c.delaycnt)
 			// send readed bytes back
-			ft := &FrameAck{
-				streamid: c.streamid,
-				window:   uint32(c.delaycnt),
-			}
+			ft := NewFrameAck(c.streamid, uint32(c.delaycnt))
 			err := c.sess.WriteFrame(ft)
 			if err != nil {
 				logger.Err(err)
@@ -85,15 +82,15 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	n = len(c.bufhead.data) - c.bufpos
+	n = len(c.bufhead.Data) - c.bufpos
 	if n > len(data) {
 		n = len(data)
-		copy(data, c.bufhead.data[c.bufpos:c.bufpos+n])
+		copy(data, c.bufhead.Data[c.bufpos:c.bufpos+n])
 		logger.Debugf("read %d of head chunk at %d.",
 			n, c.bufpos)
 		c.bufpos += n
 	} else {
-		copy(data, c.bufhead.data[c.bufpos:])
+		copy(data, c.bufhead.Data[c.bufpos:])
 		logger.Debugf("read all.")
 		c.bufhead.Free()
 		c.bufhead = nil
@@ -108,12 +105,12 @@ func (c *Conn) OnRecv(f *FrameData) (err error) {
 	if c.rclosed {
 		return
 	}
-	if len(f.data) == 0 {
+	if len(f.Data) == 0 {
 		return nil
 	}
 
 	logger.Debugf("%p(%d) recved %d bytes from remote.",
-		c.sess, f.streamid, len(f.data))
+		c.sess, f.Streamid, len(f.Data))
 	c.buf <- f
 	return nil
 }
@@ -159,11 +156,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 		logger.Debugf("%p(%d) send chunk size %d at %d.",
 			c.sess, c.streamid, size, n)
-		ft := &FrameData{
-			streamid: c.streamid,
-			data:     data[:size],
-		}
-
+		ft := NewFrameData(c.streamid, data[:size])
 		err = c.sess.WriteFrame(ft)
 		if err != nil {
 			return
@@ -202,7 +195,7 @@ func (c *Conn) Close() (err error) {
 	}
 
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
-	f := &FrameFin{streamid: c.streamid}
+	f := NewFrameFin(c.streamid)
 	err = c.sess.WriteFrame(f)
 	if err != nil {
 		logger.Err(err)

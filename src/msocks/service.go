@@ -95,30 +95,30 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		return false
 	}
 
-	logger.Debugf("auth with username: %s, password: %s.", ft.username, ft.password)
+	logger.Infof("auth with username: %s, password: %s.",
+		ft.Username, ft.Password)
 	if ms.userpass != nil {
-		password1, ok := ms.userpass[ft.username]
-		if !ok || (ft.password != password1) {
-			fr := &FrameFAILED{streamid: ft.streamid, errno: ERR_AUTH}
-			fr.WriteFrame(stream)
-			logger.Err("failed with auth")
+		password1, ok := ms.userpass[ft.Username]
+		if !ok || (ft.Password != password1) {
+			fr := NewFrameFAILED(ft.Streamid, ERR_AUTH)
+			WriteFrame(stream, fr)
+			logger.Err("auth failed.")
 			return false
 		}
 	}
-	fr := &FrameOK{streamid: ft.streamid}
-	err = fr.WriteFrame(stream)
+	fr := NewFrameOK(ft.Streamid)
+	err = WriteFrame(stream, fr)
 	if err != nil {
 		logger.Err(err)
 		return false
 	}
 
-	logger.Infof("auth passed with username: %s, password: %s.",
-		ft.username, ft.password)
+	logger.Infof("auth passed.")
 	return true
 }
 
 func (ms *MsocksService) Handler(conn net.Conn) {
-	logger.Debugf("connection come from: %s => %s",
+	logger.Infof("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
 	if !ms.on_auth(conn) {
@@ -129,6 +129,8 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	ms.sess = NewSession(conn)
 	ms.sess.on_conn = ms.on_conn
 	ms.sess.Run()
+	logger.Infof("server session quit: %s => %s.",
+		conn.RemoteAddr(), conn.LocalAddr())
 }
 
 func (ms *MsocksService) ServeTCP(listener net.Listener) (err error) {

@@ -62,11 +62,8 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 
 	logger.Infof("auth with username: %s, password: %s.",
 		ds.username, ds.password)
-	fa := &FrameAuth{
-		username: ds.username,
-		password: ds.password,
-	}
-	err = fa.WriteFrame(conn)
+	fa := NewFrameAuth(0, ds.username, ds.password)
+	err = WriteFrame(conn, fa)
 	if err != nil {
 		return
 	}
@@ -86,7 +83,7 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 	case *FrameFAILED:
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
-			ft.errno)
+			ft.Errno)
 		logger.Err(err)
 		return
 	}
@@ -168,10 +165,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	f := &FrameSyn{
-		streamid: streamid,
-		address:  address,
-	}
+	f := NewFrameSyn(streamid, address)
 	err = sess.WriteFrame(f)
 	if err != nil {
 		return
@@ -200,7 +194,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	if err != nil {
 		logger.Err(err)
 	}
-	err = errors.New("connection failed")
+	err = errors.New("connection failed.")
 	logger.Err(err)
 	close(ch)
 	return
@@ -217,10 +211,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	f := &FrameDns{
-		streamid: streamid,
-		hostname: hostname,
-	}
+	f := NewFrameDns(streamid, hostname)
 	err = sess.WriteFrame(f)
 	if err != nil {
 		return
@@ -239,7 +230,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		break
 	case *FrameAddr: // OK
 		logger.Debugf("lookup ip ok.")
-		ipaddr = frt.ipaddr
+		ipaddr = frt.Ipaddr
 		close(ch)
 		return
 	}

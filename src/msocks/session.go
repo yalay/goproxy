@@ -88,7 +88,7 @@ func (s *Session) PutIntoId(id uint16, i interface{}) (err error) {
 func (s *Session) WriteFrame(f Frame) (err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
-	return f.WriteFrame(s.conn)
+	return WriteFrame(s.conn, f)
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
@@ -116,7 +116,7 @@ func (s *Session) Number() (n int) {
 }
 
 func (s *Session) Close() (err error) {
-	logger.Infof("close all connections for session: %x.", s)
+	logger.Infof("close all connections for session: %p.", s)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -134,32 +134,32 @@ func (s *Session) Close() (err error) {
 }
 
 func (s *Session) on_syn(ft *FrameSyn) bool {
-	_, ok := s.ports[ft.streamid]
+	_, ok := s.ports[ft.Streamid]
 	if ok {
 		logger.Err("frame sync stream id exist.")
-		fr := &FrameFAILED{streamid: ft.streamid, errno: ERR_IDEXIST}
+		fr := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
 		s.WriteFrame(fr)
-		return false
+		return true
 	}
 
 	// lock streamid temporary
-	s.ports[ft.streamid] = 1
+	s.ports[ft.Streamid] = 1
 
 	go func() {
-		logger.Infof("client try to connect: %s.", ft.address)
-		stream, err := s.on_conn("tcp", ft.address, ft.streamid)
+		logger.Infof("client try to connect: %s.", ft.Address)
+		stream, err := s.on_conn("tcp", ft.Address, ft.Streamid)
 		if err != nil {
 			logger.Err(err)
-			fr := &FrameFAILED{streamid: ft.streamid, errno: ERR_CONNFAILED}
+			fr := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
 			s.WriteFrame(fr)
 
-			s.RemovePorts(ft.streamid)
+			s.RemovePorts(ft.Streamid)
 			return
 		}
 
 		// update it, don't need to lock
-		s.ports[ft.streamid] = stream
-		fr := &FrameOK{streamid: ft.streamid}
+		s.ports[ft.Streamid] = stream
+		fr := NewFrameOK(ft.Streamid)
 		err = s.WriteFrame(fr)
 		if err != nil {
 			logger.Err(err)
@@ -172,10 +172,10 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 }
 
 func (s *Session) on_fin(ft *FrameFin) bool {
-	i, ok := s.ports[ft.streamid]
+	i, ok := s.ports[ft.Streamid]
 	if !ok {
 		logger.Err("frame fin stream id not exist")
-		return false
+		return true
 	}
 	it, ok := i.(*Conn)
 	if !ok {
@@ -191,10 +191,10 @@ func (s *Session) on_fin(ft *FrameFin) bool {
 }
 
 func (s *Session) on_data(ft *FrameData) bool {
-	i, ok := s.ports[ft.streamid]
+	i, ok := s.ports[ft.Streamid]
 	if !ok {
 		logger.Err("frame data stream id not exist")
-		return false
+		return true
 	}
 
 	it, ok := i.(*Conn)
@@ -212,16 +212,13 @@ func (s *Session) on_data(ft *FrameData) bool {
 }
 
 func (s *Session) on_dns(ft *FrameDns) {
-	ipaddr, err := net.LookupIP(ft.hostname)
+	ipaddr, err := net.LookupIP(ft.Hostname)
 	if err != nil {
 		logger.Err(err)
 		ipaddr = make([]net.IP, 0)
 	}
 
-	fr := &FrameAddr{
-		streamid: ft.streamid,
-		ipaddr:   ipaddr,
-	}
+	fr := NewFrameAddr(ft.Streamid, ipaddr)
 	err = s.WriteFrame(fr)
 	if err != nil {
 		logger.Err(err)
@@ -233,7 +230,7 @@ func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 	i, ok := s.ports[streamid]
 	if !ok {
 		logger.Err("stream id not exist")
-		return false
+		return true
 	}
 	ch, ok := i.(chan Frame)
 	if !ok {
@@ -260,31 +257,32 @@ func (s *Session) Run() {
 			logger.Err("unexpected package")
 			return
 		case *FrameOK:
-			logger.Debugf("get package ok: %d.", ft.streamid)
-			if !s.sendFrameInChan(ft.streamid, f) {
+			logger.Debugf("get package ok: %d.", ft.Streamid)
+			if !s.sendFrameInChan(ft.Streamid, f) {
 				return
 			}
 		case *FrameFAILED:
 			logger.Debugf("get package failed: %d, errno: %d.",
-				ft.streamid, ft.errno)
-			if !s.sendFrameInChan(ft.streamid, f) {
+				ft.Streamid, ft.Errno)
+			if !s.sendFrameInChan(ft.Streamid, f) {
 				return
 			}
 		case *FrameData:
 			logger.Debugf("get package data: stream(%d), len(%d).",
-				ft.streamid, len(ft.data))
+				ft.Streamid, len(ft.Data))
 			if !s.on_data(ft) {
 				return
 			}
 		case *FrameSyn:
-			logger.Debugf("get package syn: %d => %s.", ft.streamid, ft.address)
+			logger.Debugf("get package syn: %d => %s.",
+				ft.Streamid, ft.Address)
 			if !s.on_syn(ft) {
 				return
 			}
 		case *FrameAck:
 			logger.Debugf("get package ack: %d, window: %d.",
-				ft.streamid, ft.window)
-			i, ok := s.ports[ft.streamid]
+				ft.Streamid, ft.Window)
+			i, ok := s.ports[ft.Streamid]
 			if !ok {
 				logger.Err("frame ack stream id not exist")
 				continue
@@ -294,19 +292,19 @@ func (s *Session) Run() {
 				logger.Err("unexpected ports type")
 				return
 			}
-			it.OnRead(ft.window)
+			it.OnRead(ft.Window)
 		case *FrameFin:
-			logger.Debugf("get package fin: %d.", ft.streamid)
+			logger.Debugf("get package fin: %d.", ft.Streamid)
 			if !s.on_fin(ft) {
 				return
 			}
 		case *FrameDns:
 			logger.Debugf("get package dns: %s, stream(%d).",
-				ft.hostname, ft.streamid)
+				ft.Hostname, ft.Streamid)
 			go s.on_dns(ft)
 		case *FrameAddr:
-			logger.Debugf("get package addr: %d.", ft.streamid)
-			if !s.sendFrameInChan(ft.streamid, f) {
+			logger.Debugf("get package addr: %d.", ft.Streamid)
+			if !s.sendFrameInChan(ft.Streamid, f) {
 				return
 			}
 		}

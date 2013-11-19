@@ -28,7 +28,7 @@ func init() {
 	var logfile string
 	var loglevel string
 
-	flag.StringVar(&runmode, "mode", "", "server/client/httproxy mode")
+	flag.StringVar(&runmode, "mode", "http", "server/socks5/http mode")
 	flag.StringVar(&cipher, "cipher", "aes", "aes/des/tripledes/rc4")
 	flag.StringVar(&keyfile, "keyfile", "", "key and iv file")
 	flag.StringVar(&listenaddr, "listen", ":5233", "listen address")
@@ -81,7 +81,6 @@ func run_server() {
 		logger.Warning("no vaild keyfile.")
 	}
 
-	// qsocks to msocks
 	qs, err := msocks.NewService(passfile, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
@@ -189,9 +188,9 @@ func main() {
 	switch runmode {
 	case "server":
 		run_server()
-	case "client":
+	case "socks5":
 		run_client()
-	case "httproxy":
+	case "http":
 		run_httproxy()
 	}
 	logger.Info("server stopped")

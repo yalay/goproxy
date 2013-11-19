@@ -10,6 +10,9 @@ all: build
 %.html: %.md
 	markdown $^ > $@
 
+test:
+	export GOPATH=$$GOPATH:$(shell pwd); go test ./...
+
 build:
 	export GOPATH=$$GOPATH:$(shell pwd); go install ./...
 

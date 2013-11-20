@@ -126,6 +126,7 @@ type FrameBase struct {
 
 func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {
 	buf = bytes.NewBuffer(nil)
+	buf.Grow(int(5 + f.Length))
 	err = binary.Write(buf, binary.BigEndian, f)
 	if err != nil {
 		logger.Err(err)

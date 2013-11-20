@@ -14,14 +14,14 @@ type Conn struct {
 	rclosed  bool
 	wclosed  bool
 
+	lock    sync.Mutex
 	ch_win  chan uint32
 	buf     chan *FrameData
 	bufhead *FrameData
 	bufpos  int
 
-	delaylock sync.Mutex
-	delayack  *time.Timer
-	delaycnt  int
+	delayack *time.Timer
+	delaycnt int
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
@@ -30,7 +30,7 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 		sess:     sess,
 		rclosed:  false,
 		wclosed:  false,
-		ch_win:   make(chan uint32, 3),
+		ch_win:   make(chan uint32, 10),
 		buf:      make(chan *FrameData, 1024),
 		// use 1024 as default channel length, 1024 * 1024 = 1M
 		// that is the buffer before read
@@ -43,14 +43,14 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 }
 
 func (c *Conn) SendAck(n int) {
-	c.delaylock.Lock()
-	defer c.delaylock.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	if c.delayack == nil {
 		// to avoid silly window symptom
 		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
-			c.delaylock.Lock()
-			defer c.delaylock.Unlock()
+			c.lock.Lock()
+			defer c.lock.Unlock()
 			if c.rclosed || c.wclosed {
 				return
 			}
@@ -171,14 +171,13 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 func (c *Conn) OnRead(window uint32) {
 	c.release(window)
-	// logger.Debugf("remote readed %d bytes, window: %d.",
-	// 	window, c.window.Number())
-	logger.Debugf("remote readed %d bytes.",
-		window)
+	logger.Debugf("remote readed %d bytes.", window)
 	return
 }
 
 func (c *Conn) MarkClose() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.wclosed = true
 	// weakup writer
 	c.ch_win <- 0
@@ -190,7 +189,9 @@ func (c *Conn) MarkClose() {
 }
 
 func (c *Conn) Close() (err error) {
+	c.lock.Lock()
 	if c.wclosed {
+		c.lock.Unlock()
 		return
 	}
 
@@ -201,6 +202,7 @@ func (c *Conn) Close() (err error) {
 		logger.Err(err)
 	}
 	c.wclosed = true
+	c.lock.Unlock()
 
 	if c.rclosed && c.wclosed {
 		err = c.sess.RemovePorts(c.streamid)
@@ -212,11 +214,18 @@ func (c *Conn) Close() (err error) {
 }
 
 func (c *Conn) OnClose() (err error) {
+	c.lock.Lock()
+	if c.rclosed {
+		c.lock.Unlock()
+		return
+	}
+
 	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
 	if !c.rclosed {
 		c.buf <- nil
 	}
 	c.rclosed = true
+	c.lock.Unlock()
 
 	if c.rclosed && c.wclosed {
 		err = c.sess.RemovePorts(c.streamid)

@@ -91,8 +91,7 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 	return
 }
 
-func (md *Dialer) createSession() {
-	var err error
+func (md *Dialer) createSession() (err error) {
 	var conn net.Conn
 	md.sesslock.Lock()
 	defer md.sesslock.Unlock()
@@ -124,6 +123,7 @@ func (md *Dialer) createSession() {
 		// that's mean session is dead
 		logger.Info("session runtime quit, reboot from connect.")
 
+		// remove from sess
 		idx := -1
 		for i, o := range md.sess {
 			if o == sess {
@@ -135,18 +135,18 @@ func (md *Dialer) createSession() {
 			logger.Err("sess %p not found.", sess)
 			return
 		}
-
 		copy(md.sess[idx:len(md.sess)-1], md.sess[idx+1:])
 		md.sess = md.sess[:len(md.sess)-1]
 
 		md.createSession()
 	}()
+	return
 }
 
 func (md *Dialer) GetSess() (sess *Session) {
 	// TODO: new session when too many connections.
 	if len(md.sess) == 0 {
-		err = md.createSession()
+		err := md.createSession()
 		if err != nil {
 			logger.Err(err)
 			panic(err)

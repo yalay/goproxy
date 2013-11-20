@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+const (
+	IDLECLOSE = 10 * time.Minute
+)
+
 var logger logging.Logger
 
 func init() {
@@ -34,10 +38,15 @@ type Session struct {
 }
 
 func NewSession(conn net.Conn) (s *Session) {
-	return &Session{
+	s = &Session{
 		conn:  conn,
 		ports: make(map[uint16]interface{}, 0),
 	}
+	// close session after 10 mins.
+	s.delayclose = time.AfterFunc(IDLECLOSE, func() {
+		s.conn.Close()
+	})
+	return
 }
 
 func (s *Session) LocalAddr() net.Addr {
@@ -69,10 +78,7 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 	s.next_id += 1
 
 	s.ports[id] = i
-	// stop close
-	if s.delayclose != nil && s.delayclose.Stop() {
-		s.delayclose = nil
-	}
+	s.delayclose.Stop()
 	return
 }
 
@@ -102,11 +108,8 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		err = fmt.Errorf("streamid not exist: %d.", streamid)
 		logger.Err(err)
 	}
-	if len(s.ports) == 0 && s.delayclose != nil {
-		// close session after 10 mins.
-		s.delayclose = time.AfterFunc(10*time.Minute, func() {
-			s.conn.Close()
-		})
+	if len(s.ports) == 0 {
+		s.delayclose.Reset(IDLECLOSE)
 	}
 	return
 }

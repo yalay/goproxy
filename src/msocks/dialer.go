@@ -52,7 +52,7 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 	n := rand.Intn(len(md.dss))
 	ds := md.dss[n]
 
-	logger.Infof("create connect, serveraddr: %s.",
+	logger.Noticef("create connect, serveraddr: %s.",
 		ds.serveraddr)
 	conn, err = md.Dialer.Dial("tcp", ds.serveraddr)
 	if err != nil {
@@ -60,7 +60,7 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 		return
 	}
 
-	logger.Infof("auth with username: %s, password: %s.",
+	logger.Noticef("auth with username: %s, password: %s.",
 		ds.username, ds.password)
 	fa := NewFrameAuth(0, ds.username, ds.password)
 	err = WriteFrame(conn, fa)
@@ -79,7 +79,7 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 		logger.Err(err)
 		return
 	case *FrameOK:
-		logger.Infof("auth ok.")
+		logger.Notice("auth ok.")
 	case *FrameFAILED:
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
@@ -111,17 +111,18 @@ func (md *Dialer) createSession() (err error) {
 
 	}
 	if err != nil {
+		logger.Crit("can't connect to host, quit.")
 		return
 	}
 
-	logger.Debugf("create session.")
+	logger.Noticef("create session.")
 	sess := NewSession(conn)
 	md.sess = append(md.sess, sess)
 
 	go func() {
 		sess.Run()
 		// that's mean session is dead
-		logger.Info("session runtime quit, reboot from connect.")
+		logger.Warning("session runtime quit, reboot from connect.")
 
 		// remove from sess
 		idx := -1
@@ -159,7 +160,7 @@ func (md *Dialer) GetSess() (sess *Session) {
 
 func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess := md.GetSess()
-	logger.Infof("dial: %s => %s.",
+	logger.Noticef("dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
@@ -187,7 +188,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	case *FrameFAILED: // FAILED
 		break
 	case *FrameOK: // OK
-		logger.Debugf("connect ok.")
+		logger.Info("connect ok.")
 		c := NewConn(streamid, sess)
 		sess.PutIntoId(streamid, c)
 		close(ch)
@@ -205,7 +206,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 }
 
 func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
-	logger.Infof("lookup ip: %s", hostname)
+	logger.Noticef("lookup ip: %s", hostname)
 	sess := md.GetSess()
 
 	// lock streamid and put chan for it
@@ -233,7 +234,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	case *FrameFAILED: // FAILED
 		break
 	case *FrameAddr: // OK
-		logger.Debugf("lookup ip ok.")
+		logger.Infof("lookup ip ok.")
 		ipaddr = frt.Ipaddr
 		close(ch)
 		return

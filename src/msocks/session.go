@@ -58,7 +58,6 @@ func (s *Session) RemoteAddr() net.Addr {
 }
 
 func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
-	logger.Debugf("put into next id: %d.", i)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -74,7 +73,7 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 		_, ok = s.ports[s.next_id]
 	}
 	id = s.next_id
-	logger.Debugf("next id is: %d.", id)
+	logger.Debugf("put into next id(%d): %p.", id, i)
 	s.next_id += 1
 
 	s.ports[id] = i
@@ -98,7 +97,7 @@ func (s *Session) WriteFrame(f Frame) (err error) {
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
-	logger.Infof("remove ports: %p(%d).", s, streamid)
+	logger.Noticef("remove ports: %p(%d).", s, streamid)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 	_, ok := s.ports[streamid]
@@ -119,7 +118,7 @@ func (s *Session) Number() (n int) {
 }
 
 func (s *Session) Close() (err error) {
-	logger.Infof("close all connections for session: %p.", s)
+	logger.Warning("close all connections for session: %p.", s)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -149,7 +148,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	s.ports[ft.Streamid] = 1
 
 	go func() {
-		logger.Infof("client try to connect: %s.", ft.Address)
+		logger.Noticef("client(%p) try to connect: %s.", s, ft.Address)
 		stream, err := s.on_conn("tcp", ft.Address, ft.Streamid)
 		if err != nil {
 			logger.Err(err)

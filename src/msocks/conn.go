@@ -221,9 +221,7 @@ func (c *Conn) OnClose() (err error) {
 	}
 
 	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
-	if !c.rclosed {
-		c.buf <- nil
-	}
+	c.buf <- nil
 	c.rclosed = true
 	c.lock.Unlock()
 

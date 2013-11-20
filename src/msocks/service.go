@@ -18,7 +18,7 @@ type MsocksService struct {
 }
 
 func LoadPassfile(filename string) (userpass map[string]string, err error) {
-	logger.Infof("load passfile from file %s.", filename)
+	logger.Noticef("load passfile from file %s.", filename)
 
 	file, err := os.Open(filename)
 	if err != nil {
@@ -95,7 +95,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		return false
 	}
 
-	logger.Infof("auth with username: %s, password: %s.",
+	logger.Noticef("auth with username: %s, password: %s.",
 		ft.Username, ft.Password)
 	if ms.userpass != nil {
 		password1, ok := ms.userpass[ft.Username]
@@ -113,12 +113,12 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		return false
 	}
 
-	logger.Infof("auth passed.")
+	logger.Info("auth passed.")
 	return true
 }
 
 func (ms *MsocksService) Handler(conn net.Conn) {
-	logger.Infof("connection come from: %s => %s.",
+	logger.Noticef("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
 	if !ms.on_auth(conn) {
@@ -129,7 +129,7 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	ms.sess = NewSession(conn)
 	ms.sess.on_conn = ms.on_conn
 	ms.sess.Run()
-	logger.Infof("server session quit: %s => %s.",
+	logger.Noticef("server session quit: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 }
 

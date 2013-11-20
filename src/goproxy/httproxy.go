@@ -71,8 +71,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	w.WriteHeader(resp.StatusCode)
 	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
 		httplogger.Err(err)

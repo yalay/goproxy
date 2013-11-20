@@ -11,8 +11,10 @@ import (
 type Conn struct {
 	sess     *Session
 	streamid uint16
-	rclosed  bool
-	wclosed  bool
+	// from remote to local
+	rclosed bool
+	// from local to remote
+	wclosed bool
 
 	lock    sync.Mutex
 	ch_win  chan uint32
@@ -51,7 +53,7 @@ func (c *Conn) SendAck(n int) {
 		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
 			c.lock.Lock()
 			defer c.lock.Unlock()
-			if c.rclosed || c.wclosed {
+			if c.rclosed {
 				return
 			}
 
@@ -64,6 +66,7 @@ func (c *Conn) SendAck(n int) {
 				logger.Err(err)
 				// big trouble
 			}
+
 			c.delayack = nil
 			c.delaycnt = 0
 		})
@@ -74,6 +77,9 @@ func (c *Conn) SendAck(n int) {
 }
 
 func (c *Conn) Read(data []byte) (n int, err error) {
+	if c.rclosed {
+		return 0, io.EOF
+	}
 	if c.bufhead == nil {
 		c.bufhead = <-c.buf
 		c.bufpos = 0
@@ -102,7 +108,9 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 }
 
 func (c *Conn) OnRecv(f *FrameData) (err error) {
+	// to save time
 	if c.rclosed {
+		f.Free()
 		return
 	}
 	if len(f.Data) == 0 {
@@ -120,18 +128,6 @@ func (c *Conn) acquire(num uint32) (n uint32) {
 	if n > num {
 		c.ch_win <- (n - num)
 		n = num
-	}
-	return
-}
-
-func (c *Conn) release(num uint32) (n uint32) {
-	select {
-	case n = <-c.ch_win:
-		n += num
-		c.ch_win <- n
-	default:
-		n = num
-		c.ch_win <- n
 	}
 	return
 }
@@ -169,9 +165,23 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 	return
 }
 
+func (c *Conn) release(num uint32) (n uint32) {
+	n = num
+	for {
+		select {
+		case m := <-c.ch_win:
+			n += m
+		default:
+			c.ch_win <- n
+			return
+		}
+	}
+}
+
 func (c *Conn) OnRead(window uint32) {
-	c.release(window)
-	logger.Debugf("remote readed %d bytes.", window)
+	n := c.release(window)
+	logger.Debugf("remote readed %d bytes, window size maybe: %d.",
+		window, n)
 	return
 }
 
@@ -182,10 +192,10 @@ func (c *Conn) MarkClose() {
 	// weakup writer
 	c.ch_win <- 0
 	// weakup reader
+	c.rclosed = true
 	if !c.rclosed {
 		c.buf <- nil
 	}
-	c.rclosed = true
 }
 
 func (c *Conn) Close() (err error) {
@@ -202,6 +212,7 @@ func (c *Conn) Close() (err error) {
 		logger.Err(err)
 	}
 	c.wclosed = true
+	c.ch_win <- 0
 	c.lock.Unlock()
 
 	if c.rclosed && c.wclosed {
@@ -221,8 +232,8 @@ func (c *Conn) OnClose() (err error) {
 	}
 
 	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
-	c.buf <- nil
 	c.rclosed = true
+	c.buf <- nil
 	c.lock.Unlock()
 
 	if c.rclosed && c.wclosed {

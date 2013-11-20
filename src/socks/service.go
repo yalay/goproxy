@@ -61,7 +61,7 @@ func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error
 	return dstconn, nil
 }
 
-func (ss *SocksService) ServeTCP(listener net.Listener) (err error) {
+func (ss *SocksService) Serve(listener net.Listener) (err error) {
 	var conn net.Conn
 
 	for {

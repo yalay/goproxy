@@ -22,6 +22,13 @@ type Proxy struct {
 	dialer sutils.Dialer
 }
 
+func NewProxy(dialer sutils.Dialer) (p *Proxy) {
+	return &Proxy{
+		dialer: dialer,
+		tspt:   http.Transport{Dial: dialer.Dial},
+	}
+}
+
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	httplogger.Infof("%s: %s", r.Method, r.URL)
 

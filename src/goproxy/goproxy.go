@@ -86,7 +86,7 @@ func run_server() {
 		return
 	}
 
-	err = qs.ServeTCP(listener)
+	err = qs.Serve(listener)
 	if err != nil {
 		logger.Err(err)
 	}
@@ -159,7 +159,7 @@ func run_client() {
 	}
 
 	ss := socks.NewService(dialer)
-	err = ss.ServeTCP(listener)
+	err = ss.Serve(listener)
 	if err != nil {
 		logger.Err(err)
 	}
@@ -177,10 +177,10 @@ func run_httproxy() {
 		return
 	}
 
-	http.ListenAndServe(listenaddr, &Proxy{
-		dialer: dialer,
-		tspt:   http.Transport{Dial: dialer.Dial},
-	})
+	err = http.ListenAndServe(listenaddr, NewProxy(dialer))
+	if err != nil {
+		logger.Err(err)
+	}
 }
 
 func main() {

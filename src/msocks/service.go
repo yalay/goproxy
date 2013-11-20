@@ -133,7 +133,7 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 		conn.RemoteAddr(), conn.LocalAddr())
 }
 
-func (ms *MsocksService) ServeTCP(listener net.Listener) (err error) {
+func (ms *MsocksService) Serve(listener net.Listener) (err error) {
 	var conn net.Conn
 
 	for {

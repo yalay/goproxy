@@ -18,44 +18,61 @@ func init() {
 }
 
 type Proxy struct {
-	tspt   http.Transport
-	dialer sutils.Dialer
+	transport http.Transport
+	dialer    sutils.Dialer
 }
 
 func NewProxy(dialer sutils.Dialer) (p *Proxy) {
 	return &Proxy{
-		dialer: dialer,
-		tspt:   http.Transport{Dial: dialer.Dial},
+		dialer:    dialer,
+		transport: http.Transport{Dial: dialer.Dial},
 	}
 }
 
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	httplogger.Infof("%s: %s", r.Method, r.URL)
+var hopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te", // canonicalized version of "TE"
+	"Trailers",
+	"Transfer-Encoding",
+	"Upgrade",
+}
 
-	if r.Method == "CONNECT" {
-		p.Connect(w, r)
+func copyHeader(dst, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
+		}
+	}
+}
+
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	httplogger.Infof("%s: %s", req.Method, req.URL)
+
+	if req.Method == "CONNECT" {
+		p.Connect(w, req)
 		return
 	}
 
-	r.RequestURI = ""
-	r.Header.Del("Accept-Encoding")
-	r.Header.Del("Proxy-Connection")
-	r.Header.Del("Connection")
+	req.RequestURI = ""
+	for _, h := range hopHeaders {
+		if req.Header.Get(h) != "" {
+			req.Header.Del(h)
+		}
+	}
 
-	resp, err := p.tspt.RoundTrip(r)
+	resp, err := p.transport.RoundTrip(req)
 	if err != nil {
 		httplogger.Err(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
 
-	resp.Header.Del("Content-Length")
-	for k, vv := range resp.Header {
-		for _, v := range vv {
-			w.Header().Add(k, v)
-		}
-	}
 	w.WriteHeader(resp.StatusCode)
+	copyHeader(w.Header(), resp.Header)
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
 		httplogger.Err(err)
@@ -87,7 +104,6 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}
-	defer dstconn.Close()
 	srcconn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
 	sutils.CopyLink(srcconn, dstconn)

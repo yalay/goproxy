@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LEVEL=INFO
+LEVEL=NOTICE
 
 rm -f server.log client.log httproxy.log
 

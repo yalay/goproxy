@@ -53,7 +53,7 @@ func (c *Conn) SendAck(n int) {
 		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
 			c.lock.Lock()
 			defer c.lock.Unlock()
-			if c.rclosed {
+			if c.rclosed || c.wclosed {
 				return
 			}
 
@@ -85,6 +85,8 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		c.bufpos = 0
 	}
 	if c.bufhead == nil {
+		// weak up next.
+		c.buf <- nil
 		return 0, io.EOF
 	}
 
@@ -134,10 +136,6 @@ func (c *Conn) acquire(num uint32) (n uint32) {
 
 func (c *Conn) Write(data []byte) (n int, err error) {
 	for len(data) > 0 {
-		if c.wclosed {
-			return n, io.EOF
-		}
-
 		size := uint32(len(data))
 		// use 1024 as a chunk coz leakbuf 1k
 		if size > 1024 {
@@ -150,13 +148,22 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 			return n, io.EOF
 		}
 
+		c.lock.Lock()
+		if c.wclosed {
+			// write closed, so we don't care window too much.
+			c.lock.Unlock()
+			return n, io.EOF
+		}
+
 		logger.Debugf("%p(%d) send chunk size %d at %d.",
 			c.sess, c.streamid, size, n)
 		ft := NewFrameData(c.streamid, data[:size])
 		err = c.sess.WriteFrame(ft)
 		if err != nil {
+			c.lock.Unlock()
 			return
 		}
+		c.lock.Unlock()
 
 		data = data[size:]
 		n += int(size)

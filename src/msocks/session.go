@@ -286,7 +286,8 @@ func (s *Session) Run() {
 				ft.Streamid, ft.Window)
 			i, ok := s.ports[ft.Streamid]
 			if !ok {
-				logger.Err("frame ack stream id not exist")
+				logger.Errf("frame ack stream id(%d) not exist.",
+					ft.Streamid)
 				continue
 			}
 			it, ok := i.(*Conn)

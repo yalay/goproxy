@@ -118,7 +118,7 @@ func (s *Session) Number() (n int) {
 }
 
 func (s *Session) Close() (err error) {
-	logger.Warning("close all connections for session: %p.", s)
+	logger.Warningf("close all connections for session(%d): %p.", len(s.ports), s)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 

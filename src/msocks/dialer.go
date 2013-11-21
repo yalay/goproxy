@@ -160,7 +160,7 @@ func (md *Dialer) GetSess() (sess *Session) {
 
 func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess := md.GetSess()
-	logger.Noticef("dial: %s => %s.",
+	logger.Infof("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
@@ -192,6 +192,8 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		c := NewConn(streamid, sess)
 		sess.PutIntoId(streamid, c)
 		close(ch)
+		logger.Noticef("new conn %p: %s => %s.",
+			c, sess.conn.RemoteAddr().String(), address)
 		return c, nil
 	}
 

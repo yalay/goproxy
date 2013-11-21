@@ -46,6 +46,7 @@ func NewSession(conn net.Conn) (s *Session) {
 	s.delayclose = time.AfterFunc(IDLECLOSE, func() {
 		s.conn.Close()
 	})
+	logger.Noticef("session %p created.", s)
 	return
 }
 

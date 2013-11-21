@@ -25,7 +25,7 @@ goproxy拥有众多参数，以下为参数解释。
 
 密码文件使用文本格式，每个用户一行，以:分割。第一个:前的为用户名，后面直到换行为止是密码。因此用户名中不得带有:。
 
-# client模式 #
+# socks5模式 #
 
 客户端模式提供socks5协议的代理，代理端口在listen中指定。启动时需要在第一个参数指定一个服务端。
 
@@ -45,22 +45,13 @@ dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域�
 
 源码中附带了一个resolv.conf，一般可以直接使用。
 
-# httproxy模式 #
+# http模式 #
 
-httproxy模式提供http协议的代理。但是由于实现的不好，目前不推荐使用。建议使用polipo+client模式。
+http模式提供http协议的代理。推荐使用。
+
+黑名单，DNS配置同socks5模式。
 
 # 启动脚本用法 #
-
-## daemonized ##
-
-这是一个python写的小脚本，目的是用于转换为系统服务，并监视goproxy的执行。go本身不适合做daemonized的工作，因此监控程序正常执行和重启的工作是由python来完成的。
-
-* -f: 前台执行。
-* -l: log文件。
-* -h: help信息。
-* -p: pid文件。检测pid文件是否存在，如果存在且pid文件指名的进程exe为执行程序，则不继续执行。
-
-其余参数为要启动的程序和参数。daemonized脚本可以用于大部分程序的daemonized化和监控。
 
 ## init脚本 ##
 
@@ -81,37 +72,35 @@ DAEMON_OPTS里面需要指名运行goproxy所需的参数。注意goproxy自身�
 	dd if=/dev/random of=key count=32 bs=1
 	chmod 400 key
 
-其中aes需要32字节的随机数，des/tripledes需要24字节，rc4需要16字节。
+其中aes需要32字节的随机数，des/tripledes需要24字节，rc4需要16字节。当然，在默认情况下，debian打出的包会在安装时自动生成一个/etc/goproxy/key（如果没有的话）。
 
 ## 配置样例 ##
 
 服务器端/etc/default/goproxy下。
 
 	RUNDAEMON=1
-	DAEMON_OPTS="-mode server -keyfile=/etc/goproxy/key -passfile=/etc/goproxy/users.pwd"
+	LOGFILE="/var/log/$NAME.log"
+	RUNMODE="server"
+	KEYFILE="/etc/goproxy/key"
+	DAEMON_OPTS="-passfile=/etc/goproxy/users.pwd"
 
 客户端/etc/default/goproxy下。
 
 	RUNDAEMON=1
-	DAEMON_OPTS="-mode client -keyfile=/etc/goproxy/key -black=/usr/share/goproxy/routes.list.gz -username=usr -password=pwd srv:5233
+	LOGFILE="/var/log/$NAME.log"
+	RUNMODE="http"
+	KEYFILE="/etc/goproxy/key"
+	DAEMON_OPTS="-black=/usr/share/goproxy/routes.list.gz -username=usr -password=pwd srv:5233"
 
-客户端/etc/polipo/config。
+# msocks协议 #
 
-	proxyPort = 8118 # 或者你希望的其他端口
-	allowedClients = 127.0.0.1 # 按照需要修改
-	socksParentProxy = "localhost:5233"
-	socksProxyType = socks5
+msocks协议最大的改进是增加了连接复用能力，这个功能允许你在一个TCP连接上代理多个http请求。由于qsocks协议非常快速的建立和释放连接，并且每次连接时必然是连接方向目标方发送大量数据，目标方再反向发送。因此有可能被流量模型发现。msocks保持这个连接，因此连接建立速度更快，没有大量的打开和关闭开销，而且流量模型很难发现。
 
-	chunkHighMark = 819200 # 不需要缓存
-	objectHighMark = 128
-
-# TODO #
-
-goproxy解决了加密和SSL握手容易识别的问题，但是连接特性和流量特性依然十分明显。下一步考虑做连接复用和流量混淆。
+但是目前连接复用协议中，每个chunk都是1024字节大小。下一步考虑使用随机大小，彻底打乱流量模型。同时启用内容数据压缩（考虑snappy），加快传输速度。
 
 # 授权 #
 
-    Copyright (C) 2012 Shell Xu
+    Copyright (C) 2012-2013 Shell Xu
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	IDLECLOSE = 10 * time.Minute
+	IDLECLOSE      = 10 * time.Minute
+	DIAL_TIMEOUT   = 30 * time.Second
+	LOOKUP_TIMEOUT = 60 * time.Second
 )
 
 var logger logging.Logger
@@ -23,6 +25,12 @@ func init() {
 	}
 }
 
+// There two kind of situation ports[streamid] will be a chan.
+// 1. dial.
+// 2. lookup.
+// And one kind of situation ports[streamid] will be a num(actually, 1).
+// 1. try to connect.
+// Otherwise, ports[streamid] must be a *Conn.
 type Session struct {
 	flock sync.Mutex
 	conn  net.Conn
@@ -145,10 +153,11 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		return true
 	}
 
-	// lock streamid temporary
+	// lock streamid temporary, do I need this?
 	s.ports[ft.Streamid] = 1
 
 	go func() {
+		// TODO: timeout
 		logger.Noticef("client(%p) try to connect: %s.", s, ft.Address)
 		stream, err := s.on_conn("tcp", ft.Address, ft.Streamid)
 		if err != nil {
@@ -185,11 +194,14 @@ func (s *Session) on_fin(ft *FrameFin) bool {
 		logger.Err("unexpected ports type")
 		return false
 	}
-	err := it.OnClose()
-	if err != nil {
-		logger.Err(err)
-		return false
-	}
+	go func() {
+		// maybe this will take a while.
+		err := it.OnClose()
+		if err != nil {
+			logger.Err(err)
+			s.conn.Close()
+		}
+	}()
 	return true
 }
 
@@ -206,29 +218,68 @@ func (s *Session) on_data(ft *FrameData) bool {
 		return false
 	}
 
-	// never use ft again, you just lost it control.
+	// Never use ft again, you just lost it control.
+	// This should not take too much time, but may failed.
 	err := it.OnRecv(ft)
 	if err != nil {
+		// When this happen, that's mean we should close streamid.
 		logger.Err(err)
+		// This may take some time.
+		go func() {
+			err := it.Close()
+			if err != nil {
+				logger.Err(err)
+				s.conn.Close()
+			}
+
+			err = it.OnClose()
+			if err != nil {
+				logger.Err(err)
+				s.conn.Close()
+			}
+		}()
 	}
 	return true
 }
 
-func (s *Session) on_dns(ft *FrameDns) {
-	ipaddr, err := net.LookupIP(ft.Hostname)
-	if err != nil {
-		logger.Err(err)
-		ipaddr = make([]net.IP, 0)
+func (s *Session) on_ack(ft *FrameAck) bool {
+	i, ok := s.ports[ft.Streamid]
+	if !ok {
+		logger.Errf("frame ack stream id(%d) not exist.",
+			ft.Streamid)
+		return true
 	}
+	it, ok := i.(*Conn)
+	if !ok {
+		logger.Err("unexpected ports type")
+		return false
+	}
+	// almost don't take time, but for safe...
+	it.OnRead(ft.Window)
+	return true
+}
 
-	fr := NewFrameAddr(ft.Streamid, ipaddr)
-	err = s.WriteFrame(fr)
-	if err != nil {
-		logger.Err(err)
-	}
+func (s *Session) on_dns(ft *FrameDns) {
+	// This will toke long time...
+	go func() {
+		ipaddr, err := net.LookupIP(ft.Hostname)
+		if err != nil {
+			logger.Err(err)
+			ipaddr = make([]net.IP, 0)
+		}
+
+		fr := NewFrameAddr(ft.Streamid, ipaddr)
+		err = s.WriteFrame(fr)
+		if err != nil {
+			logger.Err(err)
+		}
+		return
+	}()
 	return
 }
 
+// In all of situation, drop frame if chan full.
+// And if frame finally come, drop it too.
 func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 	i, ok := s.ports[streamid]
 	if !ok {
@@ -240,8 +291,13 @@ func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 		logger.Err("unexpected ports type")
 		return false
 	}
-	ch <- f
-	return true
+	select {
+	case ch <- f:
+		return true
+	default:
+		// chan is full
+		return s.RemovePorts(streamid) == nil
+	}
 }
 
 func (s *Session) Run() {
@@ -285,18 +341,9 @@ func (s *Session) Run() {
 		case *FrameAck:
 			logger.Debugf("get package ack: %d, window: %d.",
 				ft.Streamid, ft.Window)
-			i, ok := s.ports[ft.Streamid]
-			if !ok {
-				logger.Errf("frame ack stream id(%d) not exist.",
-					ft.Streamid)
-				continue
-			}
-			it, ok := i.(*Conn)
-			if !ok {
-				logger.Err("unexpected ports type")
+			if !s.on_ack(ft) {
 				return
 			}
-			it.OnRead(ft.Window)
 		case *FrameFin:
 			logger.Debugf("get package fin: %d.", ft.Streamid)
 			if !s.on_fin(ft) {

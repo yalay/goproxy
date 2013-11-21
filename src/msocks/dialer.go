@@ -7,6 +7,7 @@ import (
 	"net"
 	"sutils"
 	"sync"
+	"time"
 )
 
 type DialerSetting struct {
@@ -164,7 +165,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
-	ch := make(chan Frame, 0)
+	ch := make(chan Frame, 1)
 	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
@@ -176,25 +177,30 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	// TODO: timeout?
-	fr := <-ch
-	switch fr.(type) {
-	default:
-		err = errors.New("unknown status")
-		logger.Err(err)
-		return
-	case nil: // close all
+	ch_timeout := time.After(DIAL_TIMEOUT)
+
+	select {
+	case fr := <-ch:
+		switch fr.(type) {
+		default:
+			err = errors.New("unknown status")
+			logger.Err(err)
+			return
+		case nil: // close all
+			break
+		case *FrameFAILED: // FAILED
+			break
+		case *FrameOK: // OK
+			logger.Info("connect ok.")
+			c := NewConn(streamid, sess)
+			sess.PutIntoId(streamid, c)
+			close(ch)
+			logger.Noticef("new conn %p: %s => %s.",
+				c, sess.conn.RemoteAddr().String(), address)
+			return c, nil
+		}
+	case <-ch_timeout: // timeout
 		break
-	case *FrameFAILED: // FAILED
-		break
-	case *FrameOK: // OK
-		logger.Info("connect ok.")
-		c := NewConn(streamid, sess)
-		sess.PutIntoId(streamid, c)
-		close(ch)
-		logger.Noticef("new conn %p: %s => %s.",
-			c, sess.conn.RemoteAddr().String(), address)
-		return c, nil
 	}
 
 	err = sess.RemovePorts(streamid)
@@ -212,7 +218,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	sess := md.GetSess()
 
 	// lock streamid and put chan for it
-	ch := make(chan Frame, 0)
+	ch := make(chan Frame, 1)
 	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
@@ -224,22 +230,27 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	// TODO: timeout?
-	fr := <-ch
-	switch frt := fr.(type) {
-	default:
-		err = errors.New("unknown status")
-		logger.Err(err)
-		return
-	case nil: // close all
+	ch_timeout := time.After(LOOKUP_TIMEOUT)
+
+	select {
+	case fr := <-ch:
+		switch frt := fr.(type) {
+		default:
+			err = errors.New("unknown status")
+			logger.Err(err)
+			return
+		case nil: // close all
+			break
+		case *FrameFAILED: // FAILED
+			break
+		case *FrameAddr: // OK
+			logger.Infof("lookup ip ok.")
+			ipaddr = frt.Ipaddr
+			close(ch)
+			return
+		}
+	case <-ch_timeout: // timeout
 		break
-	case *FrameFAILED: // FAILED
-		break
-	case *FrameAddr: // OK
-		logger.Infof("lookup ip ok.")
-		ipaddr = frt.Ipaddr
-		close(ch)
-		return
 	}
 
 	err = sess.RemovePorts(streamid)

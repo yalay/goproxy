@@ -76,6 +76,7 @@ func (c *Conn) SendAck(n int) {
 	return
 }
 
+// TODO: one read in same time.
 func (c *Conn) Read(data []byte) (n int, err error) {
 	if c.rclosed {
 		return 0, io.EOF
@@ -121,8 +122,13 @@ func (c *Conn) OnRecv(f *FrameData) (err error) {
 
 	logger.Debugf("%p(%d) recved %d bytes from remote.",
 		c.sess, f.Streamid, len(f.Data))
-	c.buf <- f
-	return nil
+	select {
+	case c.buf <- f:
+		return nil
+	default:
+	}
+	return fmt.Errorf("we are in big trouble, because %p(%d) c.buf is full.",
+		c.sess, c.streamid)
 }
 
 func (c *Conn) acquire(num uint32) (n uint32) {

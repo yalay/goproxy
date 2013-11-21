@@ -29,4 +29,4 @@ func (lb *LeakBuf) Free(b []byte) {
 	return
 }
 
-var Klb = NewLeakBuf(1024, 64)
+var Klb = NewLeakBuf(1024, 256)

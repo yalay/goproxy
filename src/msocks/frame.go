@@ -54,26 +54,8 @@ func WriteString(w io.Writer, s string) (err error) {
 }
 
 type Frame interface {
-	// Packed() (*bytes.Buffer, error)
 	Unpack(r io.Reader) error
 }
-
-// func WriteFrame(w io.Writer, f Frame) (err error) {
-// 	buf, err := f.Packed()
-// 	if err != nil {
-// 		return
-// 	}
-// 	b := buf.Bytes()
-// 	n, err := w.Write(b)
-// 	if err != nil {
-// 		return
-// 	}
-// 	if n != len(b) {
-// 		err = io.ErrShortWrite
-// 		return
-// 	}
-// 	return
-// }
 
 func ReadFrame(r io.Reader) (f Frame, err error) {
 	fb := new(FrameBase)

@@ -13,6 +13,6 @@ sleep 1
 curl -x http://localhost:7002 http://www.baidu.com > /dev/null
 curl -x http://localhost:7002 http://www.microsoft.com > /dev/null
 
-ab -X localhost:7002 -c 900 -n 900000 http://127.0.0.1:6060/
+ab -X localhost:7002 -c 900 -n 90000 http://127.0.0.1:6060/
 
 killall goproxy

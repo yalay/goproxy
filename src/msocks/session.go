@@ -143,9 +143,10 @@ func (s *Session) Number() (n int) {
 }
 
 func (s *Session) Close() (err error) {
-	logger.Warningf("close all connections for session(%d): %p.", len(s.ports), s)
+	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	s.plock.Lock()
 	defer s.plock.Unlock()
+	defer s.conn.Close()
 
 	for id, v := range s.ports {
 		switch vt := v.(type) {
@@ -348,13 +349,12 @@ func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 }
 
 func (s *Session) Run() {
-	defer s.conn.Close()
 	defer s.Close()
 
 	for {
 		f, err := ReadFrame(s.conn)
-		// EOF, in client mode, try reconnect
 		if err != nil {
+			logger.Err(err)
 			return
 		}
 

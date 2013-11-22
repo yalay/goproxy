@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"sutils"
 	"sync"
 	"time"
@@ -63,8 +64,12 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 
 	logger.Noticef("auth with username: %s, password: %s.",
 		ds.username, ds.password)
-	fa := NewFrameAuth(0, ds.username, ds.password)
-	err = WriteFrame(conn, fa)
+	b, err := NewFrameAuth(0, ds.username, ds.password)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	_, err = conn.Write(b)
 	if err != nil {
 		return
 	}
@@ -151,7 +156,8 @@ func (md *Dialer) GetSess() (sess *Session) {
 		err := md.createSession()
 		if err != nil {
 			logger.Err(err)
-			panic(err)
+			// more civilized
+			os.Exit(-1)
 		}
 	}
 	n := rand.Intn(len(md.sess))
@@ -171,9 +177,14 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	f := NewFrameSyn(streamid, address)
-	err = sess.WriteFrame(f)
+	b, err := NewFrameSyn(streamid, address)
 	if err != nil {
+		logger.Err(err)
+		return
+	}
+	err = sess.Write(b)
+	if err != nil {
+		logger.Err(err)
 		return
 	}
 
@@ -181,34 +192,34 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 
 	select {
 	case fr := <-ch:
-		switch fr.(type) {
+		switch frt := fr.(type) {
 		default:
 			err = errors.New("unknown status")
 			logger.Err(err)
 			return
 		case nil: // close all
+			err = fmt.Errorf("connection failed for all closed(%p).", sess)
 			break
 		case *FrameFAILED: // FAILED
+			err = fmt.Errorf("connection failed for remote failed(%d): %d.",
+				streamid, frt.Errno)
 			break
 		case *FrameOK: // OK
 			logger.Info("connect ok.")
 			c := NewConn(streamid, sess)
 			sess.PutIntoId(streamid, c)
 			close(ch)
-			logger.Noticef("new conn %p: %s => %s.",
-				c, sess.conn.RemoteAddr().String(), address)
+			logger.Noticef("new conn: %p:%d => %s.",
+				sess, streamid, address)
 			return c, nil
 		}
 	case <-ch_timeout: // timeout
+		err = fmt.Errorf("connection failed for timeout(%d).", streamid)
 		break
 	}
 
-	err = sess.RemovePorts(streamid)
-	if err != nil {
-		logger.Err(err)
-	}
-	err = errors.New("connection failed.")
 	logger.Err(err)
+	sess.RemovePorts(streamid)
 	close(ch)
 	return
 }
@@ -224,8 +235,12 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	f := NewFrameDns(streamid, hostname)
-	err = sess.WriteFrame(f)
+	b, err := NewFrameDns(streamid, hostname)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	err = sess.Write(b)
 	if err != nil {
 		return
 	}
@@ -240,8 +255,11 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 			logger.Err(err)
 			return
 		case nil: // close all
+			err = fmt.Errorf("lookup ip failed for all closed(%p).", sess)
 			break
 		case *FrameFAILED: // FAILED
+			err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
+				streamid, frt.Errno)
 			break
 		case *FrameAddr: // OK
 			logger.Infof("lookup ip ok.")
@@ -250,15 +268,12 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 			return
 		}
 	case <-ch_timeout: // timeout
+		err = fmt.Errorf("lookup ip failed for timeout(%d).", streamid)
 		break
 	}
 
-	err = sess.RemovePorts(streamid)
-	if err != nil {
-		logger.Err(err)
-	}
-	err = errors.New("lookup ip failed")
 	logger.Err(err)
+	sess.RemovePorts(streamid)
 	close(ch)
 	return
 }

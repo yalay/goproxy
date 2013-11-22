@@ -3,6 +3,7 @@ package msocks
 import (
 	"errors"
 	"fmt"
+	"io"
 	"logging"
 	"net"
 	"sync"
@@ -86,7 +87,10 @@ func (s *Session) PutIntoNextId(i interface{}) (id uint16, err error) {
 	s.next_id += 1
 
 	s.ports[id] = i
-	s.delayclose.Stop()
+	if s.delayclose != nil {
+		s.delayclose.Stop()
+		s.delayclose = nil
+	}
 	return
 }
 
@@ -99,25 +103,37 @@ func (s *Session) PutIntoId(id uint16, i interface{}) (err error) {
 	return
 }
 
-func (s *Session) WriteFrame(f Frame) (err error) {
+func (s *Session) Write(b []byte) (err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
-	return WriteFrame(s.conn, f)
+	n, err := s.conn.Write(b)
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	if n != len(b) {
+		err = io.ErrShortWrite
+		logger.Err(err)
+	}
+	return
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
-	logger.Noticef("remove ports: %p(%d).", s, streamid)
+	logger.Noticef("remove ports: %p:%d.", s, streamid)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 	_, ok := s.ports[streamid]
 	if ok {
 		delete(s.ports, streamid)
 	} else {
-		err = fmt.Errorf("streamid not exist: %d.", streamid)
-		logger.Err(err)
+		err = fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	if len(s.ports) == 0 {
-		s.delayclose.Reset(IDLECLOSE)
+		if s.delayclose == nil {
+			s.delayclose = time.AfterFunc(IDLECLOSE, func() {
+				s.conn.Close()
+			})
+		}
 	}
 	return
 }
@@ -131,8 +147,11 @@ func (s *Session) Close() (err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
-	for _, v := range s.ports {
+	for id, v := range s.ports {
 		switch vt := v.(type) {
+		default:
+			logger.Errf("unexpected ports type(%d).", id)
+		case int:
 		case chan Frame:
 			vt <- nil
 		case *Conn:
@@ -148,8 +167,14 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.Streamid]
 	if ok {
 		logger.Err("frame sync stream id exist.")
-		fr := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
-		s.WriteFrame(fr)
+		b, err := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
+		if err != nil {
+			return false
+		}
+		err = s.Write(b)
+		if err != nil {
+			return false
+		}
 		return true
 	}
 
@@ -158,26 +183,42 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 
 	go func() {
 		// TODO: timeout
-		logger.Noticef("client(%p) try to connect: %s.", s, ft.Address)
+		logger.Debugf("client(%p) try to connect: %s.", s, ft.Address)
 		stream, err := s.on_conn("tcp", ft.Address, ft.Streamid)
 		if err != nil {
 			logger.Err(err)
-			fr := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
-			s.WriteFrame(fr)
+			b, err := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
+			if err != nil {
+				logger.Err(err)
+				return
+			}
+			err = s.Write(b)
+			if err != nil {
+				logger.Err(err)
+				return
+			}
 
-			s.RemovePorts(ft.Streamid)
+			err = s.RemovePorts(ft.Streamid)
+			if err != nil {
+				logger.Err(err)
+			}
 			return
 		}
 
 		// update it, don't need to lock
 		s.ports[ft.Streamid] = stream
-		fr := NewFrameOK(ft.Streamid)
-		err = s.WriteFrame(fr)
+		b, err := NewFrameOK(ft.Streamid)
 		if err != nil {
 			logger.Err(err)
 			return
 		}
-		logger.Debug("connect successed.")
+		err = s.Write(b)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+		logger.Noticef("connected %p:%d => %s.",
+			s, ft.Streamid, ft.Address)
 		return
 	}()
 	return true
@@ -186,7 +227,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 func (s *Session) on_fin(ft *FrameFin) bool {
 	i, ok := s.ports[ft.Streamid]
 	if !ok {
-		logger.Err("frame fin stream id not exist")
+		logger.Errf("frame fin stream id(%d) not exist.",
+			ft.Streamid)
 		return true
 	}
 	it, ok := i.(*Conn)
@@ -208,7 +250,8 @@ func (s *Session) on_fin(ft *FrameFin) bool {
 func (s *Session) on_data(ft *FrameData) bool {
 	i, ok := s.ports[ft.Streamid]
 	if !ok {
-		logger.Err("frame data stream id not exist")
+		logger.Errf("frame data stream id(%d) not exist.",
+			ft.Streamid)
 		return true
 	}
 
@@ -254,7 +297,7 @@ func (s *Session) on_ack(ft *FrameAck) bool {
 		logger.Err("unexpected ports type")
 		return false
 	}
-	// almost don't take time, but for safe...
+	// almost don't take time
 	it.OnRead(ft.Window)
 	return true
 }
@@ -268,8 +311,12 @@ func (s *Session) on_dns(ft *FrameDns) {
 			ipaddr = make([]net.IP, 0)
 		}
 
-		fr := NewFrameAddr(ft.Streamid, ipaddr)
-		err = s.WriteFrame(fr)
+		b, err := NewFrameAddr(ft.Streamid, ipaddr)
+		if err != nil {
+			logger.Err(err)
+			return
+		}
+		err = s.Write(b)
 		if err != nil {
 			logger.Err(err)
 		}
@@ -283,7 +330,7 @@ func (s *Session) on_dns(ft *FrameDns) {
 func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 	i, ok := s.ports[streamid]
 	if !ok {
-		logger.Err("stream id not exist")
+		logger.Errf("stream id(%d) not exist.", streamid)
 		return true
 	}
 	ch, ok := i.(chan Frame)
@@ -295,7 +342,7 @@ func (s *Session) sendFrameInChan(streamid uint16, f Frame) bool {
 	case ch <- f:
 		return true
 	default:
-		// chan is full
+		logger.Errf("%p:%d chan has fulled.", s, streamid)
 		return s.RemovePorts(streamid) == nil
 	}
 }

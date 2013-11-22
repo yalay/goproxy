@@ -11,19 +11,22 @@ import (
 type Conn struct {
 	sess     *Session
 	streamid uint16
+
 	// from remote to local
 	rclosed bool
 	// from local to remote
-	wclosed bool
+	wclosed   bool
+	closefunc sync.Once
+	wlock     sync.Mutex
+	ch_win    chan uint32
 
-	lock    sync.Mutex
-	ch_win  chan uint32
 	buf     chan *FrameData
 	bufhead *FrameData
 	bufpos  int
 
-	delayack *time.Timer
-	delaycnt int
+	delaylock sync.Mutex
+	delayack  *time.Timer
+	delaycnt  int
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
@@ -44,29 +47,47 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	return
 }
 
+func (c *Conn) writeSafe(b []byte) (err error) {
+	c.wlock.Lock()
+	defer c.wlock.Unlock()
+	if c.wclosed {
+		return io.EOF
+	}
+	return c.sess.Write(b)
+}
+
 func (c *Conn) SendAck(n int) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.delaylock.Lock()
+	defer c.delaylock.Unlock()
 
 	if c.delayack == nil {
 		// to avoid silly window symptom
 		c.delayack = time.AfterFunc(100*time.Millisecond, func() {
-			c.lock.Lock()
-			defer c.lock.Unlock()
-			if c.rclosed || c.wclosed {
-				return
-			}
-
 			logger.Debugf("%p(%d) send ack %d.",
 				c.sess, c.streamid, c.delaycnt)
 			// send readed bytes back
-			ft := NewFrameAck(c.streamid, uint32(c.delaycnt))
-			err := c.sess.WriteFrame(ft)
+			b, err := NewFrameAck(c.streamid, uint32(c.delaycnt))
 			if err != nil {
 				logger.Err(err)
-				// big trouble
+				return
 			}
 
+			// rclose will got wrong
+			// When we close first, remote sent fin in air.
+			// At this moment, wclosed setted and rclosed not set.
+			// Check rclosed will send a ack, which remote already removed port.
+			err = c.writeSafe(b)
+			switch err {
+			case nil:
+			case io.EOF:
+				return
+			default:
+				logger.Err(err)
+				return
+			}
+
+			c.delaylock.Lock()
+			defer c.delaylock.Unlock()
 			c.delayack = nil
 			c.delaycnt = 0
 		})
@@ -133,7 +154,10 @@ func (c *Conn) OnRecv(f *FrameData) (err error) {
 
 func (c *Conn) acquire(num uint32) (n uint32) {
 	n = <-c.ch_win
-	if n > num {
+	switch {
+	case n == 0: // weak up next
+		c.ch_win <- 0
+	case n > num:
 		c.ch_win <- (n - num)
 		n = num
 	}
@@ -141,35 +165,30 @@ func (c *Conn) acquire(num uint32) (n uint32) {
 }
 
 func (c *Conn) Write(data []byte) (n int, err error) {
+	var b []byte
 	for len(data) > 0 {
 		size := uint32(len(data))
 		// use 1024 as a chunk coz leakbuf 1k
+		// TODO: random size
 		if size > 1024 {
 			size = 1024
 		}
 		// check for window
 		// if window <= 0, wait for window
 		size = c.acquire(size)
-		if size == 0 {
-			return n, io.EOF
-		}
-
-		c.lock.Lock()
-		if c.wclosed {
-			// write closed, so we don't care window too much.
-			c.lock.Unlock()
-			return n, io.EOF
-		}
-
-		logger.Debugf("%p(%d) send chunk size %d at %d.",
-			c.sess, c.streamid, size, n)
-		ft := NewFrameData(c.streamid, data[:size])
-		err = c.sess.WriteFrame(ft)
+		b, err = NewFrameData(c.streamid, data[:size])
 		if err != nil {
-			c.lock.Unlock()
+			logger.Err(err)
 			return
 		}
-		c.lock.Unlock()
+
+		err = c.writeSafe(b)
+		// write closed, so we don't care window too much.
+		if err != nil {
+			return
+		}
+		logger.Debugf("%p(%d) send chunk size %d at %d.",
+			c.sess, c.streamid, size, n)
 
 		data = data[size:]
 		n += int(size)
@@ -199,61 +218,67 @@ func (c *Conn) OnRead(window uint32) {
 }
 
 func (c *Conn) MarkClose() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	c.wclosed = true
+	c.rclosed = true
 	// weakup writer
 	c.ch_win <- 0
 	// weakup reader
-	c.rclosed = true
 	if !c.rclosed {
 		c.buf <- nil
 	}
 }
 
 func (c *Conn) Close() (err error) {
-	c.lock.Lock()
+	c.wlock.Lock()
 	if c.wclosed {
-		c.lock.Unlock()
+		c.wlock.Unlock()
 		return
 	}
+	c.wclosed = true
+	c.wlock.Unlock()
 
-	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
-	f := NewFrameFin(c.streamid)
-	err = c.sess.WriteFrame(f)
+	c.ch_win <- 0
+	logger.Infof("connection %p:%d closing from local.", c.sess, c.streamid)
+
+	b, err := NewFrameFin(c.streamid)
 	if err != nil {
 		logger.Err(err)
-	}
-	c.wclosed = true
-	c.ch_win <- 0
-	c.lock.Unlock()
-
-	if c.rclosed && c.wclosed {
-		err = c.sess.RemovePorts(c.streamid)
+	} else {
+		err = c.sess.Write(b)
 		if err != nil {
 			logger.Err(err)
 		}
+	}
+
+	if c.rclosed {
+		c.closefunc.Do(func() {
+			err := c.sess.RemovePorts(c.streamid)
+			if err != nil {
+				logger.Err(err)
+			}
+		})
 	}
 	return
 }
 
 func (c *Conn) OnClose() (err error) {
-	c.lock.Lock()
 	if c.rclosed {
-		c.lock.Unlock()
 		return
 	}
-
-	logger.Infof("connection %p(%d) closed from remote.", c.sess, c.streamid)
 	c.rclosed = true
-	c.buf <- nil
-	c.lock.Unlock()
+	select {
+	case c.buf <- nil:
+	default:
+	}
+	logger.Infof("connection %p:%d closed from remote.", c.sess, c.streamid)
 
-	if c.rclosed && c.wclosed {
-		err = c.sess.RemovePorts(c.streamid)
-		if err != nil {
-			logger.Err(err)
-		}
+	if c.wclosed {
+		c.closefunc.Do(func() {
+			err := c.sess.RemovePorts(c.streamid)
+			if err != nil {
+				logger.Err(err)
+			}
+		})
 	}
 	return
 }

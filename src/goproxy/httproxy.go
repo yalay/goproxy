@@ -3,6 +3,7 @@ package main
 import (
 	"logging"
 	"net/http"
+	"runtime"
 	"strings"
 	"sutils"
 )
@@ -53,6 +54,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == "CONNECT" {
 		p.Connect(w, req)
+		return
+	}
+
+	if req.URL.Host == "" {
+		p.Handler(w, req)
 		return
 	}
 
@@ -107,5 +113,13 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	srcconn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
 	sutils.CopyLink(srcconn, dstconn)
+	return
+}
+
+func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
+	var buf [1000000]byte
+	n := runtime.Stack(buf[:], true)
+	w.WriteHeader(200)
+	w.Write(buf[:n])
 	return
 }

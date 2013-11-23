@@ -36,11 +36,9 @@ func CoreCopy(dst io.Writer, src io.Reader) (written int64, err error) {
 }
 
 func CopyLink(src, dst io.ReadWriteCloser) {
-	// defer src.Close()
 	defer dst.Close()
 	go func() {
 		defer src.Close()
-		// defer dst.Close()
 		CoreCopy(src, dst)
 	}()
 	CoreCopy(dst, src)

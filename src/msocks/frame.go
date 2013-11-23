@@ -54,7 +54,9 @@ func WriteString(w io.Writer, s string) (err error) {
 }
 
 type Frame interface {
+	GetStreamid() uint16
 	Unpack(r io.Reader) error
+	Debug()
 }
 
 func ReadFrame(r io.Reader) (f Frame, err error) {
@@ -98,6 +100,10 @@ type FrameBase struct {
 	Streamid uint16
 }
 
+func (f *FrameBase) GetStreamid() uint16 {
+	return f.Streamid
+}
+
 func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {
 	buf = bytes.NewBuffer(nil)
 	buf.Grow(int(5 + f.Length))
@@ -108,6 +114,11 @@ func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {
 func (f *FrameBase) Unpack(r io.Reader) (err error) {
 	err = binary.Read(r, binary.BigEndian, f)
 	return
+}
+
+func (f *FrameBase) Debug() {
+	logger.Debugf("get package: type(%d), stream(%d), len(%d).",
+		f.Type, f.Streamid, f.Length)
 }
 
 type FrameOK struct {
@@ -295,10 +306,6 @@ func NewFrameSyn(streamid uint16, address string) (b []byte, err error) {
 	return
 }
 
-func (f *FrameSyn) Packed() (buf *bytes.Buffer, err error) {
-	return
-}
-
 func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 	f.Address, err = ReadString(r)
 	if err != nil {
@@ -309,6 +316,11 @@ func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 		err = errors.New("frame sync length not match.")
 	}
 	return
+}
+
+func (f *FrameSyn) Debug() {
+	logger.Debugf("get package syn: stream(%d), len(%d), addr(%s).",
+		f.Streamid, f.Length, f.Address)
 }
 
 type FrameAck struct {
@@ -351,6 +363,11 @@ func (f *FrameAck) Unpack(r io.Reader) (err error) {
 	return
 }
 
+func (f *FrameAck) Debug() {
+	logger.Debugf("get package ack: stream(%d), len(%d), window(%d).",
+		f.Streamid, f.Length, f.Window)
+}
+
 type FrameFin struct {
 	FrameBase
 }
@@ -374,6 +391,10 @@ func (f *FrameFin) Unpack(r io.Reader) (err error) {
 		return errors.New("frame fin with length not 0.")
 	}
 	return
+}
+
+func (f *FrameFin) Debug() {
+	logger.Debugf("get package fin: stream(%d).", f.Streamid)
 }
 
 type FrameDns struct {
@@ -411,6 +432,11 @@ func (f *FrameDns) Unpack(r io.Reader) (err error) {
 		err = errors.New("frame dns length not match.")
 	}
 	return
+}
+
+func (f *FrameDns) Debug() {
+	logger.Debugf("get package dns: stream(%d), len(%d), host(%s).",
+		f.Streamid, f.Length, f.Hostname)
 }
 
 type FrameAddr struct {

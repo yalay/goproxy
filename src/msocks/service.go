@@ -69,17 +69,15 @@ func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err e
 	return
 }
 
-func (ms *MsocksService) on_conn(network, address string, streamid uint16) (c *Conn, err error) {
+func (ms *MsocksService) on_conn(network, address string, streamid uint16) (ch chan Frame, err error) {
 	conn, err := ms.dialer.Dial("tcp", address)
 	if err != nil {
 		return
 	}
 
-	c = NewConn(streamid, ms.sess)
-	go func() {
-		sutils.CopyLink(conn, c)
-	}()
-	return c, nil
+	c := NewConn(streamid, ms.sess)
+	go sutils.CopyLink(conn, c)
+	return c.ch_f, nil
 }
 
 func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {

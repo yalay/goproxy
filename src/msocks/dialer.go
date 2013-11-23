@@ -182,7 +182,7 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		logger.Err(err)
 		return
 	}
-	err = sess.Write(b)
+	_, err = sess.Write(b)
 	if err != nil {
 		logger.Err(err)
 		return
@@ -207,9 +207,9 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		case *FrameOK: // OK
 			logger.Info("connect ok.")
 			c := NewConn(streamid, sess)
-			sess.PutIntoId(streamid, c)
+			sess.PutIntoId(streamid, c.ch_f)
 			close(ch)
-			logger.Noticef("new conn: %p:%d => %s.",
+			logger.Noticef("new conn: %p(%d) => %s.",
 				sess, streamid, address)
 			return c, nil
 		}
@@ -240,7 +240,7 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		logger.Err(err)
 		return
 	}
-	err = sess.Write(b)
+	_, err = sess.Write(b)
 	if err != nil {
 		return
 	}

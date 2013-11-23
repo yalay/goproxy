@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,7 @@ func GetLevelByName(name string) (lv int, err error) {
 }
 
 type Logger interface {
+	Stack()
 	Alert(a ...interface{})
 	Alertf(format string, a ...interface{})
 	Crit(a ...interface{})
@@ -135,6 +137,10 @@ func (l *FileLogger) Output(lv int, s string) {
 	l.m.Lock()
 	defer l.m.Unlock()
 	l.out.Write([]byte(buf))
+}
+
+func (l *FileLogger) Stack() {
+	l.Output(LOG_DEBUG, string(debug.Stack()))
 }
 
 func (l *FileLogger) Alert(a ...interface{}) {
@@ -243,6 +249,10 @@ func (l *SysLogger) Output(lv int, s string) {
 	l.m.Lock()
 	defer l.m.Unlock()
 	l.out.Write([]byte(buf))
+}
+
+func Stack() {
+	Default.Output(LOG_DEBUG, string(debug.Stack()))
 }
 
 func Alert(a ...interface{}) {

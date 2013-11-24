@@ -20,18 +20,13 @@ type Conn struct {
 	SeqWriter
 }
 
-// use 1024 as default channel length, 1024 * 1024 = 1M
-// that is the buffer before read
-// and it's the maxmium length of write window.
-// default value of write window is 256K.
-// that will be sent in 0.1s, so maxmium speed will be 2.56M/s = 20Mbps.
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	c = &Conn{
 		streamid:  streamid,
 		sess:      sess,
-		ch_f:      make(chan Frame, 1024),
-		Window:    *NewWindow(256 * 1024),
-		Bytebuf:   *NewBytebuf(1024),
+		ch_f:      make(chan Frame, CHANLEN),
+		Window:    *NewWindow(WIN_SIZE),
+		Bytebuf:   *NewBytebuf(CHANLEN),
 		DelayDo:   *NewDelayDo(ACKDELAY, nil),
 		SeqWriter: *NewSeqWriter(sess),
 	}
@@ -60,8 +55,6 @@ func (c *Conn) RemovePort() {
 }
 
 func (c *Conn) Run() {
-	defer c.RemovePort()
-
 	var err error
 	for {
 		f := <-c.ch_f
@@ -120,7 +113,7 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 func (c *Conn) send_ack(n int) (err error) {
 	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
-	b := NewFrameAck(c.streamid, uint32(n))
+	b := NewFrameOneInt(MSG_ACK, c.streamid, uint32(n))
 
 	_, err = c.SeqWriter.Write(b)
 	if err != nil && err != io.EOF {
@@ -142,12 +135,12 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		// check for window
 		// if window <= 0, wait for window
 		size = c.Acquire(size)
+
 		b, err = NewFrameData(c.streamid, data[:size])
 		if err != nil {
 			logger.Err(err)
 			return
 		}
-
 		_, err = c.SeqWriter.Write(b)
 		// write closed, so we don't care window too much.
 		if err != nil {
@@ -175,7 +168,7 @@ func (c *Conn) Close() (err error) {
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
 
 	// send fin if not closed yet.
-	b := NewFrameFin(c.streamid)
+	b := NewFrameNoParam(MSG_FIN, c.streamid)
 	_, err = c.sess.Write(b)
 	if err != nil {
 		logger.Err(err)

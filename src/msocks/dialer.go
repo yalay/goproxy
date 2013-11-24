@@ -16,7 +16,7 @@ type Dialer struct {
 	serveraddr string
 	username   string
 	password   string
-	sesslock   sync.Mutex
+	lock       sync.Mutex
 	sess       []*Session
 }
 
@@ -77,8 +77,8 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 
 func (d *Dialer) createSession() (err error) {
 	var conn net.Conn
-	d.sesslock.Lock()
-	defer d.sesslock.Unlock()
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
 	if len(d.sess) > 0 {
 		return
@@ -109,6 +109,7 @@ func (d *Dialer) createSession() (err error) {
 		logger.Warning("session runtime quit, reboot from connect.")
 
 		// remove from sess
+		d.lock.Lock()
 		idx := -1
 		for i, o := range d.sess {
 			if o == sess {
@@ -118,10 +119,12 @@ func (d *Dialer) createSession() (err error) {
 		}
 		if idx == -1 {
 			logger.Err("sess %p not found.", sess)
+			d.lock.Unlock()
 			return
 		}
 		copy(d.sess[idx:len(d.sess)-1], d.sess[idx+1:])
 		d.sess = d.sess[:len(d.sess)-1]
+		d.lock.Unlock()
 
 		d.createSession()
 	}()
@@ -171,7 +174,7 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	b, err := NewFrameSyn(streamid, address)
+	b, err := NewFrameOneString(MSG_SYN, streamid, address)
 	if err != nil {
 		logger.Err(err)
 		return
@@ -221,7 +224,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	b, err := NewFrameDns(streamid, hostname)
+	b, err := NewFrameOneString(MSG_DNS, streamid, hostname)
 	if err != nil {
 		logger.Err(err)
 		return

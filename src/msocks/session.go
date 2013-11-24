@@ -12,11 +12,18 @@ import (
 
 const (
 	RETRY_TIMES    = 6
+	CHANLEN        = 1024
+	WIN_SIZE       = 256 * 1024
 	ACKDELAY       = 100 * time.Millisecond
 	IDLECLOSE      = 10 * time.Minute
 	DIAL_TIMEOUT   = 30 * time.Second
 	LOOKUP_TIMEOUT = 60 * time.Second
 )
+
+// use 1024 as default channel length, 1024 * 1024 = 1M
+// that is the buffer before read, and it's the maxmium length of write window.
+// default value of write window is 256K.
+// that will be sent in 0.1s, so maxmium speed will be 2.56M/s = 20Mbps.
 
 var logger logging.Logger
 
@@ -63,6 +70,28 @@ func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
+func (s *Session) Write(b []byte) (n int, err error) {
+	s.flock.Lock()
+	defer s.flock.Unlock()
+	n, err = s.conn.Write(b)
+	if err != nil {
+		return
+	}
+	if n != len(b) {
+		err = io.ErrShortWrite
+	}
+	return
+}
+
+func (s *Session) Close() (err error) {
+	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
+	defer s.conn.Close()
+	for _, v := range s.ports {
+		v <- nil
+	}
+	return
+}
+
 func (s *Session) PutIntoNextId(ch chan Frame) (id uint16, err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
@@ -99,19 +128,6 @@ func (s *Session) PutIntoId(id uint16, ch chan Frame) {
 	return
 }
 
-func (s *Session) Write(b []byte) (n int, err error) {
-	s.flock.Lock()
-	defer s.flock.Unlock()
-	n, err = s.conn.Write(b)
-	if err != nil {
-		return
-	}
-	if n != len(b) {
-		err = io.ErrShortWrite
-	}
-	return
-}
-
 func (s *Session) RemovePorts(streamid uint16) (err error) {
 	logger.Noticef("remove ports: %p(%d).", s, streamid)
 	s.plock.Lock()
@@ -134,21 +150,11 @@ func (s *Session) Number() (n int) {
 	return len(s.ports)
 }
 
-func (s *Session) Close() (err error) {
-	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
-	defer s.conn.Close()
-
-	for _, v := range s.ports {
-		v <- nil
-	}
-	return
-}
-
 func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.Streamid]
 	if ok {
 		logger.Err("frame sync stream id exist.")
-		b := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
+		b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_IDEXIST)
 		_, err := s.Write(b)
 		if err != nil {
 			return false
@@ -166,7 +172,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		if err != nil {
 			logger.Err(err)
 
-			b := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
+			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_CONNFAILED)
 			_, err = s.Write(b)
 			if err != nil {
 				logger.Err(err)
@@ -183,7 +189,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		// update it, don't need to lock
 		s.PutIntoId(ft.Streamid, ch)
 
-		b := NewFrameOK(ft.Streamid)
+		b := NewFrameNoParam(MSG_OK, ft.Streamid)
 		_, err = s.Write(b)
 		if err != nil {
 			logger.Err(err)
@@ -227,11 +233,11 @@ func (s *Session) sendFrameInChan(f Frame) bool {
 	if !ok {
 		logger.Errf("%p(%d) not exist.", s, streamid)
 		// send back stream not exist any more.
-		b := NewFrameFin(streamid)
-		_, err := s.Write(b)
-		if err != nil {
-			logger.Err(err)
-		}
+		// b := NewFrameNoParam(MSG_FIN, streamid)
+		// _, err := s.Write(b)
+		// if err != nil {
+		// 	logger.Err(err)
+		// }
 		return true
 	}
 	select {

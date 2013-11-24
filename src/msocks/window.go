@@ -13,7 +13,10 @@ func NewWindow(init uint32) (w *Window) {
 }
 
 func (w *Window) Close() (err error) {
-	w.ch_win <- 0
+	select {
+	case w.ch_win <- 0:
+	default:
+	}
 	return
 }
 

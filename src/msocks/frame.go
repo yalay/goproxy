@@ -13,15 +13,17 @@ import (
 // TODO: compressed session?
 
 const (
-	MSG_OK = iota
-	MSG_FAILED
-	MSG_AUTH
-	MSG_DATA
-	MSG_SYN
-	MSG_ACK
-	MSG_FIN
-	MSG_DNS
-	MSG_ADDR
+	MSG_OK     = 0x00
+	MSG_FAILED = 0x01
+	MSG_AUTH   = 0x02
+	MSG_DATA   = 0x03
+	MSG_SYN    = 0x04
+	MSG_ACK    = 0x05
+	MSG_FIN    = 0x06
+	MSG_RST    = 0x07
+	MSG_DNS    = 0x10
+	MSG_ADDR   = 0x11
+	MSG_PING   = 0x12
 )
 
 const (
@@ -85,10 +87,14 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FrameAck{FrameBase: *fb}
 	case MSG_FIN:
 		f = &FrameFin{FrameBase: *fb}
+	case MSG_RST:
+		f = &FrameRst{FrameBase: *fb}
 	case MSG_DNS:
 		f = &FrameDns{FrameBase: *fb}
 	case MSG_ADDR:
 		f = &FrameAddr{FrameBase: *fb}
+	case MSG_PING:
+		f = &FramePing{FrameBase: *fb}
 	}
 	err = f.Unpack(r)
 	return
@@ -125,9 +131,9 @@ type FrameOK struct {
 	FrameBase
 }
 
-func NewFrameOK(streamid uint16) (b []byte) {
+func NewFrameNoParam(ftype uint8, streamid uint16) (b []byte) {
 	f := &FrameBase{
-		Type:     MSG_OK,
+		Type:     ftype,
 		Streamid: streamid,
 		Length:   0,
 	}
@@ -147,14 +153,14 @@ type FrameFAILED struct {
 	Errno uint32
 }
 
-func NewFrameFAILED(streamid uint16, errno uint32) (b []byte) {
+func NewFrameOneInt(ftype uint8, streamid uint16, i uint32) (b []byte) {
 	f := &FrameBase{
-		Type:     MSG_FAILED,
+		Type:     ftype,
 		Streamid: streamid,
 		Length:   4,
 	}
 	buf := f.Packed()
-	binary.Write(buf, binary.BigEndian, errno)
+	binary.Write(buf, binary.BigEndian, i)
 	return buf.Bytes()
 }
 
@@ -265,15 +271,16 @@ type FrameSyn struct {
 	Address string
 }
 
-func NewFrameSyn(streamid uint16, address string) (b []byte, err error) {
+func NewFrameOneString(ftype uint8, streamid uint16, s string) (
+	b []byte, err error) {
 	f := &FrameBase{
-		Type:     MSG_SYN,
+		Type:     ftype,
 		Streamid: streamid,
-		Length:   uint16(len(address) + 2),
+		Length:   uint16(len(s) + 2),
 	}
 	buf := f.Packed()
 
-	err = WriteString(buf, address)
+	err = WriteString(buf, s)
 	if err != nil {
 		return
 	}
@@ -303,17 +310,6 @@ type FrameAck struct {
 	Window uint32
 }
 
-func NewFrameAck(streamid uint16, window uint32) (b []byte) {
-	f := &FrameBase{
-		Type:     MSG_ACK,
-		Streamid: streamid,
-		Length:   4,
-	}
-	buf := f.Packed()
-	binary.Write(buf, binary.BigEndian, window)
-	return buf.Bytes()
-}
-
 func (f *FrameAck) Unpack(r io.Reader) (err error) {
 	err = binary.Read(r, binary.BigEndian, &f.Window)
 	if err != nil {
@@ -336,16 +332,6 @@ type FrameFin struct {
 	FrameBase
 }
 
-func NewFrameFin(streamid uint16) (b []byte) {
-	f := &FrameBase{
-		Type:     MSG_FIN,
-		Streamid: streamid,
-		Length:   0,
-	}
-	buf := f.Packed()
-	return buf.Bytes()
-}
-
 func (f *FrameFin) Unpack(r io.Reader) (err error) {
 	if f.FrameBase.Length != 0 {
 		return errors.New("frame fin with length not 0.")
@@ -353,29 +339,20 @@ func (f *FrameFin) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameFin) Debug() {
-	logger.Debugf("get package fin: stream(%d).", f.Streamid)
+type FrameRst struct {
+	FrameBase
+}
+
+func (f *FrameRst) Unpack(r io.Reader) (err error) {
+	if f.FrameBase.Length != 0 {
+		return errors.New("frame rst with length not 0.")
+	}
+	return
 }
 
 type FrameDns struct {
 	FrameBase
 	Hostname string
-}
-
-func NewFrameDns(streamid uint16, hostname string) (b []byte, err error) {
-	f := &FrameBase{
-		Type:     MSG_DNS,
-		Streamid: streamid,
-		Length:   uint16(len(hostname) + 2),
-	}
-	buf := f.Packed()
-
-	err = WriteString(buf, hostname)
-	if err != nil {
-		return
-	}
-
-	return buf.Bytes(), nil
 }
 
 func (f *FrameDns) Unpack(r io.Reader) (err error) {
@@ -447,6 +424,17 @@ func (f *FrameAddr) Unpack(r io.Reader) (err error) {
 
 	if f.FrameBase.Length != size {
 		return errors.New("frame addr length not match.")
+	}
+	return
+}
+
+type FramePing struct {
+	FrameBase
+}
+
+func (f *FramePing) Unpack(r io.Reader) (err error) {
+	if f.FrameBase.Length != 0 {
+		return errors.New("frame ping with length not 0.")
 	}
 	return
 }

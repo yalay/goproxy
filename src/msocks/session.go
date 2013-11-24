@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	RETRY_TIMES    = 6
 	ACKDELAY       = 100 * time.Millisecond
 	IDLECLOSE      = 10 * time.Minute
 	DIAL_TIMEOUT   = 30 * time.Second
@@ -135,8 +136,6 @@ func (s *Session) Number() (n int) {
 
 func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
-	s.plock.Lock()
-	defer s.plock.Unlock()
 	defer s.conn.Close()
 
 	for _, v := range s.ports {
@@ -149,11 +148,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.Streamid]
 	if ok {
 		logger.Err("frame sync stream id exist.")
-		b, err := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
-		if err != nil {
-			return false
-		}
-		_, err = s.Write(b)
+		b := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
+		_, err := s.Write(b)
 		if err != nil {
 			return false
 		}
@@ -170,11 +166,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		if err != nil {
 			logger.Err(err)
 
-			b, err := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
-			if err != nil {
-				logger.Err(err)
-				return
-			}
+			b := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
 			_, err = s.Write(b)
 			if err != nil {
 				logger.Err(err)
@@ -191,11 +183,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		// update it, don't need to lock
 		s.PutIntoId(ft.Streamid, ch)
 
-		b, err := NewFrameOK(ft.Streamid)
-		if err != nil {
-			logger.Err(err)
-			return
-		}
+		b := NewFrameOK(ft.Streamid)
 		_, err = s.Write(b)
 		if err != nil {
 			logger.Err(err)
@@ -238,6 +226,12 @@ func (s *Session) sendFrameInChan(f Frame) bool {
 	ch, ok := s.ports[streamid]
 	if !ok {
 		logger.Errf("%p(%d) not exist.", s, streamid)
+		// send back stream not exist any more.
+		b := NewFrameFin(streamid)
+		_, err := s.Write(b)
+		if err != nil {
+			logger.Err(err)
+		}
 		return true
 	}
 	select {

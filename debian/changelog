@@ -1,3 +1,9 @@
+goproxy (2.0.3) unstable; urgency=low
+
+  * change close mode back.
+
+ -- Shell Xu <shell909090@gmail.com>  Sun, 24 Nov 2013 10:51:32 +0800
+
 goproxy (2.0.2) unstable; urgency=low
 
   * change loop mode.

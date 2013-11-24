@@ -71,3 +71,7 @@ func (b *Bytebuf) Close() (err error) {
 	b.buf <- nil
 	return
 }
+
+func (b *Bytebuf) Closed() bool {
+	return b.closed
+}

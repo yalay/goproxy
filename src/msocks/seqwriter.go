@@ -13,10 +13,7 @@ type SeqWriter struct {
 }
 
 func NewSeqWriter(w io.Writer) (sw *SeqWriter) {
-	sw = &SeqWriter{
-		w: w,
-	}
-	return
+	return &SeqWriter{w: w}
 }
 
 func (sw *SeqWriter) Write(b []byte) (n int, err error) {
@@ -40,4 +37,8 @@ func (sw *SeqWriter) Close() (err error) {
 	}
 	sw.closed = true
 	return
+}
+
+func (sw *SeqWriter) Closed() bool {
+	return sw.closed
 }

@@ -17,7 +17,7 @@ func (w *Window) Close() (err error) {
 	return
 }
 
-func (w *Window) acquire(num uint32) (n uint32) {
+func (w *Window) Acquire(num uint32) (n uint32) {
 	n = <-w.ch_win
 	switch {
 	case n == 0: // weak up next
@@ -29,7 +29,7 @@ func (w *Window) acquire(num uint32) (n uint32) {
 	return
 }
 
-func (w *Window) release(num uint32) (n uint32) {
+func (w *Window) Release(num uint32) (n uint32) {
 	n = num
 	for {
 		select {

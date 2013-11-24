@@ -104,10 +104,10 @@ func (f *FrameBase) GetStreamid() uint16 {
 	return f.Streamid
 }
 
-func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {
+func (f *FrameBase) Packed() (buf *bytes.Buffer) {
 	buf = bytes.NewBuffer(nil)
 	buf.Grow(int(5 + f.Length))
-	err = binary.Write(buf, binary.BigEndian, f)
+	binary.Write(buf, binary.BigEndian, f)
 	return
 }
 
@@ -125,24 +125,19 @@ type FrameOK struct {
 	FrameBase
 }
 
-func NewFrameOK(streamid uint16) (b []byte, err error) {
+func NewFrameOK(streamid uint16) (b []byte) {
 	f := &FrameBase{
 		Type:     MSG_OK,
 		Streamid: streamid,
 		Length:   0,
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
-	b = buf.Bytes()
-	return
+	buf := f.Packed()
+	return buf.Bytes()
 }
 
 func (f *FrameOK) Unpack(r io.Reader) (err error) {
 	if f.FrameBase.Length != 0 {
 		err = errors.New("frame ok with length not 0.")
-		return
 	}
 	return
 }
@@ -152,23 +147,15 @@ type FrameFAILED struct {
 	Errno uint32
 }
 
-func NewFrameFAILED(streamid uint16, errno uint32) (b []byte, err error) {
-	f := &FrameFAILED{
-		FrameBase: FrameBase{
-			Type:     MSG_FAILED,
-			Streamid: streamid,
-			Length:   4,
-		},
-		Errno: errno,
+func NewFrameFAILED(streamid uint16, errno uint32) (b []byte) {
+	f := &FrameBase{
+		Type:     MSG_FAILED,
+		Streamid: streamid,
+		Length:   4,
 	}
-	buf := bytes.NewBuffer(nil)
-	buf.Grow(9)
-	err = binary.Write(buf, binary.BigEndian, f)
-	if err != nil {
-		return
-	}
-	b = buf.Bytes()
-	return
+	buf := f.Packed()
+	binary.Write(buf, binary.BigEndian, errno)
+	return buf.Bytes()
 }
 
 func (f *FrameFAILED) Unpack(r io.Reader) (err error) {
@@ -197,10 +184,7 @@ func NewFrameAuth(streamid uint16, username, password string) (b []byte, err err
 		Length:   uint16(len(username) + len(password) + 4),
 	}
 
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
+	buf := f.Packed()
 
 	err = WriteString(buf, username)
 	if err != nil {
@@ -212,8 +196,7 @@ func NewFrameAuth(streamid uint16, username, password string) (b []byte, err err
 		return
 	}
 
-	b = buf.Bytes()
-	return
+	return buf.Bytes(), nil
 }
 
 func (f *FrameAuth) Unpack(r io.Reader) (err error) {
@@ -245,10 +228,7 @@ func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
 		Streamid: streamid,
 		Length:   uint16(len(data)),
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
+	buf := f.Packed()
 
 	n, err := buf.Write(data)
 	if err != nil {
@@ -259,8 +239,7 @@ func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
 		return
 	}
 
-	b = buf.Bytes()
-	return
+	return buf.Bytes(), nil
 }
 
 func (f *FrameData) Unpack(r io.Reader) (err error) {
@@ -292,18 +271,14 @@ func NewFrameSyn(streamid uint16, address string) (b []byte, err error) {
 		Streamid: streamid,
 		Length:   uint16(len(address) + 2),
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
+	buf := f.Packed()
 
 	err = WriteString(buf, address)
 	if err != nil {
 		return
 	}
 
-	b = buf.Bytes()
-	return
+	return buf.Bytes(), nil
 }
 
 func (f *FrameSyn) Unpack(r io.Reader) (err error) {
@@ -328,26 +303,15 @@ type FrameAck struct {
 	Window uint32
 }
 
-func NewFrameAck(streamid uint16, window uint32) (b []byte, err error) {
+func NewFrameAck(streamid uint16, window uint32) (b []byte) {
 	f := &FrameBase{
 		Type:     MSG_ACK,
 		Streamid: streamid,
 		Length:   4,
 	}
-	buf := bytes.NewBuffer(nil)
-	buf.Grow(9)
-	err = binary.Write(buf, binary.BigEndian, f)
-	if err != nil {
-		return
-	}
-
-	err = binary.Write(buf, binary.BigEndian, window)
-	if err != nil {
-		return
-	}
-
-	b = buf.Bytes()
-	return
+	buf := f.Packed()
+	binary.Write(buf, binary.BigEndian, window)
+	return buf.Bytes()
 }
 
 func (f *FrameAck) Unpack(r io.Reader) (err error) {
@@ -372,18 +336,14 @@ type FrameFin struct {
 	FrameBase
 }
 
-func NewFrameFin(streamid uint16) (b []byte, err error) {
+func NewFrameFin(streamid uint16) (b []byte) {
 	f := &FrameBase{
 		Type:     MSG_FIN,
 		Streamid: streamid,
 		Length:   0,
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
-	b = buf.Bytes()
-	return
+	buf := f.Packed()
+	return buf.Bytes()
 }
 
 func (f *FrameFin) Unpack(r io.Reader) (err error) {
@@ -408,18 +368,14 @@ func NewFrameDns(streamid uint16, hostname string) (b []byte, err error) {
 		Streamid: streamid,
 		Length:   uint16(len(hostname) + 2),
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
+	buf := f.Packed()
 
 	err = WriteString(buf, hostname)
 	if err != nil {
 		return
 	}
 
-	b = buf.Bytes()
-	return
+	return buf.Bytes(), nil
 }
 
 func (f *FrameDns) Unpack(r io.Reader) (err error) {
@@ -454,17 +410,11 @@ func NewFrameAddr(streamid uint16, ipaddr []net.IP) (b []byte, err error) {
 		Streamid: streamid,
 		Length:   size,
 	}
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
+	buf := f.Packed()
 
 	for _, o := range ipaddr {
 		n := uint8(len(o))
-		err = binary.Write(buf, binary.BigEndian, n)
-		if err != nil {
-			return
-		}
+		binary.Write(buf, binary.BigEndian, n)
 
 		_, err = buf.Write(o)
 		if err != nil {
@@ -472,8 +422,7 @@ func NewFrameAddr(streamid uint16, ipaddr []net.IP) (b []byte, err error) {
 		}
 	}
 
-	b = buf.Bytes()
-	return
+	return buf.Bytes(), nil
 }
 
 func (f *FrameAddr) Unpack(r io.Reader) (err error) {

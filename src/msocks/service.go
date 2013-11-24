@@ -99,11 +99,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
 			logger.Err("auth failed.")
-			b, err := NewFrameFAILED(ft.Streamid, ERR_AUTH)
-			if err != nil {
-				logger.Err(err)
-				return false
-			}
+			b := NewFrameFAILED(ft.Streamid, ERR_AUTH)
 			_, err = stream.Write(b)
 			if err != nil {
 				logger.Err(err)
@@ -112,11 +108,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 			return false
 		}
 	}
-	b, err := NewFrameOK(ft.Streamid)
-	if err != nil {
-		logger.Err(err)
-		return false
-	}
+	b := NewFrameOK(ft.Streamid)
 	_, err = stream.Write(b)
 	if err != nil {
 		logger.Err(err)

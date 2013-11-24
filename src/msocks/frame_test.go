@@ -26,10 +26,7 @@ func TestFrameOKRead(t *testing.T) {
 }
 
 func TestFrameOKWrite(t *testing.T) {
-	b, err := NewFrameOK(10)
-	if err != nil {
-		t.Error(err)
-	}
+	b := NewFrameOK(10)
 
 	if bytes.Compare(b, []byte{0x00, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameOK write wrong")
@@ -56,10 +53,7 @@ func TestFrameFailedRead(t *testing.T) {
 }
 
 func TestFrameFailedWrite(t *testing.T) {
-	b, err := NewFrameFAILED(10, 32)
-	if err != nil {
-		t.Error(err)
-	}
+	b := NewFrameFAILED(10, 32)
 
 	if bytes.Compare(b, []byte{0x01, 0x00, 0x04, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x20}) != 0 {
 		t.Fatalf("FrameFailed write wrong")
@@ -180,10 +174,7 @@ func TestFrameAckRead(t *testing.T) {
 }
 
 func TestFrameAckWrite(t *testing.T) {
-	b, err := NewFrameAck(10, 0x04050607)
-	if err != nil {
-		t.Error(err)
-	}
+	b := NewFrameAck(10, 0x04050607)
 
 	if bytes.Compare(b, []byte{0x05, 0x00, 0x04, 0x00, 0x0A,
 		0x04, 0x05, 0x06, 0x07}) != 0 {
@@ -206,10 +197,7 @@ func TestFrameFinRead(t *testing.T) {
 }
 
 func TestFrameFinWrite(t *testing.T) {
-	b, err := NewFrameFin(10)
-	if err != nil {
-		t.Error(err)
-	}
+	b := NewFrameFin(10)
 
 	if bytes.Compare(b, []byte{0x06, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameFin write wrong")

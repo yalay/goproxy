@@ -11,60 +11,38 @@ import (
 	"time"
 )
 
-type DialerSetting struct {
+type Dialer struct {
+	sutils.Dialer
 	serveraddr string
 	username   string
 	password   string
-}
-
-type Dialer struct {
-	sutils.Dialer
-	dss      []*DialerSetting
-	sesslock sync.Mutex
-	sess     []*Session
+	sesslock   sync.Mutex
+	sess       []*Session
 }
 
 func NewDialer(dialer sutils.Dialer, serveraddr string,
-	username, password string) (md *Dialer, err error) {
-	ds := &DialerSetting{
+	username, password string) (d *Dialer, err error) {
+	d = &Dialer{
+		Dialer:     dialer,
 		serveraddr: serveraddr,
 		username:   username,
 		password:   password,
 	}
-	md = &Dialer{
-		Dialer: dialer,
-	}
-	md.dss = append(md.dss, ds)
-
 	return
 }
 
-func (md *Dialer) NewDialerSetting(serveraddr string,
-	username, password string) (err error) {
-	ds := &DialerSetting{
-		serveraddr: serveraddr,
-		username:   username,
-		password:   password,
-	}
-	md.dss = append(md.dss, ds)
-	return
-}
-
-func (md *Dialer) createConn() (conn net.Conn, err error) {
-	n := rand.Intn(len(md.dss))
-	ds := md.dss[n]
-
+func (d *Dialer) createConn() (conn net.Conn, err error) {
 	logger.Noticef("create connect, serveraddr: %s.",
-		ds.serveraddr)
-	conn, err = md.Dialer.Dial("tcp", ds.serveraddr)
+		d.serveraddr)
+	conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 	if err != nil {
 		logger.Err(err)
 		return
 	}
 
 	logger.Noticef("auth with username: %s, password: %s.",
-		ds.username, ds.password)
-	b, err := NewFrameAuth(0, ds.username, ds.password)
+		d.username, d.password)
+	b, err := NewFrameAuth(0, d.username, d.password)
 	if err != nil {
 		logger.Err(err)
 		return
@@ -97,24 +75,24 @@ func (md *Dialer) createConn() (conn net.Conn, err error) {
 	return
 }
 
-func (md *Dialer) createSession() (err error) {
+func (d *Dialer) createSession() (err error) {
 	var conn net.Conn
-	md.sesslock.Lock()
-	defer md.sesslock.Unlock()
+	d.sesslock.Lock()
+	defer d.sesslock.Unlock()
 
-	if len(md.sess) > 0 {
+	if len(d.sess) > 0 {
 		return
 	}
 
 	// retry
-	for i := 0; i < 3; i++ {
-		conn, err = md.createConn()
+	for i := uint(0); i < RETRY_TIMES; i++ {
+		conn, err = d.createConn()
 		if err != nil {
 			logger.Err(err)
+			time.Sleep((1 << i) * time.Second)
 		} else {
 			break
 		}
-
 	}
 	if err != nil {
 		logger.Crit("can't connect to host, quit.")
@@ -123,7 +101,7 @@ func (md *Dialer) createSession() (err error) {
 
 	logger.Noticef("create session.")
 	sess := NewSession(conn)
-	md.sess = append(md.sess, sess)
+	d.sess = append(d.sess, sess)
 
 	go func() {
 		sess.Run()
@@ -132,7 +110,7 @@ func (md *Dialer) createSession() (err error) {
 
 		// remove from sess
 		idx := -1
-		for i, o := range md.sess {
+		for i, o := range d.sess {
 			if o == sess {
 				idx = i
 				break
@@ -142,31 +120,47 @@ func (md *Dialer) createSession() (err error) {
 			logger.Err("sess %p not found.", sess)
 			return
 		}
-		copy(md.sess[idx:len(md.sess)-1], md.sess[idx+1:])
-		md.sess = md.sess[:len(md.sess)-1]
+		copy(d.sess[idx:len(d.sess)-1], d.sess[idx+1:])
+		d.sess = d.sess[:len(d.sess)-1]
 
-		md.createSession()
+		d.createSession()
 	}()
 	return
 }
 
-func (md *Dialer) GetSess() (sess *Session) {
+func (d *Dialer) GetSess() (sess *Session) {
 	// TODO: new session when too many connections.
-	if len(md.sess) == 0 {
-		err := md.createSession()
+	switch len(d.sess) {
+	case 0:
+		err := d.createSession()
 		if err != nil {
 			logger.Err(err)
 			// more civilized
 			os.Exit(-1)
 		}
+		return d.sess[0]
+	case 1:
+		return d.sess[0]
+	default:
+		n := rand.Intn(len(d.sess))
+		sess = d.sess[n]
+		return
 	}
-	n := rand.Intn(len(md.sess))
-	sess = md.sess[n]
 	return
 }
 
-func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
-	sess := md.GetSess()
+func FrameOrTimeout(ch chan Frame, t time.Duration) (f Frame) {
+	ch_timeout := time.After(t)
+	select {
+	case f := <-ch:
+		return f
+	case <-ch_timeout: // timeout
+		return nil
+	}
+}
+
+func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
+	sess := d.GetSess()
 	logger.Infof("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
@@ -188,45 +182,37 @@ func (md *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	ch_timeout := time.After(DIAL_TIMEOUT)
+	fr := FrameOrTimeout(ch, DIAL_TIMEOUT)
+	close(ch)
 
-	select {
-	case fr := <-ch:
-		switch frt := fr.(type) {
-		default:
-			err = errors.New("unknown status")
-			logger.Err(err)
-			return
-		case nil: // close all
-			err = fmt.Errorf("connection failed for all closed(%p).", sess)
-			break
-		case *FrameFAILED: // FAILED
-			err = fmt.Errorf("connection failed for remote failed(%d): %d.",
-				streamid, frt.Errno)
-			break
-		case *FrameOK: // OK
-			logger.Info("connect ok.")
-			c := NewConn(streamid, sess)
-			sess.PutIntoId(streamid, c.ch_f)
-			close(ch)
-			logger.Noticef("new conn: %p(%d) => %s.",
-				sess, streamid, address)
-			return c, nil
-		}
-	case <-ch_timeout: // timeout
-		err = fmt.Errorf("connection failed for timeout(%d).", streamid)
-		break
+	switch frt := fr.(type) {
+	default:
+		err = errors.New("unknown status")
+	case nil: // close all or timeout
+		err = fmt.Errorf("connection failed for timeout(%d) or all closed(%p).", streamid, sess)
+	case *FrameFAILED: // FAILED
+		err = fmt.Errorf("connection failed for remote failed(%d): %d.",
+			streamid, frt.Errno)
+	case *FrameOK: // OK
+		logger.Info("connect ok.")
 	}
 
-	logger.Err(err)
-	sess.RemovePorts(streamid)
-	close(ch)
-	return
+	if err != nil {
+		logger.Err(err)
+		sess.RemovePorts(streamid)
+		return
+	}
+
+	c := NewConn(streamid, sess)
+	sess.PutIntoId(streamid, c.ch_f)
+	logger.Noticef("new conn: %p(%d) => %s.",
+		sess, streamid, address)
+	return c, nil
 }
 
-func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
+func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	logger.Noticef("lookup ip: %s", hostname)
-	sess := md.GetSess()
+	sess := d.GetSess()
 
 	// lock streamid and put chan for it
 	ch := make(chan Frame, 1)
@@ -245,35 +231,24 @@ func (md *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	ch_timeout := time.After(LOOKUP_TIMEOUT)
+	fr := FrameOrTimeout(ch, LOOKUP_TIMEOUT)
+	close(ch)
 
-	select {
-	case fr := <-ch:
-		switch frt := fr.(type) {
-		default:
-			err = errors.New("unknown status")
-			logger.Err(err)
-			return
-		case nil: // close all
-			err = fmt.Errorf("lookup ip failed for all closed(%p).", sess)
-			break
-		case *FrameFAILED: // FAILED
-			err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
-				streamid, frt.Errno)
-			break
-		case *FrameAddr: // OK
-			logger.Infof("lookup ip ok.")
-			ipaddr = frt.Ipaddr
-			close(ch)
-			return
-		}
-	case <-ch_timeout: // timeout
-		err = fmt.Errorf("lookup ip failed for timeout(%d).", streamid)
-		break
+	switch frt := fr.(type) {
+	default:
+		err = errors.New("unknown status")
+	case nil: // close all or timeout
+		err = fmt.Errorf("lookup ip failed for timeout(%d) or all closed(%p).", streamid, sess)
+	case *FrameFAILED: // FAILED
+		err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
+			streamid, frt.Errno)
+	case *FrameAddr: // OK
+		logger.Infof("lookup ip ok.")
+		ipaddr = frt.Ipaddr
+		return
 	}
 
 	logger.Err(err)
 	sess.RemovePorts(streamid)
-	close(ch)
 	return
 }

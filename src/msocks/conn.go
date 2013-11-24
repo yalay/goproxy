@@ -29,7 +29,7 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	c = &Conn{
 		streamid:  streamid,
 		sess:      sess,
-		ch_f:      make(chan Frame, 10),
+		ch_f:      make(chan Frame, 1024),
 		Window:    *NewWindow(256 * 1024),
 		Bytebuf:   *NewBytebuf(1024),
 		DelayDo:   *NewDelayDo(ACKDELAY, nil),
@@ -40,14 +40,16 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	return
 }
 
+// close all, weakup writer, reader, quit loop.
 func (c *Conn) Final() {
 	c.Bytebuf.Close()
 	c.SeqWriter.Close()
-	// weakup writer, reader, quit loop
 	c.Window.Close()
 	c.ch_f <- nil
+	c.RemovePort()
 }
 
+// disconnected from session.
 func (c *Conn) RemovePort() {
 	c.removefunc.Do(func() {
 		err := c.sess.RemovePorts(c.streamid)
@@ -88,16 +90,19 @@ func (c *Conn) Run() {
 			}
 		case *FrameAck:
 			f.Debug()
-			n := c.release(ft.Window)
+			n := c.Release(ft.Window)
 			logger.Debugf("remote readed %d bytes, window size maybe: %d.",
 				ft.Window, n)
 		case *FrameFin:
 			f.Debug()
 			c.Bytebuf.Close()
+			c.Window.Close()
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
-			c.RemovePort()
-			c.ch_f <- nil
+			if c.SeqWriter.Closed() {
+				c.RemovePort()
+			}
+			return
 		}
 	}
 }
@@ -115,25 +120,12 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 func (c *Conn) send_ack(n int) (err error) {
 	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
-	b, err := NewFrameAck(c.streamid, uint32(n))
-	if err != nil {
-		logger.Err(err)
-		return
-	}
+	b := NewFrameAck(c.streamid, uint32(n))
 
-	// rclose will got wrong
-	// When we close first, remote sent fin in air.
-	// At this moment, closed setted and rclosed not set.
-	// Check rclosed will send a ack, which remote already removed port.
 	_, err = c.SeqWriter.Write(b)
-	switch err {
-	case nil:
-	case io.EOF:
-		return
-	default:
+	if err != nil && err != io.EOF {
 		logger.Err(err)
 		c.Final()
-		return
 	}
 	return
 }
@@ -149,7 +141,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		}
 		// check for window
 		// if window <= 0, wait for window
-		size = c.acquire(size)
+		size = c.Acquire(size)
 		b, err = NewFrameData(c.streamid, data[:size])
 		if err != nil {
 			logger.Err(err)
@@ -183,14 +175,14 @@ func (c *Conn) Close() (err error) {
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
 
 	// send fin if not closed yet.
-	b, err := NewFrameFin(c.streamid)
+	b := NewFrameFin(c.streamid)
+	_, err = c.sess.Write(b)
 	if err != nil {
 		logger.Err(err)
-	} else {
-		_, err = c.sess.Write(b)
-		if err != nil {
-			logger.Err(err)
-		}
+	}
+
+	if c.Bytebuf.Closed() {
+		c.RemovePort()
 	}
 	return
 }

@@ -23,7 +23,11 @@ func (sw *SeqWriter) Write(b []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 	n, err = sw.w.Write(b)
-	if err != nil {
+	switch err {
+	case nil:
+	case io.EOF:
+		sw.closed = true
+	default:
 		logger.Err(err)
 	}
 	return

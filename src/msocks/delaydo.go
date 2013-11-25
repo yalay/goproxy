@@ -29,7 +29,6 @@ func (d *DelayDo) Add(n int) {
 		d.timer = time.AfterFunc(d.delay, func() {
 			d.lock.Lock()
 			defer d.lock.Unlock()
-			// FIXME: error
 			d.do(d.cnt)
 			d.timer = nil
 			d.cnt = 0

@@ -5,26 +5,28 @@ import (
 	"fmt"
 	"io"
 	"logging"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
-)
-
-const (
-	RETRY_TIMES    = 6
-	CHANLEN        = 1024
-	WIN_SIZE       = 256 * 1024
-	ACKDELAY       = 100 * time.Millisecond
-	IDLECLOSE      = 10 * time.Minute
-	PINGTIME       = 30 * time.Second
-	DIAL_TIMEOUT   = 30 * time.Second
-	LOOKUP_TIMEOUT = 60 * time.Second
 )
 
 // use 1024 as default channel length, 1024 * 1024 = 1M
 // that is the buffer before read, and it's the maxmium length of write window.
 // default value of write window is 256K.
 // that will be sent in 0.1s, so maxmium speed will be 2.56M/s = 20Mbps.
+
+const (
+	RETRY_TIMES    = 6
+	CHANLEN        = 1024
+	WIN_SIZE       = 256 * 1024
+	ACKDELAY       = 100 * time.Millisecond
+	PINGTIME       = 15 * time.Second
+	DIAL_TIMEOUT   = 30 * time.Second
+	LOOKUP_TIMEOUT = 60 * time.Second
+)
+
+var errClosing = "use of closed network connection"
 
 var logger logging.Logger
 
@@ -34,9 +36,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	rand.Seed(time.Now().UnixNano())
 }
 
-// TODO: ping/echo
 type Session struct {
 	flock sync.Mutex
 	conn  net.Conn
@@ -48,46 +51,17 @@ type Session struct {
 
 	on_conn func(string, string, uint16) (chan Frame, error)
 
-	ch_ping chan int
+	PingPong
 }
 
 func NewSession(conn net.Conn) (s *Session) {
 	s = &Session{
-		conn:    conn,
-		ports:   make(map[uint16]chan Frame, 0),
-		idle:    time.NewTicker(PINGTIME),
-		ch_ping: make(chan int, 3),
+		conn:  conn,
+		ports: make(map[uint16]chan Frame, 0),
 	}
+	s.PingPong = *NewPingPong(PINGTIME, s)
 	logger.Noticef("session %p created.", s)
-	go s.keep_eye_open()
-	s.ch_ping <- 1
 	return
-}
-
-func (s *Session) keep_eye_open() {
-	for {
-		timeout := time.After(6 * PINGTIME)
-		select {
-		case <-timeout:
-			s.Close()
-			return
-		case <-s.ch_ping:
-		PING:
-			for {
-				select {
-				case <-s.ch_ping:
-				default:
-					break PING
-				}
-			}
-			time.Sleep(PINGTIME)
-			b := NewFrameNoParam(MSG_PING, 0)
-			_, err = s.Write(b)
-			if err != nil {
-				logger.Err(err)
-			}
-		}
-	}
 }
 
 func (s *Session) LocalAddr() net.Addr {
@@ -98,7 +72,14 @@ func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-var errClosing = "use of closed network connection"
+func (s *Session) WriteStream(streamid uint16, b []byte) (err error) {
+	s.PingPong.Reset()
+	if _, ok := s.ports[streamid]; !ok {
+		return io.EOF
+	}
+	_, err = s.Write(b)
+	return
+}
 
 func (s *Session) Write(b []byte) (n int, err error) {
 	s.flock.Lock()
@@ -146,10 +127,6 @@ func (s *Session) PutIntoNextId(ch chan Frame) (id uint16, err error) {
 	logger.Debugf("put into next id(%d): %p.", id, ch)
 
 	s.ports[id] = ch
-	if s.idleclose != nil {
-		s.idleclose.Stop()
-		s.idleclose = nil
-	}
 	return
 }
 
@@ -172,11 +149,6 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 	} else {
 		err = fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
-	if len(s.ports) == 0 {
-		s.idleclose = time.AfterFunc(IDLECLOSE, func() {
-			s.conn.Close()
-		})
-	}
 	return
 }
 
@@ -189,7 +161,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	if ok {
 		logger.Err("frame sync stream id exist.")
 		b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_IDEXIST)
-		_, err := s.Write(b)
+		err := s.WriteStream(ft.Streamid, b)
 		if err != nil {
 			return false
 		}
@@ -207,7 +179,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 			logger.Err(err)
 
 			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_CONNFAILED)
-			_, err = s.Write(b)
+			err = s.WriteStream(ft.Streamid, b)
 			if err != nil {
 				logger.Err(err)
 				return
@@ -224,7 +196,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		s.PutIntoId(ft.Streamid, ch)
 
 		b := NewFrameNoParam(MSG_OK, ft.Streamid)
-		_, err = s.Write(b)
+		err = s.WriteStream(ft.Streamid, b)
 		if err != nil {
 			logger.Err(err)
 			return
@@ -250,7 +222,7 @@ func (s *Session) on_dns(ft *FrameDns) {
 			logger.Err(err)
 			return
 		}
-		_, err = s.Write(b)
+		err = s.WriteStream(ft.Streamid, b)
 		if err != nil {
 			logger.Err(err)
 		}
@@ -306,10 +278,7 @@ func (s *Session) Run() {
 			go s.on_dns(ft)
 		case *FramePing:
 			f.Debug()
-			select {
-			case s.ch_ping <- 1:
-			default:
-			}
+			s.PingPong.Ping()
 		}
 	}
 }

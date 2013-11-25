@@ -101,6 +101,7 @@ func (d *Dialer) createSession() (err error) {
 
 	logger.Noticef("create session.")
 	sess := NewSession(conn)
+	sess.Ping()
 	d.sess = append(d.sess, sess)
 
 	go func() {

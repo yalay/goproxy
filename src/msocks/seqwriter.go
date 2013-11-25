@@ -1,45 +1,75 @@
 package msocks
 
 import (
-	"errors"
 	"io"
 	"sync"
 )
 
+// write in seq,
 type SeqWriter struct {
 	closed bool
 	lock   sync.Mutex
-	w      io.Writer
+	sess   *Session
 }
 
-func NewSeqWriter(w io.Writer) (sw *SeqWriter) {
-	return &SeqWriter{w: w}
+func NewSeqWriter(sess *Session) (sw *SeqWriter) {
+	return &SeqWriter{sess: sess}
 }
 
-func (sw *SeqWriter) Write(b []byte) (n int, err error) {
+func (sw *SeqWriter) Ack(streamid uint16, n int) (err error) {
+	b := NewFrameOneInt(MSG_ACK, streamid, uint32(n))
+	err = sw.WriteStream(streamid, b)
+	if err == io.EOF {
+		err = nil
+	}
+	return
+}
+
+func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
+	b, err := NewFrameData(streamid, data)
+	if err == io.EOF {
+		err = nil
+	}
+	if err != nil {
+		logger.Err(err)
+		return
+	}
+	return sw.WriteStream(streamid, b)
+}
+
+func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {
 	sw.lock.Lock()
 	defer sw.lock.Unlock()
 	if sw.closed {
-		return 0, io.EOF
+		return io.EOF
 	}
-	n, err = sw.w.Write(b)
-	switch err {
-	case nil:
-	case io.EOF:
+	err = sw.sess.WriteStream(streamid, b)
+	if err == io.EOF {
 		sw.closed = true
-	default:
+	}
+	if err != nil {
 		logger.Err(err)
 	}
 	return
 }
 
-func (sw *SeqWriter) Close() (err error) {
+func (sw *SeqWriter) Close(streamid uint16) (err error) {
 	sw.lock.Lock()
 	defer sw.lock.Unlock()
 	if sw.closed {
-		return errors.New("closed already.")
+		return io.EOF
 	}
 	sw.closed = true
+
+	// send fin if not closed yet.
+	b := NewFrameNoParam(MSG_FIN, streamid)
+	err = sw.sess.WriteStream(streamid, b)
+	if err == io.EOF {
+		err = nil
+	}
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 

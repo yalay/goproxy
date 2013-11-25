@@ -10,10 +10,10 @@ bin/goproxy -loglevel=$LEVEL -logfile=httproxy.log -mode http -listen=:7002 -key
 
 sleep 1
 
-# ab -X localhost:7002 -c 800 -n 80000 http://127.0.0.1:6060/
+ab -X localhost:7002 -c 300 -n 30000 http://127.0.0.1:6060/
 
-curl -x http://localhost:7002 http://www.baidu.com > /dev/null
-curl -x http://localhost:7002 http://www.microsoft.com > /dev/null
-curl -x http://localhost:7002 http://mirrors.ustc.edu.cn/debian-cd/7.2.0/amd64/iso-cd/debian-7.2.0-amd64-netinst.iso debian-7.2.0-amd64-netinst.iso
+# curl -x http://localhost:7002 http://www.baidu.com > /dev/null
+# curl -x http://localhost:7002 http://www.microsoft.com > /dev/null
+# curl -x http://localhost:7002 http://mirrors.ustc.edu.cn/debian-cd/7.2.0/amd64/iso-cd/debian-7.2.0-amd64-netinst.iso debian-7.2.0-amd64-netinst.iso
 
 killall goproxy

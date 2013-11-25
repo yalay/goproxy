@@ -38,7 +38,7 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 // close all, weakup writer, reader, quit loop.
 func (c *Conn) Final() {
 	c.Bytebuf.Close()
-	c.SeqWriter.Close()
+	c.SeqWriter.Close(c.streamid)
 	c.Window.Close()
 	c.ch_f <- nil
 	c.RemovePort()
@@ -59,6 +59,7 @@ func (c *Conn) Run() {
 	for {
 		f := <-c.ch_f
 		if f == nil {
+			c.Final()
 			return
 		}
 
@@ -113,10 +114,9 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 func (c *Conn) send_ack(n int) (err error) {
 	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
-	b := NewFrameOneInt(MSG_ACK, c.streamid, uint32(n))
 
-	_, err = c.SeqWriter.Write(b)
-	if err != nil && err != io.EOF {
+	err = c.SeqWriter.Ack(c.streamid, n)
+	if err != nil {
 		logger.Err(err)
 		c.Final()
 	}
@@ -124,7 +124,6 @@ func (c *Conn) send_ack(n int) (err error) {
 }
 
 func (c *Conn) Write(data []byte) (n int, err error) {
-	var b []byte
 	for len(data) > 0 {
 		size := uint32(len(data))
 		// use 1024 as a chunk coz leakbuf 1k
@@ -136,12 +135,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		// if window <= 0, wait for window
 		size = c.Acquire(size)
 
-		b, err = NewFrameData(c.streamid, data[:size])
-		if err != nil {
-			logger.Err(err)
-			return
-		}
-		_, err = c.SeqWriter.Write(b)
+		err = c.SeqWriter.Data(c.streamid, data[:size])
 		// write closed, so we don't care window too much.
 		if err != nil {
 			return
@@ -158,21 +152,17 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 func (c *Conn) Close() (err error) {
 	// make sure just one will enter this func
-	err = c.SeqWriter.Close()
-	if err != nil {
+	err = c.SeqWriter.Close(c.streamid)
+	if err == io.EOF {
 		// ok for already closed
-		return nil
+		err = nil
+	}
+	if err != nil {
+		return err
 	}
 
 	c.Window.Close()
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
-
-	// send fin if not closed yet.
-	b := NewFrameNoParam(MSG_FIN, c.streamid)
-	_, err = c.sess.Write(b)
-	if err != nil {
-		logger.Err(err)
-	}
 
 	if c.Bytebuf.Closed() {
 		c.RemovePort()

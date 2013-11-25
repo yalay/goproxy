@@ -27,14 +27,15 @@ func (sw *SeqWriter) Ack(streamid uint16, n int) (err error) {
 
 func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
 	b, err := NewFrameData(streamid, data)
-	if err == io.EOF {
-		err = nil
-	}
 	if err != nil {
 		logger.Err(err)
 		return
 	}
-	return sw.WriteStream(streamid, b)
+	err = sw.WriteStream(streamid, b)
+	if err == io.EOF {
+		err = nil
+	}
+	return
 }
 
 func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {

@@ -22,6 +22,7 @@ const (
 	CHANLEN        = 128
 	WIN_SIZE       = 128 * 1024
 	ACKDELAY       = 100 * time.Millisecond
+	BUFF_TIMEOUT   = 100 * time.Millisecond
 	PINGTIME       = 15 * time.Second
 	DIAL_TIMEOUT   = 30 * time.Second
 	LOOKUP_TIMEOUT = 60 * time.Second
@@ -209,6 +210,13 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	return true
 }
 
+func (s *Session) on_rst(ft *FrameRst) {
+	if ch, ok := s.ports[ft.Streamid]; ok {
+		ch <- nil
+	}
+	s.RemovePorts(ft.Streamid)
+}
+
 func (s *Session) on_dns(ft *FrameDns) {
 	// This will toke long time...
 	go func() {
@@ -239,7 +247,9 @@ func (s *Session) sendFrameInChan(f Frame) bool {
 	ch, ok := s.ports[streamid]
 	if !ok {
 		logger.Errf("%p(%d) not exist.", s, streamid)
-		return true
+		b := NewFrameNoParam(MSG_RST, streamid)
+		_, err := s.Write(b)
+		return err == nil
 	}
 	select {
 	case ch <- f:
@@ -274,6 +284,9 @@ func (s *Session) Run() {
 			if !s.on_syn(ft) {
 				return
 			}
+		case *FrameRst:
+			f.Debug()
+			s.on_rst(ft)
 		case *FrameDns:
 			f.Debug()
 			go s.on_dns(ft)

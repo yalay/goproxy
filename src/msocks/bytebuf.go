@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 )
 
 type Bytebuf struct {
@@ -27,10 +28,18 @@ func (b *Bytebuf) Append(f *FrameData) (err error) {
 	}
 	select {
 	case b.buf <- f:
+		return
 	default:
-		err = errors.New("buf full.")
 	}
-	return
+
+	// try again with timeout
+	ch_timeout := time.After(BUFF_TIMEOUT)
+	select {
+	case b.buf <- f:
+		return
+	case <-ch_timeout: // timeout
+	}
+	return errors.New("buf full.")
 }
 
 func (b *Bytebuf) Read(data []byte) (n int, err error) {

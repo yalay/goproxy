@@ -141,7 +141,7 @@ func NewFrameNoParam(ftype uint8, streamid uint16) (b []byte) {
 }
 
 func (f *FrameOK) Unpack(r io.Reader) (err error) {
-	if f.FrameBase.Length != 0 {
+	if f.Length != 0 {
 		err = errors.New("frame ok with length not 0.")
 	}
 	return
@@ -169,7 +169,7 @@ func (f *FrameFAILED) Unpack(r io.Reader) (err error) {
 		return
 	}
 
-	if f.FrameBase.Length != 4 {
+	if f.Length != 4 {
 		err = errors.New("frame failed with length not 4.")
 		return
 	}
@@ -215,7 +215,7 @@ func (f *FrameAuth) Unpack(r io.Reader) (err error) {
 		return
 	}
 
-	if f.FrameBase.Length != uint16(len(f.Username)+len(f.Password)+4) {
+	if f.Length != uint16(len(f.Username)+len(f.Password)+4) {
 		err = errors.New("frame auth length not match.")
 	}
 	return
@@ -243,8 +243,7 @@ func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
 }
 
 func (f *FrameData) Unpack(r io.Reader) (err error) {
-	size := ((f.FrameBase.Length-1)/0x400 + 1) * 0x400
-	f.Data = make([]byte, size)[:f.FrameBase.Length]
+	f.Data = make([]byte, f.Length)
 	_, err = io.ReadFull(r, f.Data)
 	return
 }
@@ -277,7 +276,7 @@ func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 		return
 	}
 
-	if f.FrameBase.Length != uint16(len(f.Address)+2) {
+	if f.Length != uint16(len(f.Address)+2) {
 		err = errors.New("frame sync length not match.")
 	}
 	return
@@ -299,7 +298,7 @@ func (f *FrameAck) Unpack(r io.Reader) (err error) {
 		return
 	}
 
-	if f.FrameBase.Length != 4 {
+	if f.Length != 4 {
 		err = errors.New("frame ack with length not 4.")
 		return
 	}
@@ -316,7 +315,7 @@ type FrameFin struct {
 }
 
 func (f *FrameFin) Unpack(r io.Reader) (err error) {
-	if f.FrameBase.Length != 0 {
+	if f.Length != 0 {
 		return errors.New("frame fin with length not 0.")
 	}
 	return
@@ -327,7 +326,7 @@ type FrameRst struct {
 }
 
 func (f *FrameRst) Unpack(r io.Reader) (err error) {
-	if f.FrameBase.Length != 0 {
+	if f.Length != 0 {
 		return errors.New("frame rst with length not 0.")
 	}
 	return
@@ -344,7 +343,7 @@ func (f *FrameDns) Unpack(r io.Reader) (err error) {
 		return
 	}
 
-	if f.FrameBase.Length != uint16(len(f.Hostname)+2) {
+	if f.Length != uint16(len(f.Hostname)+2) {
 		err = errors.New("frame dns length not match.")
 	}
 	return
@@ -389,7 +388,7 @@ func (f *FrameAddr) Unpack(r io.Reader) (err error) {
 	var n uint8
 	size := uint16(0)
 
-	for size < f.FrameBase.Length {
+	for size < f.Length {
 		err = binary.Read(r, binary.BigEndian, &n)
 		if err != nil {
 			return
@@ -405,7 +404,7 @@ func (f *FrameAddr) Unpack(r io.Reader) (err error) {
 		size += uint16(n + 1)
 	}
 
-	if f.FrameBase.Length != size {
+	if f.Length != size {
 		return errors.New("frame addr length not match.")
 	}
 	return
@@ -416,7 +415,7 @@ type FramePing struct {
 }
 
 func (f *FramePing) Unpack(r io.Reader) (err error) {
-	if f.FrameBase.Length != 0 {
+	if f.Length != 0 {
 		return errors.New("frame ping with length not 0.")
 	}
 	return

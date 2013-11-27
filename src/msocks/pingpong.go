@@ -52,7 +52,7 @@ func (p *PingPong) Run() {
 		timeout := time.After(6 * p.pingtime)
 		select {
 		case <-timeout:
-			logger.Warningf("pingpong timeout: %s", p.w)
+			logger.Warningf("pingpong timeout: %p.", p.w)
 			p.w.Close()
 			return
 		case <-p.ch:

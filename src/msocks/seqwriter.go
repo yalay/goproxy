@@ -16,7 +16,7 @@ func NewSeqWriter(sess *Session) (sw *SeqWriter) {
 	return &SeqWriter{sess: sess}
 }
 
-func (sw *SeqWriter) Ack(streamid uint16, n int) (err error) {
+func (sw *SeqWriter) Ack(streamid uint16, n int32) (err error) {
 	b := NewFrameOneInt(MSG_ACK, streamid, uint32(n))
 	err = sw.WriteStream(streamid, b)
 	if err == io.EOF {

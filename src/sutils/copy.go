@@ -5,8 +5,8 @@ import (
 )
 
 func CoreCopy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := Klb.Get()
-	defer Klb.Free(buf)
+	var buffer [8192]byte
+	buf := buffer[:]
 
 	for {
 		nr, er := src.Read(buf)

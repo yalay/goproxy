@@ -23,7 +23,6 @@ func NewBytebuf(size int) (b *Bytebuf) {
 
 func (b *Bytebuf) Append(f *FrameData) (err error) {
 	if b.closed {
-		f.Free()
 		return
 	}
 	select {
@@ -60,7 +59,6 @@ func (b *Bytebuf) Read(data []byte) (n int, err error) {
 	} else {
 		copy(data, b.bufhead.Data[b.bufpos:])
 		logger.Debugf("read all.")
-		b.bufhead.Free()
 		b.bufhead = nil
 	}
 	return

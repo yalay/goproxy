@@ -3,7 +3,8 @@ package main
 import (
 	"logging"
 	"net/http"
-	"runtime"
+	"os"
+	"runtime/pprof"
 	"strings"
 	"sutils"
 )
@@ -117,9 +118,16 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
-	var buf [1000000]byte
-	n := runtime.Stack(buf[:], true)
+	f, err := os.Create("mem.prof")
+	if err != nil {
+		logger.Err(err)
+		w.WriteHeader(500)
+		return
+	}
+	defer f.Close()
+
+	pprof.WriteHeapProfile(f)
+
 	w.WriteHeader(200)
-	w.Write(buf[:n])
 	return
 }

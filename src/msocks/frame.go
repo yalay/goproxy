@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sutils"
 )
 
 // TODO: compressed session?
@@ -225,7 +224,6 @@ func (f *FrameAuth) Unpack(r io.Reader) (err error) {
 type FrameData struct {
 	FrameBase
 	Data []byte
-	Buf  []byte
 }
 
 func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
@@ -236,12 +234,8 @@ func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
 	}
 	buf := f.Packed()
 
-	n, err := buf.Write(data)
+	_, err = buf.Write(data)
 	if err != nil {
-		return
-	}
-	if n != len(data) {
-		err = io.ErrShortWrite
 		return
 	}
 
@@ -249,21 +243,10 @@ func NewFrameData(streamid uint16, data []byte) (b []byte, err error) {
 }
 
 func (f *FrameData) Unpack(r io.Reader) (err error) {
-	if f.FrameBase.Length <= 1024 {
-		f.Buf = sutils.Klb.Get()
-		f.Data = f.Buf[:f.FrameBase.Length]
-	} else {
-		f.Buf = make([]byte, f.FrameBase.Length)
-		f.Data = f.Buf
-	}
+	size := ((f.FrameBase.Length-1)/0x400 + 1) * 0x400
+	f.Data = make([]byte, size)[:f.FrameBase.Length]
 	_, err = io.ReadFull(r, f.Data)
 	return
-}
-
-func (f *FrameData) Free() {
-	if len(f.Buf) == 1024 {
-		sutils.Klb.Free(f.Buf)
-	}
 }
 
 type FrameSyn struct {

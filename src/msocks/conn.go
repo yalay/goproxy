@@ -3,6 +3,7 @@ package msocks
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -15,20 +16,20 @@ type Conn struct {
 	// from local to remote
 	removefunc sync.Once
 	Window
-	Bytebuf
 	DelayDo
-	SeqWriter
+	bb *Bytebuf
+	sw *SeqWriter
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	c = &Conn{
-		streamid:  streamid,
-		sess:      sess,
-		ch_f:      make(chan Frame, CHANLEN),
-		Window:    *NewWindow(WIN_SIZE),
-		Bytebuf:   *NewBytebuf(CHANLEN),
-		DelayDo:   *NewDelayDo(ACKDELAY, nil),
-		SeqWriter: *NewSeqWriter(sess),
+		streamid: streamid,
+		sess:     sess,
+		ch_f:     make(chan Frame, CHANLEN),
+		Window:   *NewWindow(WIN_SIZE),
+		DelayDo:  *NewDelayDo(ACKDELAY, nil),
+		bb:       NewBytebuf(10),
+		sw:       NewSeqWriter(sess),
 	}
 	c.DelayDo.do = c.send_ack
 	go c.Run()
@@ -37,8 +38,8 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 
 // close all, weakup writer, reader, quit loop.
 func (c *Conn) Final() {
-	c.Bytebuf.Close()
-	c.SeqWriter.Close(c.streamid)
+	c.bb.Close()
+	c.sw.Close(c.streamid)
 	c.Window.Close()
 	c.ch_f <- nil
 	c.RemovePort()
@@ -75,7 +76,7 @@ func (c *Conn) Run() {
 			}
 			logger.Debugf("%p(%d) recved %d bytes from remote.",
 				c.sess, ft.Streamid, len(ft.Data))
-			err = c.Append(ft)
+			err = c.bb.Append(ft)
 			if err != nil {
 				logger.Errf("big trouble, %p(%d) buf is full.",
 					c.sess, c.streamid)
@@ -89,11 +90,11 @@ func (c *Conn) Run() {
 				ft.Window, n)
 		case *FrameFin:
 			f.Debug()
-			c.Bytebuf.Close()
+			c.bb.Close()
 			c.Window.Close()
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
-			if c.SeqWriter.Closed() {
+			if c.sw.Closed() {
 				c.RemovePort()
 			}
 			return
@@ -102,7 +103,7 @@ func (c *Conn) Run() {
 }
 
 func (c *Conn) Read(data []byte) (n int, err error) {
-	n, err = c.Bytebuf.Read(data)
+	n, err = c.bb.Read(data)
 	if err != nil {
 		return
 	}
@@ -115,7 +116,7 @@ func (c *Conn) send_ack(n int) (err error) {
 	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
 
-	err = c.SeqWriter.Ack(c.streamid, n)
+	err = c.sw.Ack(c.streamid, int32(n))
 	if err != nil {
 		logger.Err(err)
 		c.Final()
@@ -126,16 +127,19 @@ func (c *Conn) send_ack(n int) (err error) {
 func (c *Conn) Write(data []byte) (n int, err error) {
 	for len(data) > 0 {
 		size := uint32(len(data))
-		// use 1024 as a chunk coz leakbuf 1k
+		// use 4096 as a chunk coz leakbuf 1k
 		// TODO: random size
-		if size > 1024 {
-			size = 1024
+		switch {
+		case size > 6*1024:
+			size = uint32(3072 + rand.Intn(1024))
+		case 3*1024 < size && size < 6*1024:
+			size /= 2
 		}
 		// check for window
 		// if window <= 0, wait for window
 		size = c.Acquire(size)
 
-		err = c.SeqWriter.Data(c.streamid, data[:size])
+		err = c.sw.Data(c.streamid, data[:size])
 		// write closed, so we don't care window too much.
 		if err != nil {
 			return
@@ -152,7 +156,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 func (c *Conn) Close() (err error) {
 	// make sure just one will enter this func
-	err = c.SeqWriter.Close(c.streamid)
+	err = c.sw.Close(c.streamid)
 	if err == io.EOF {
 		// ok for already closed
 		err = nil
@@ -164,7 +168,7 @@ func (c *Conn) Close() (err error) {
 	c.Window.Close()
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
 
-	if c.Bytebuf.Closed() {
+	if c.bb.Closed() {
 		c.RemovePort()
 	}
 	return

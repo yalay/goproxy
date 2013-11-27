@@ -27,12 +27,14 @@ func (p *PingPong) Reset() {
 	p.cnt = 0
 }
 
-func (p *PingPong) Ping() {
+func (p *PingPong) Ping() bool {
 	logger.Debugf("ping: %p.", p.w)
 	select {
 	case p.ch <- 1:
 	default:
+		return false
 	}
+	return true
 }
 
 func (p *PingPong) Pong() {

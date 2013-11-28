@@ -3,9 +3,7 @@ package msocks
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
-	"os"
 	"sutils"
 	"sync"
 	"time"
@@ -17,7 +15,7 @@ type Dialer struct {
 	username   string
 	password   string
 	lock       sync.Mutex
-	sess       []*Session
+	sess       *Session
 }
 
 func NewDialer(dialer sutils.Dialer, serveraddr string,
@@ -76,15 +74,15 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 }
 
 func (d *Dialer) createSession() (err error) {
-	var conn net.Conn
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if len(d.sess) > 0 {
+	if d.sess != nil {
 		return
 	}
 
 	// retry
+	var conn net.Conn
 	for i := uint(0); i < RETRY_TIMES; i++ {
 		conn, err = d.createConn()
 		if err != nil {
@@ -100,31 +98,17 @@ func (d *Dialer) createSession() (err error) {
 	}
 
 	logger.Noticef("create session.")
-	sess := NewSession(conn)
-	sess.Ping()
-	d.sess = append(d.sess, sess)
+	d.sess = NewSession(conn)
+	d.sess.Ping()
 
 	go func() {
-		sess.Run()
+		d.sess.Run()
 		// that's mean session is dead
 		logger.Warning("session runtime quit, reboot from connect.")
 
 		// remove from sess
 		d.lock.Lock()
-		idx := -1
-		for i, o := range d.sess {
-			if o == sess {
-				idx = i
-				break
-			}
-		}
-		if idx == -1 {
-			logger.Err("sess %p not found.", sess)
-			d.lock.Unlock()
-			return
-		}
-		copy(d.sess[idx:len(d.sess)-1], d.sess[idx+1:])
-		d.sess = d.sess[:len(d.sess)-1]
+		d.sess = nil
 		d.lock.Unlock()
 
 		d.createSession()
@@ -133,24 +117,13 @@ func (d *Dialer) createSession() (err error) {
 }
 
 func (d *Dialer) GetSess() (sess *Session) {
-	// TODO: new session when too many connections.
-	switch len(d.sess) {
-	case 0:
+	if d.sess == nil {
 		err := d.createSession()
 		if err != nil {
-			logger.Err(err)
-			// more civilized
-			os.Exit(-1)
+			return
 		}
-		return d.sess[0]
-	case 1:
-		return d.sess[0]
-	default:
-		n := rand.Intn(len(d.sess))
-		sess = d.sess[n]
-		return
 	}
-	return
+	return d.sess
 }
 
 func FrameOrTimeout(ch chan Frame, t time.Duration) (f Frame) {

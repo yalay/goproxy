@@ -6,10 +6,9 @@ import (
 	"flag"
 	"ipfilter"
 	"logging"
+	"msocks"
 	"net"
 	"net/http"
-	// qsocks to msocks
-	"msocks"
 	"socks"
 	"sutils"
 )

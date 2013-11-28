@@ -58,6 +58,7 @@ func (p *PingPong) Run() {
 		case <-p.ch:
 			p.cnt += 1
 			if p.cnt >= 20 {
+				logger.Warning("pingpong gameover.")
 				p.w.Close()
 				return
 			}

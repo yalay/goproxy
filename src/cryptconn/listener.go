@@ -1,23 +1,26 @@
 package cryptconn
 
 import (
+	"crypto/cipher"
 	"net"
 )
 
 type Listener struct {
 	net.Listener
-	key     []byte
-	iv      []byte
-	Wrapper func(net.Conn) (net.Conn, error)
+	block cipher.Block
 }
 
 func NewListener(listener net.Listener, method string, keyfile string) (l *Listener, err error) {
 	logger.Infof("Crypt Listener with %s preparing.", method)
-	l = &Listener{
-		Listener: listener,
+	c, err := NewBlock(method, keyfile)
+	if err != nil {
+		return
 	}
 
-	l.Wrapper, err = New(method, keyfile)
+	l = &Listener{
+		Listener: listener,
+		block:    c,
+	}
 	return
 }
 
@@ -26,5 +29,6 @@ func (l *Listener) Accept() (conn net.Conn, err error) {
 	if err != nil {
 		return
 	}
-	return l.Wrapper(conn)
+
+	return NewServer(conn, l.block)
 }

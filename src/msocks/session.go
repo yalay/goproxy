@@ -20,7 +20,7 @@ import (
 const (
 	RETRY_TIMES    = 6
 	CHANLEN        = 128
-	WIN_SIZE       = 128 * 1024
+	WIN_SIZE       = 100
 	ACKDELAY       = 100 * time.Millisecond
 	BUFF_TIMEOUT   = 100 * time.Millisecond
 	PINGTIME       = 15 * time.Second
@@ -29,7 +29,6 @@ const (
 )
 
 var errClosing = "use of closed network connection"
-var ErrClosed = errors.New("already closed.")
 
 var logger logging.Logger
 
@@ -156,10 +155,6 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		err = fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	return
-}
-
-func (s *Session) Number() (n int) {
-	return len(s.ports)
 }
 
 func (s *Session) on_syn(ft *FrameSyn) bool {

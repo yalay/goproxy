@@ -29,6 +29,7 @@ const (
 )
 
 var errClosing = "use of closed network connection"
+var ErrClosed = errors.New("already closed.")
 
 var logger logging.Logger
 
@@ -104,7 +105,10 @@ func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
-		v <- nil
+		func() {
+			defer func() { recover() }()
+			close(v)
+		}()
 	}
 	return
 }
@@ -211,10 +215,13 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 }
 
 func (s *Session) on_rst(ft *FrameRst) {
-	if ch, ok := s.ports[ft.Streamid]; ok {
-		ch <- nil
+	ch, ok := s.ports[ft.Streamid]
+	if !ok {
+		return
 	}
 	s.RemovePorts(ft.Streamid)
+	defer func() { recover() }()
+	close(ch)
 }
 
 func (s *Session) on_dns(ft *FrameDns) {
@@ -242,7 +249,7 @@ func (s *Session) on_dns(ft *FrameDns) {
 
 // In all of situation, drop frame if chan full.
 // And if frame finally come, drop it too.
-func (s *Session) sendFrameInChan(f Frame) bool {
+func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	streamid := f.GetStreamid()
 	ch, ok := s.ports[streamid]
 	if !ok {
@@ -251,11 +258,19 @@ func (s *Session) sendFrameInChan(f Frame) bool {
 		_, err := s.Write(b)
 		return err == nil
 	}
+
+	b = true
+	defer func() { recover() }()
 	select {
 	case ch <- f:
 		return true
 	default:
 		logger.Errf("%p(%d) chan has fulled.", s, streamid)
+		b := NewFrameNoParam(MSG_RST, streamid)
+		_, err := s.Write(b)
+		if err != nil {
+			return false
+		}
 		return s.RemovePorts(streamid) == nil
 	}
 }

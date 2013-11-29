@@ -1,3 +1,10 @@
+goproxy (2.0.5) UNRELEASED; urgency=low
+
+  * manageable http server.
+  * close to stop sending.
+
+ -- Shell.Xu <shell909090@gmail.com>  Fri, 29 Nov 2013 17:02:39 +0800
+
 goproxy (2.0.4) unstable; urgency=low
 
   * memory optimized.

@@ -4,10 +4,22 @@ import (
 	"logging"
 	"net/http"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"sutils"
 )
+
+var hopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te", // canonicalized version of "TE"
+	"Trailers",
+	"Transfer-Encoding",
+	"Upgrade",
+}
 
 var httplogger logging.Logger
 
@@ -22,24 +34,18 @@ func init() {
 type Proxy struct {
 	transport http.Transport
 	dialer    sutils.Dialer
+	mux       *http.ServeMux
 }
 
 func NewProxy(dialer sutils.Dialer) (p *Proxy) {
-	return &Proxy{
+	p = &Proxy{
 		dialer:    dialer,
 		transport: http.Transport{Dial: dialer.Dial},
+		mux:       http.NewServeMux(),
 	}
-}
-
-var hopHeaders = []string{
-	"Connection",
-	"Keep-Alive",
-	"Proxy-Authenticate",
-	"Proxy-Authorization",
-	"Te", // canonicalized version of "TE"
-	"Trailers",
-	"Transfer-Encoding",
-	"Upgrade",
+	p.mux.HandleFunc("/mem", p.HandlerMemory)
+	p.mux.HandleFunc("/stack", p.HandlerGoroutine)
+	return
 }
 
 func copyHeader(dst, src http.Header) {
@@ -59,7 +65,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.URL.Host == "" {
-		p.Handler(w, req)
+		p.mux.ServeHTTP(w, req)
 		return
 	}
 
@@ -107,7 +113,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 	dstconn, err := p.dialer.Dial("tcp", host)
 	if err != nil {
-		httplogger.Err(err)
+		httplogger.Err("dial failed:", err)
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}
@@ -117,7 +123,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) HandlerMemory(w http.ResponseWriter, req *http.Request) {
 	f, err := os.Create("mem.prof")
 	if err != nil {
 		logger.Err(err)
@@ -129,5 +135,14 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	pprof.WriteHeapProfile(f)
 
 	w.WriteHeader(200)
+	return
+}
+
+func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
+	buf := make([]byte, 20*1024*1024)
+	n := runtime.Stack(buf, true)
+	// w.Header().Add("Content-Type", "plain/text")
+	w.WriteHeader(200)
+	w.Write(buf[:n])
 	return
 }

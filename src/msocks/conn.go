@@ -2,7 +2,6 @@ package msocks
 
 import (
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"sync"
@@ -10,10 +9,9 @@ import (
 )
 
 type Conn struct {
-	sess     *Session
-	streamid uint16
-	ch_f     chan Frame
-	// from local to remote
+	sess       *Session
+	streamid   uint16
+	ch_f       chan Frame
 	removefunc sync.Once
 	Window
 	DelayDo
@@ -36,38 +34,19 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	return
 }
 
-// close all, weakup writer, reader, quit loop.
-func (c *Conn) Final() {
-	c.bb.Close()
-	c.sw.Close(c.streamid)
-	c.Window.Close()
-	c.ch_f <- nil
-	c.RemovePort()
-}
-
-// disconnected from session.
-func (c *Conn) RemovePort() {
-	c.removefunc.Do(func() {
-		err := c.sess.RemovePorts(c.streamid)
-		if err != nil {
-			logger.Err(err)
-		}
-	})
-}
-
 func (c *Conn) Run() {
 	var err error
 	for {
-		f := <-c.ch_f
-		if f == nil {
-			c.Final()
+		f, ok := <-c.ch_f
+		if !ok {
+			c.CloseAll()
 			return
 		}
 
 		switch ft := f.(type) {
 		default:
 			logger.Err("unexpected package")
-			c.Final()
+			c.CloseAll()
 			return
 		case *FrameData:
 			f.Debug()
@@ -80,7 +59,7 @@ func (c *Conn) Run() {
 			if err != nil {
 				logger.Errf("big trouble, %p(%d) buf is full.",
 					c.sess, c.streamid)
-				c.Final()
+				c.CloseAll()
 				return
 			}
 		case *FrameAck:
@@ -91,11 +70,10 @@ func (c *Conn) Run() {
 		case *FrameFin:
 			f.Debug()
 			c.bb.Close()
-			c.Window.Close()
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
 			if c.sw.Closed() {
-				c.RemovePort()
+				c.remove_port()
 			}
 			return
 		}
@@ -119,7 +97,7 @@ func (c *Conn) send_ack(n int) (err error) {
 	err = c.sw.Ack(c.streamid, int32(n))
 	if err != nil {
 		logger.Err(err)
-		c.Final()
+		c.Close()
 	}
 	return
 }
@@ -131,13 +109,16 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		// TODO: random size
 		switch {
 		case size > 6*1024:
-			size = uint32(3072 + rand.Intn(1024))
+			size = uint32(3*1024 + rand.Intn(1024))
 		case 3*1024 < size && size < 6*1024:
 			size /= 2
 		}
 		// check for window
 		// if window <= 0, wait for window
 		size = c.Acquire(size)
+		if size == 0 {
+			return
+		}
 
 		err = c.sw.Data(c.streamid, data[:size])
 		// write closed, so we don't care window too much.
@@ -154,10 +135,21 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 	return
 }
 
+func (c *Conn) remove_port() {
+	c.removefunc.Do(func() {
+		err := c.sess.RemovePorts(c.streamid)
+		if err != nil {
+			logger.Err(err)
+		}
+		defer func() { recover() }()
+		close(c.ch_f)
+	})
+}
+
 func (c *Conn) Close() (err error) {
 	// make sure just one will enter this func
 	err = c.sw.Close(c.streamid)
-	if err == io.EOF {
+	if err == ErrClosed {
 		// ok for already closed
 		err = nil
 	}
@@ -169,9 +161,16 @@ func (c *Conn) Close() (err error) {
 	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
 
 	if c.bb.Closed() {
-		c.RemovePort()
+		c.remove_port()
 	}
 	return
+}
+
+func (c *Conn) CloseAll() {
+	c.sw.Close(c.streamid)
+	c.Window.Close()
+	c.bb.Close()
+	c.remove_port()
 }
 
 func (c *Conn) LocalAddr() net.Addr {

@@ -10,7 +10,7 @@ bin/goproxy -loglevel=$LEVEL -logfile=httproxy.log -mode http -listen=:7002 -key
 
 sleep 1
 
-ab -X localhost:7002 -c 100 -n 10000 http://127.0.0.1:6060/
+ab -X localhost:7002 -c 800 -n 80000 http://127.0.0.1:6060/
 
 # curl -x http://localhost:7002 http://www.baidu.com > /dev/null
 # curl -x http://localhost:7002 http://www.microsoft.com > /dev/null

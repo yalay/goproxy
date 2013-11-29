@@ -1,46 +1,60 @@
 package msocks
 
+import (
+	"sync"
+)
+
 type Window struct {
-	ch_win chan uint32
+	c      *sync.Cond
+	mu     *sync.Mutex
+	closed bool
+	win    uint32
 }
 
 func NewWindow(init uint32) (w *Window) {
+	var mu sync.Mutex
 	w = &Window{
-		ch_win: make(chan uint32, 10),
+		c:   sync.NewCond(&mu),
+		mu:  &mu,
+		win: init,
 	}
-	w.ch_win <- init
 	return
 }
 
 func (w *Window) Close() (err error) {
-	select {
-	case w.ch_win <- 0:
-	default:
-	}
+	w.closed = true
+	w.c.Broadcast()
 	return
 }
 
 func (w *Window) Acquire(num uint32) (n uint32) {
-	n = <-w.ch_win
-	switch {
-	case n == 0: // weak up next
-		w.ch_win <- 0
-	case n > num:
-		w.ch_win <- (n - num)
-		n = num
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for {
+		switch {
+		case w.closed:
+			break
+		case w.win == 0:
+			w.c.Wait()
+			continue
+		case w.win < num:
+			n = w.win
+		case w.win > num:
+			n = num
+		}
+		w.win -= n
+		return
 	}
 	return
 }
 
 func (w *Window) Release(num uint32) (n uint32) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.win += num
 	n = num
-	for {
-		select {
-		case m := <-w.ch_win:
-			n += m
-		default:
-			w.ch_win <- n
-			return
-		}
-	}
+	w.c.Broadcast()
+	return
 }

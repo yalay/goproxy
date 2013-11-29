@@ -150,17 +150,14 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 
 	b, err := NewFrameOneString(MSG_SYN, streamid, address)
 	if err != nil {
-		logger.Err(err)
 		return
 	}
 	_, err = sess.Write(b)
 	if err != nil {
-		logger.Err(err)
 		return
 	}
 
 	fr := FrameOrTimeout(ch, DIAL_TIMEOUT)
-	close(ch)
 
 	switch frt := fr.(type) {
 	default:
@@ -175,13 +172,14 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	}
 
 	if err != nil {
-		logger.Err(err)
 		sess.RemovePorts(streamid)
+		close(ch)
 		return
 	}
 
 	c := NewConn(streamid, sess)
 	sess.PutIntoId(streamid, c.ch_f)
+	close(ch)
 	logger.Noticef("new conn: %p(%d) => %s.",
 		sess, streamid, address)
 	return c, nil
@@ -209,6 +207,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	}
 
 	fr := FrameOrTimeout(ch, LOOKUP_TIMEOUT)
+	sess.RemovePorts(streamid)
 	close(ch)
 
 	switch frt := fr.(type) {
@@ -226,6 +225,5 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	}
 
 	logger.Err(err)
-	sess.RemovePorts(streamid)
 	return
 }

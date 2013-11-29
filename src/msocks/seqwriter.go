@@ -48,9 +48,6 @@ func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {
 	if err == io.EOF {
 		sw.closed = true
 	}
-	if err != nil {
-		logger.Err(err)
-	}
 	return
 }
 
@@ -58,7 +55,7 @@ func (sw *SeqWriter) Close(streamid uint16) (err error) {
 	sw.lock.Lock()
 	defer sw.lock.Unlock()
 	if sw.closed {
-		return io.EOF
+		return ErrClosed
 	}
 	sw.closed = true
 
@@ -67,9 +64,6 @@ func (sw *SeqWriter) Close(streamid uint16) (err error) {
 	err = sw.sess.WriteStream(streamid, b)
 	if err == io.EOF {
 		err = nil
-	}
-	if err != nil {
-		logger.Err(err)
 	}
 	return
 }

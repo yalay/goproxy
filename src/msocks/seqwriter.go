@@ -28,26 +28,23 @@ func (w *Window) Close() (err error) {
 	return
 }
 
-func (w *Window) Acquire(num uint32) (n uint32) {
+func (w *Window) Acquire() (n uint32) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	for {
 		switch {
 		case w.closed:
-			break
+			return
 		case w.win == 0:
 			w.c.Wait()
 			continue
-		case w.win < num:
-			n = w.win
-		case w.win > num:
-			n = num
+		default:
+			n = 1
 		}
 		w.win -= n
 		return
 	}
-	return
 }
 
 func (w *Window) Release(num uint32) (n uint32) {
@@ -85,8 +82,11 @@ func (sw *SeqWriter) Ack(streamid uint16, n int32) (err error) {
 }
 
 func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
+	if len(data) == 0 {
+		return
+	}
 	// check for window
-	if sw.Acquire(1) == 0 {
+	if sw.Acquire() == 0 {
 		// that mean closed
 		return io.EOF
 	}

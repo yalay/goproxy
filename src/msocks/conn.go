@@ -41,7 +41,6 @@ func (c *Conn) Run() {
 			c.CloseAll()
 			return
 		}
-		c.dd.Add(1)
 
 		switch ft := f.(type) {
 		default:
@@ -50,10 +49,8 @@ func (c *Conn) Run() {
 			return
 		case *FrameData:
 			f.Debug()
-			if len(ft.Data) == 0 {
-				continue
-			}
-			logger.Debugf("%p(%d) recved %d bytes from remote.",
+			c.dd.Add()
+			logger.Infof("%p(%d) recved %d bytes from remote.",
 				c.sess, ft.Streamid, len(ft.Data))
 			_, err = c.Pipe.Write(ft.Data)
 			switch err {
@@ -106,7 +103,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		switch {
 		case size > 8*1024:
 			size = uint32(3*1024 + rand.Intn(1024))
-		case 4*1024 < size && size < 8*1024:
+		case 4*1024 < size && size <= 8*1024:
 			size /= 2
 		}
 
@@ -159,6 +156,7 @@ func (c *Conn) CloseAll() {
 	c.sw.Close(c.streamid)
 	c.Pipe.Close()
 	c.remove_port()
+	logger.Infof("connection %p(%d) close all.", c.sess, c.streamid)
 }
 
 func (c *Conn) LocalAddr() net.Addr {

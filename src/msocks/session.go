@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-// use 64 as default channel length.
-// average block size is 3k, 128 * 3k = 384K
-// that is the buffer before read, and it's the maxmium length of write window.
-// default value of write window is 128K.
-// that will be sent in 0.1s, so maxmium speed will be 128k / 0.1s = 1280k/s = 10Mbps.
-
 const (
 	RETRY_TIMES    = 6
 	CHANLEN        = 128

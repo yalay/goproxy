@@ -17,16 +17,24 @@ func NewPipe() (p *Pipe) {
 }
 
 func (p *Pipe) Read(data []byte) (n int, err error) {
-	return p.pr.Read(data)
+	n, err = p.pr.Read(data)
+	if err == io.ErrClosedPipe {
+		err = io.EOF
+	}
+	return
 }
 
 func (p *Pipe) Write(data []byte) (n int, err error) {
-	return p.pw.Write(data)
+	n, err = p.pw.Write(data)
+	if err == io.ErrClosedPipe {
+		err = io.EOF
+	}
+	return
 }
 
 func (p *Pipe) Close() (err error) {
 	p.Closed = true
-	p.pr.CloseWithError(io.EOF)
-	p.pw.CloseWithError(io.EOF)
+	p.pr.Close()
+	p.pw.Close()
 	return
 }

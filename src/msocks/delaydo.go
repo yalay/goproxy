@@ -21,19 +21,30 @@ func NewDelayDo(delay time.Duration, do func(int) error) (d *DelayDo) {
 	return
 }
 
-func (d *DelayDo) Add(n int) {
+func (d *DelayDo) Add() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if d.timer == nil {
+	d.cnt += 1
+	if d.cnt >= WIN_SIZE {
+		d.do(d.cnt)
+		if d.timer != nil {
+			d.timer.Stop()
+			d.timer = nil
+		}
+		d.cnt = 0
+	}
+
+	if d.cnt != 0 && d.timer == nil {
 		d.timer = time.AfterFunc(d.delay, func() {
 			d.lock.Lock()
 			defer d.lock.Unlock()
-			d.do(d.cnt)
+			if d.cnt > 0 {
+				d.do(d.cnt)
+			}
 			d.timer = nil
 			d.cnt = 0
 		})
 	}
-	d.cnt += n
 	return
 }

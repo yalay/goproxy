@@ -23,7 +23,7 @@ case "$1" in
     configure)
 	if [ ! -f "$KEYFILE" ]; then
 	    echo -n "generate crypto key..."
-	    dd if=/dev/random of="$KEYFILE" bs=1 count=32 >/dev/null 2>&1
+	    dd if=/dev/random of="$KEYFILE" bs=1 count=16 >/dev/null 2>&1
 	    chmod 400 "$KEYFILE"
 	    echo "done"
 	fi

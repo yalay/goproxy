@@ -10,6 +10,7 @@ type Window struct {
 	mu     *sync.Mutex
 	closed bool
 	win    uint32
+	max    uint32
 }
 
 func NewWindow(init uint32) (w *Window) {
@@ -18,6 +19,7 @@ func NewWindow(init uint32) (w *Window) {
 		c:   sync.NewCond(&mu),
 		mu:  &mu,
 		win: init,
+		max: init,
 	}
 	return
 }
@@ -52,6 +54,9 @@ func (w *Window) Release(num uint32) (n uint32) {
 	defer w.mu.Unlock()
 
 	w.win += num
+	if w.win > w.max {
+		w.win = w.max
+	}
 	n = w.win
 	w.c.Broadcast()
 	return

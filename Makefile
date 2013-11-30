@@ -7,9 +7,6 @@
 
 all: build
 
-%.html: %.md
-	markdown $^ > $@
-
 test:
 	go test -i github.com/shell909090/goproxy/ipfilter
 	go test -i github.com/shell909090/goproxy/msocks
@@ -19,12 +16,10 @@ build:
 	go build -o bin/goproxy github.com/shell909090/goproxy/goproxy
 	go build -o bin/glookup github.com/shell909090/goproxy/glookup
 
-build-doc: README.html
-
 clean:
 	rm -rf bin README.html
 
-install: build README.html
+install: build
 	install -d $(DESTDIR)/usr/bin/
 	install -m 755 -s bin/goproxy $(DESTDIR)/usr/bin/
 	install -m 755 -s bin/glookup $(DESTDIR)/usr/bin/

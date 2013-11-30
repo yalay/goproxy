@@ -1,0 +1,2 @@
+debian/routes.list.gz usr/share/goproxy/
+debian/resolv.conf etc/goproxy/

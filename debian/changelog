@@ -1,9 +1,11 @@
-goproxy (2.0.5) UNRELEASED; urgency=low
+goproxy (2.0.5) unstable; urgency=low
 
   * manageable http server.
   * close to stop sending.
+  * re-organized file struct to fit go project.
+  * use dh-golang to make debian package.
 
- -- Shell.Xu <shell909090@gmail.com>  Fri, 29 Nov 2013 17:02:39 +0800
+ -- Shell Xu <shell909090@gmail.com>  Sun, 01 Dec 2013 01:30:42 +0800
 
 goproxy (2.0.4) unstable; urgency=low
 

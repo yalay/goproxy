@@ -4,12 +4,6 @@
 
 package dns
 
-import (
-	// "math/rand"
-	// "sort"
-	// "net"
-)
-
 // DNSError represents a DNS lookup error.
 type DNSError struct {
 	Err       string // description of the error

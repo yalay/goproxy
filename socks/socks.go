@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"github.com/shell909090/goproxy/logging"
 	"io"
-	"logging"
 	"net"
 )
 

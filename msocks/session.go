@@ -3,8 +3,8 @@ package msocks
 import (
 	"errors"
 	"fmt"
+	"github.com/shell909090/goproxy/logging"
 	"io"
-	"logging"
 	"math/rand"
 	"net"
 	"sync"

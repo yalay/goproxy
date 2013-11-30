@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/shell909090/goproxy/sutils"
 	"net"
-	"sutils"
 )
 
 type SocksService struct {

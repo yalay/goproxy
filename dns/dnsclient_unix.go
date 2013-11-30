@@ -17,7 +17,7 @@
 package dns
 
 import (
-	"logging"
+	"github.com/shell909090/goproxy/logging"
 	"math/rand"
 	"net"
 	"time"

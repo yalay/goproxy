@@ -1,13 +1,13 @@
 package main
 
 import (
-	"logging"
+	"github.com/shell909090/goproxy/logging"
+	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sutils"
 )
 
 var hopHeaders = []string{

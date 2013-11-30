@@ -129,11 +129,15 @@ func dnsReadConfig(configfile string) (*dnsConfig, error) {
 func (dc *dnsConfig) CheckBlack(records []dnsRR) (r bool) {
 	for _, rr := range records {
 		_, ok := rr.(*dnsRR_A)
-		if !ok { return false }
+		if !ok {
+			return false
+		}
 	}
 	addrs := convertRR_A(records)
 	for _, a := range dc.blackips {
-		if a.Equal(addrs[0]) { return true }
+		if a.Equal(addrs[0]) {
+			return true
+		}
 	}
 	return false
 }

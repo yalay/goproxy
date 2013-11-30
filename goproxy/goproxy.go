@@ -1,16 +1,16 @@
 package main
 
 import (
-	"cryptconn"
-	"dns"
 	"flag"
-	"ipfilter"
-	"logging"
-	"msocks"
+	"github.com/shell909090/goproxy/cryptconn"
+	"github.com/shell909090/goproxy/dns"
+	"github.com/shell909090/goproxy/ipfilter"
+	"github.com/shell909090/goproxy/logging"
+	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/socks"
+	"github.com/shell909090/goproxy/sutils"
 	"net"
 	"net/http"
-	"socks"
-	"sutils"
 )
 
 var cipher string

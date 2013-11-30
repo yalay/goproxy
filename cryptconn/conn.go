@@ -6,8 +6,8 @@ import (
 	"crypto/des"
 	"crypto/rand"
 	"encoding/hex"
+	"github.com/shell909090/goproxy/logging"
 	"io"
-	"logging"
 	"net"
 	"os"
 )

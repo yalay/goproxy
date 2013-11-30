@@ -2,8 +2,8 @@ package cryptconn
 
 import (
 	"crypto/cipher"
+	"github.com/shell909090/goproxy/sutils"
 	"net"
-	"sutils"
 )
 
 type Dialer struct {

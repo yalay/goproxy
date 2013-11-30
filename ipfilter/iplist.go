@@ -3,15 +3,15 @@ package ipfilter
 import (
 	"bufio"
 	"compress/gzip"
-	"dns"
 	"errors"
+	"github.com/shell909090/goproxy/dns"
+	"github.com/shell909090/goproxy/logging"
+	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/sutils"
 	"io"
-	"logging"
-	"msocks"
 	"net"
 	"os"
 	"strings"
-	"sutils"
 )
 
 type IPList []net.IPNet

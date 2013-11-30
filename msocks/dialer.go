@@ -3,8 +3,8 @@ package msocks
 import (
 	"errors"
 	"fmt"
+	"github.com/shell909090/goproxy/sutils"
 	"net"
-	"sutils"
 	"sync"
 	"time"
 )

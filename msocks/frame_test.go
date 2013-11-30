@@ -1,8 +1,8 @@
 package msocks
 
 import (
+	"../logging"
 	"bytes"
-	"logging"
 	"net"
 	"testing"
 )

@@ -1,7 +1,7 @@
 package ipfilter
 
 import (
-	"logging"
+	"github.com/shell909090/goproxy/logging"
 	"net"
 	"time"
 )

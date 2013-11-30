@@ -7,9 +7,9 @@
 package dns
 
 import (
+	"net"
 	"sync"
 	"time"
-	"net"
 )
 
 const cacheMaxAge = 5 * time.Minute

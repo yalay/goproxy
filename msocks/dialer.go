@@ -126,23 +126,13 @@ func (d *Dialer) GetSess() (sess *Session) {
 	return d.sess
 }
 
-func FrameOrTimeout(ch chan Frame, t time.Duration) (f Frame) {
-	ch_timeout := time.After(t)
-	select {
-	case f := <-ch:
-		return f
-	case <-ch_timeout: // timeout
-		return nil
-	}
-}
-
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess := d.GetSess()
 	logger.Infof("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
-	ch := make(chan Frame, 1)
+	ch := NewChanFrameSender(1)
 	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
@@ -157,7 +147,7 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	fr := FrameOrTimeout(ch, DIAL_TIMEOUT)
+	fr := ch.RecvWithTimeout(DIAL_TIMEOUT)
 
 	switch frt := fr.(type) {
 	default:
@@ -178,8 +168,8 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	}
 
 	c := NewConn(streamid, sess)
-	sess.PutIntoId(streamid, c.ch_f)
-	close(ch)
+	sess.PutIntoId(streamid, c)
+	ch.CloseSend()
 	logger.Noticef("new conn: %p(%d) => %s.",
 		sess, streamid, address)
 	return c, nil
@@ -190,7 +180,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	sess := d.GetSess()
 
 	// lock streamid and put chan for it
-	ch := make(chan Frame, 1)
+	ch := NewChanFrameSender(1)
 	streamid, err := sess.PutIntoNextId(ch)
 	if err != nil {
 		return
@@ -206,7 +196,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		return
 	}
 
-	fr := FrameOrTimeout(ch, LOOKUP_TIMEOUT)
+	fr := ch.RecvWithTimeout(LOOKUP_TIMEOUT)
 	sess.RemovePorts(streamid)
 	close(ch)
 

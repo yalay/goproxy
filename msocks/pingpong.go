@@ -49,7 +49,7 @@ func (p *PingPong) Pong() {
 
 func (p *PingPong) Run() {
 	for {
-		timeout := time.After(6 * p.pingtime)
+		timeout := time.After(4 * p.pingtime)
 		select {
 		case <-timeout:
 			logger.Warningf("pingpong timeout: %p.", p.w)
@@ -57,7 +57,7 @@ func (p *PingPong) Run() {
 			return
 		case <-p.ch:
 			p.cnt += 1
-			if p.cnt >= 20 {
+			if p.cnt >= GAMEOVER_COUNT {
 				logger.Warning("pingpong gameover.")
 				p.w.Close()
 				return

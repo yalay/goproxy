@@ -9,24 +9,134 @@ import (
 	"time"
 )
 
+type DelayDo struct {
+	lock  sync.Mutex
+	delay time.Duration
+	timer *time.Timer
+	cnt   int
+	do    func(int) error
+}
+
+func NewDelayDo(delay time.Duration, do func(int) error) (d *DelayDo) {
+	d = &DelayDo{
+		delay: delay,
+		do:    do,
+	}
+	return
+}
+
+func (d *DelayDo) Add() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.cnt += 1
+	if d.cnt >= WIN_SIZE {
+		d.do(d.cnt)
+		if d.timer != nil {
+			d.timer.Stop()
+			d.timer = nil
+		}
+		d.cnt = 0
+	}
+
+	if d.cnt != 0 && d.timer == nil {
+		d.timer = time.AfterFunc(d.delay, func() {
+			d.lock.Lock()
+			defer d.lock.Unlock()
+			if d.cnt > 0 {
+				d.do(d.cnt)
+			}
+			d.timer = nil
+			d.cnt = 0
+		})
+	}
+	return
+}
+
+type Pipe struct {
+	Closed bool
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
+}
+
+func NewPipe() (p *Pipe) {
+	pr, pw := io.Pipe()
+	p = &Pipe{pr: pr, pw: pw}
+	return
+}
+
+func (p *Pipe) Read(data []byte) (n int, err error) {
+	n, err = p.pr.Read(data)
+	if err == io.ErrClosedPipe {
+		err = io.EOF
+	}
+	return
+}
+
+func (p *Pipe) Write(data []byte) (n int, err error) {
+	n, err = p.pw.Write(data)
+	if err == io.ErrClosedPipe {
+		err = io.EOF
+	}
+	return
+}
+
+func (p *Pipe) Close() (err error) {
+	p.Closed = true
+	p.pr.Close()
+	p.pw.Close()
+	return
+}
+
+type ChanFrameSender chan Frame
+
+func NewChanFrameSender(i int) ChanFrameSender {
+	return make(chan Frame, i)
+}
+
+func (c ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame) {
+	ch_timeout := time.After(t)
+	select {
+	case f := <-c:
+		return f
+	case <-ch_timeout: // timeout
+		return nil
+	}
+}
+
+func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
+	defer func() { recover() }()
+	select {
+	case c <- f:
+		return true
+	default:
+	}
+	return
+}
+
+func (c ChanFrameSender) CloseSend() {
+	defer func() { recover() }()
+	close(c)
+}
+
 type Conn struct {
+	Pipe
+	ChanFrameSender
 	sess       *Session
 	streamid   uint16
-	ch_f       chan Frame
 	removefunc sync.Once
 	dd         *DelayDo
 	sw         *SeqWriter
-	Pipe
 }
 
 func NewConn(streamid uint16, sess *Session) (c *Conn) {
 	c = &Conn{
-		streamid: streamid,
-		sess:     sess,
-		ch_f:     make(chan Frame, CHANLEN),
-		dd:       NewDelayDo(ACKDELAY, nil),
-		sw:       NewSeqWriter(sess),
-		Pipe:     *NewPipe(),
+		Pipe:            *NewPipe(),
+		ChanFrameSender: NewChanFrameSender(CHANLEN),
+		streamid:        streamid,
+		sess:            sess,
+		dd:              NewDelayDo(ACKDELAY, nil),
+		sw:              NewSeqWriter(sess),
 	}
 	c.dd.do = c.send_ack
 	go c.Run()
@@ -36,7 +146,7 @@ func NewConn(streamid uint16, sess *Session) (c *Conn) {
 func (c *Conn) Run() {
 	var err error
 	for {
-		f, ok := <-c.ch_f
+		f, ok := <-c.ChanFrameSender
 		if !ok {
 			c.CloseAll()
 			return
@@ -128,8 +238,7 @@ func (c *Conn) remove_port() {
 		if err != nil {
 			logger.Err(err)
 		}
-		defer func() { recover() }()
-		close(c.ch_f)
+		c.ChanFrameSender.CloseSend()
 	})
 }
 

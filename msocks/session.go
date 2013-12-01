@@ -16,8 +16,8 @@ const (
 	CHANLEN        = 128
 	WIN_SIZE       = 100
 	ACKDELAY       = 100 * time.Millisecond
-	BUFF_TIMEOUT   = 100 * time.Millisecond
 	PINGTIME       = 15 * time.Second
+	GAMEOVER_COUNT = 40
 	DIAL_TIMEOUT   = 30 * time.Second
 	LOOKUP_TIMEOUT = 60 * time.Second
 )
@@ -36,6 +36,11 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+type FrameSender interface {
+	SendFrame(Frame) bool
+	CloseSend()
+}
+
 type Session struct {
 	flock sync.Mutex
 	conn  net.Conn
@@ -43,9 +48,9 @@ type Session struct {
 	// lock ports before any ports op and id op
 	plock   sync.Mutex
 	next_id uint16
-	ports   map[uint16]chan Frame
+	ports   map[uint16]FrameSender
 
-	on_conn func(string, string, uint16) (chan Frame, error)
+	on_conn func(string, string, uint16) (FrameSender, error)
 
 	PingPong
 }
@@ -53,7 +58,7 @@ type Session struct {
 func NewSession(conn net.Conn) (s *Session) {
 	s = &Session{
 		conn:  conn,
-		ports: make(map[uint16]chan Frame, 0),
+		ports: make(map[uint16]FrameSender, 0),
 	}
 	s.PingPong = *NewPingPong(PINGTIME, s)
 	logger.Noticef("session %p created.", s)
@@ -98,15 +103,12 @@ func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
-		func() {
-			defer func() { recover() }()
-			close(v)
-		}()
+		v.CloseSend()
 	}
 	return
 }
 
-func (s *Session) PutIntoNextId(ch chan Frame) (id uint16, err error) {
+func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -123,18 +125,18 @@ func (s *Session) PutIntoNextId(ch chan Frame) (id uint16, err error) {
 	}
 	id = s.next_id
 	s.next_id += 1
-	logger.Debugf("put into next id(%d): %p.", id, ch)
+	logger.Debugf("put into next id(%d): %p.", id, fs)
 
-	s.ports[id] = ch
+	s.ports[id] = fs
 	return
 }
 
-func (s *Session) PutIntoId(id uint16, ch chan Frame) {
-	logger.Debugf("put into id(%d): %p.", id, ch)
+func (s *Session) PutIntoId(id uint16, fs FrameSender) {
+	logger.Debugf("put into id(%d): %p.", id, fs)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
-	s.ports[id] = ch
+	s.ports[id] = fs
 	return
 }
 
@@ -169,7 +171,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	go func() {
 		// TODO: timeout
 		logger.Debugf("client(%p) try to connect: %s.", s, ft.Address)
-		ch, err := s.on_conn("tcp", ft.Address, ft.Streamid)
+		fs, err := s.on_conn("tcp", ft.Address, ft.Streamid)
 		if err != nil {
 			logger.Err(err)
 
@@ -188,7 +190,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		}
 
 		// update it, don't need to lock
-		s.PutIntoId(ft.Streamid, ch)
+		s.PutIntoId(ft.Streamid, fs)
 
 		b := NewFrameNoParam(MSG_OK, ft.Streamid)
 		err = s.WriteStream(ft.Streamid, b)
@@ -204,13 +206,12 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 }
 
 func (s *Session) on_rst(ft *FrameRst) {
-	ch, ok := s.ports[ft.Streamid]
+	c, ok := s.ports[ft.Streamid]
 	if !ok {
 		return
 	}
 	s.RemovePorts(ft.Streamid)
-	defer func() { recover() }()
-	close(ch)
+	c.CloseSend()
 }
 
 func (s *Session) on_dns(ft *FrameDns) {
@@ -240,7 +241,7 @@ func (s *Session) on_dns(ft *FrameDns) {
 // And if frame finally come, drop it too.
 func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	streamid := f.GetStreamid()
-	ch, ok := s.ports[streamid]
+	c, ok := s.ports[streamid]
 	if !ok {
 		logger.Errf("%p(%d) not exist.", s, streamid)
 		b := NewFrameNoParam(MSG_RST, streamid)
@@ -248,13 +249,9 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 		return err == nil
 	}
 
-	b = true
-	defer func() { recover() }()
-	select {
-	case ch <- f:
-		return true
-	default:
-		logger.Errf("%p(%d) chan has fulled.", s, streamid)
+	b = c.SendFrame(f)
+	if !b {
+		logger.Errf("%p(%d) fulled or closed.", s, streamid)
 		b := NewFrameNoParam(MSG_RST, streamid)
 		_, err := s.Write(b)
 		if err != nil {
@@ -262,6 +259,7 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 		}
 		return s.RemovePorts(streamid) == nil
 	}
+	return
 }
 
 func (s *Session) Run() {

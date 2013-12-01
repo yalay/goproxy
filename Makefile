@@ -8,6 +8,9 @@ LEVEL=NOTICE
 
 all: build
 
+clean:
+	rm -rf bin
+
 test:
 	go test -i github.com/shell909090/goproxy/ipfilter
 	go test -i github.com/shell909090/goproxy/msocks
@@ -16,9 +19,6 @@ build:
 	mkdir -p bin
 	go build -o bin/goproxy github.com/shell909090/goproxy/goproxy
 	go build -o bin/glookup github.com/shell909090/goproxy/glookup
-
-clean:
-	rm -rf bin README.html
 
 install: build
 	install -d $(DESTDIR)/usr/bin/
@@ -30,8 +30,10 @@ install: build
 	install -d $(DESTDIR)/etc/goproxy/
 	install -m 644 debian/resolv.conf $(DESTDIR)/etc/goproxy/
 
-press: build
+press-clean:
 	rm -f server.log client.log httproxy.log
+
+press: build press-clean
 	bin/goproxy -loglevel=$(LEVEL) -logfile=server.log -mode server -listen=:7000 -keyfile=key -passfile=users.pwd &
 	bin/goproxy -loglevel=$(LEVEL) -logfile=httproxy.log -mode http -listen=:7002 -keyfile=key -username=usr -password=pwd localhost:7000 &
 # -black=/usr/share/goproxy/routes.list.gz

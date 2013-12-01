@@ -1,3 +1,9 @@
+goproxy (2.0.6) UNRELEASED; urgency=low
+
+  * fix issue which will crush system when close main connection with somebody dial.
+
+ -- Shell.Xu <shell909090@gmail.com>  Sun, 01 Dec 2013 10:48:56 +0800
+
 goproxy (2.0.5) unstable; urgency=low
 
   * manageable http server.

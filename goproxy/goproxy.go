@@ -91,7 +91,7 @@ func run_server() {
 	}
 }
 
-func get_dialer(serveraddr string) (dialer sutils.Dialer, err error) {
+func get_dialer(serveraddr string) (dialer sutils.Dialer, ndialer *msocks.Dialer, err error) {
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
@@ -112,19 +112,15 @@ func get_dialer(serveraddr string) (dialer sutils.Dialer, err error) {
 		logger.Warning("no vaild keyfile.")
 	}
 
-	var ndialer *msocks.Dialer
+	ndialer, err = msocks.NewDialer(dialer, serveraddr, username, password)
+	if err != nil {
+		return
+	}
+	dialer = ndialer
+
 	if blackfile != "" {
-		ndialer, err = msocks.NewDialer(dialer, serveraddr, username, password)
-		if err != nil {
-			return
-		}
 		dialer, err = ipfilter.NewFilteredDialer(
-			ndialer, sutils.DefaultTcpDialer, blackfile)
-		if err != nil {
-			return
-		}
-	} else {
-		dialer, err = msocks.NewDialer(dialer, serveraddr, username, password)
+			dialer, sutils.DefaultTcpDialer, blackfile)
 		if err != nil {
 			return
 		}
@@ -140,7 +136,7 @@ func run_client() {
 	}
 	serveraddr := flag.Args()[0]
 
-	dialer, err := get_dialer(serveraddr)
+	dialer, _, err := get_dialer(serveraddr)
 	if err != nil {
 		return
 	}
@@ -171,12 +167,12 @@ func run_httproxy() {
 	}
 	serveraddr := flag.Args()[0]
 
-	dialer, err := get_dialer(serveraddr)
+	dialer, ndialer, err := get_dialer(serveraddr)
 	if err != nil {
 		return
 	}
 
-	err = http.ListenAndServe(listenaddr, NewProxy(dialer))
+	err = http.ListenAndServe(listenaddr, NewProxy(dialer, ndialer))
 	if err != nil {
 		logger.Err(err)
 	}

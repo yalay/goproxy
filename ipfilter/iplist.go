@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/logging"
-	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"net"
@@ -88,17 +87,17 @@ func (iplist IPList) Contain(ip net.IP) bool {
 }
 
 type FilteredDialer struct {
-	msocks.Dialer
+	sutils.Dialer
 	dialer sutils.Dialer
 	iplist IPList
 	dns    *DNSCache
 }
 
-func NewFilteredDialer(dialer *msocks.Dialer, dialer2 sutils.Dialer,
+func NewFilteredDialer(dialer sutils.Dialer, dialer2 sutils.Dialer,
 	filename string) (fd *FilteredDialer, err error) {
 
 	fd = &FilteredDialer{
-		Dialer: *dialer,
+		Dialer: dialer,
 		dialer: dialer2,
 		dns: &DNSCache{
 			cache:       make(map[string]*IPEntry, 0),

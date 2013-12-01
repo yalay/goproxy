@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/shell909090/goproxy/logging"
+	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"os"
@@ -35,13 +36,15 @@ type Proxy struct {
 	transport http.Transport
 	dialer    sutils.Dialer
 	mux       *http.ServeMux
+	ndialer   *msocks.Dialer
 }
 
-func NewProxy(dialer sutils.Dialer) (p *Proxy) {
+func NewProxy(dialer sutils.Dialer, ndialer *msocks.Dialer) (p *Proxy) {
 	p = &Proxy{
 		dialer:    dialer,
 		transport: http.Transport{Dial: dialer.Dial},
 		mux:       http.NewServeMux(),
+		ndialer:   ndialer,
 	}
 	p.mux.HandleFunc("/mem", p.HandlerMemory)
 	p.mux.HandleFunc("/stack", p.HandlerGoroutine)
@@ -141,7 +144,6 @@ func (p *Proxy) HandlerMemory(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
 	buf := make([]byte, 20*1024*1024)
 	n := runtime.Stack(buf, true)
-	// w.Header().Add("Content-Type", "plain/text")
 	w.WriteHeader(200)
 	w.Write(buf[:n])
 	return

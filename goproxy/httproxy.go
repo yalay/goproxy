@@ -10,7 +10,6 @@ import (
 	"runtime/pprof"
 	"strings"
 	"text/template"
-	"time"
 )
 
 var hopHeaders = []string{
@@ -35,7 +34,12 @@ func init() {
 		panic(err)
 	}
 
-	tmpl_sess, err = template.New("session").Parse("LastPing: {{.LastPing}}")
+	tmpl_sess, err = template.New("session").Parse(`LastPing: {{.GetLastPing}}
+index address recvlen window
+{{range $index, $conn := .GetPorts}}
+{{$index}} {{$conn.Address}} {{$conn.ChanFrameSender.Len}} {{$conn.GetWindowSize}}
+{{end}}
+`)
 	if err != nil {
 		panic(err)
 	}
@@ -160,12 +164,8 @@ func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) HandlerSession(w http.ResponseWriter, req *http.Request) {
-	sess := p.ndialer.GetSess()
-	type DataSess struct {
-		LastPing time.Duration
+	err := tmpl_sess.Execute(w, p.ndialer.GetSess())
+	if err != nil {
+		logger.Err(err)
 	}
-	ds := &DataSess{
-		LastPing: sess.GetLastPing(),
-	}
-	tmpl_sess.Execute(w, ds)
 }

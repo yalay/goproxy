@@ -38,7 +38,7 @@ func init() {
 
 type FrameSender interface {
 	SendFrame(Frame) bool
-	Close() error
+	CloseAll()
 }
 
 type Session struct {
@@ -63,6 +63,20 @@ func NewSession(conn net.Conn) (s *Session) {
 	s.PingPong = *NewPingPong(s)
 	logger.Noticef("session %p created.", s)
 	return
+}
+
+func (s *Session) GetPorts() (ports map[uint16]*Conn) {
+	s.flock.Lock()
+	defer s.flock.Unlock()
+
+	ports = make(map[uint16]*Conn, 0)
+	for i, fs := range s.ports {
+		switch c := fs.(type) {
+		case *Conn:
+			ports[i] = c
+		}
+	}
+	return ports
 }
 
 func (s *Session) LocalAddr() net.Addr {
@@ -103,7 +117,7 @@ func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
-		v.Close()
+		v.CloseAll()
 	}
 	return
 }
@@ -211,7 +225,7 @@ func (s *Session) on_rst(ft *FrameRst) {
 		return
 	}
 	s.RemovePorts(ft.Streamid)
-	c.Close()
+	c.CloseAll()
 }
 
 func (s *Session) on_dns(ft *FrameDns) {

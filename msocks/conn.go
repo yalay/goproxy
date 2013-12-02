@@ -94,6 +94,10 @@ func NewChanFrameSender(i int) ChanFrameSender {
 	return make(chan Frame, i)
 }
 
+func (c ChanFrameSender) Len() int {
+	return len(c)
+}
+
 func (c ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame) {
 	ch_timeout := time.After(t)
 	select {
@@ -114,15 +118,16 @@ func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
 	return
 }
 
-func (c ChanFrameSender) Close() error {
+func (c ChanFrameSender) CloseAll() {
 	defer func() { recover() }()
 	close(c)
-	return nil
+	return
 }
 
 type Conn struct {
 	Pipe
 	ChanFrameSender
+	Address    string
 	sess       *Session
 	streamid   uint16
 	removefunc sync.Once
@@ -130,10 +135,11 @@ type Conn struct {
 	sw         *SeqWriter
 }
 
-func NewConn(streamid uint16, sess *Session) (c *Conn) {
+func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
 	c = &Conn{
 		Pipe:            *NewPipe(),
 		ChanFrameSender: NewChanFrameSender(CHANLEN),
+		Address:         address,
 		streamid:        streamid,
 		sess:            sess,
 		dd:              NewDelayDo(ACKDELAY, nil),
@@ -239,7 +245,7 @@ func (c *Conn) remove_port() {
 		if err != nil {
 			logger.Err(err)
 		}
-		c.ChanFrameSender.Close()
+		c.ChanFrameSender.CloseAll()
 	})
 }
 
@@ -281,6 +287,10 @@ func (c *Conn) RemoteAddr() net.Addr {
 		c.sess.RemoteAddr(),
 		c.streamid,
 	}
+}
+
+func (c *Conn) GetWindowSize() (n uint32) {
+	return c.sw.win
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {

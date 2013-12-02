@@ -75,7 +75,7 @@ func (ms *MsocksService) on_conn(network, address string, streamid uint16) (fs F
 		return
 	}
 
-	c := NewConn(streamid, ms.sess)
+	c := NewConn(streamid, ms.sess, address)
 	go sutils.CopyLink(conn, c)
 	return c, nil
 }

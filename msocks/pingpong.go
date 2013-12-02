@@ -9,15 +9,15 @@ import (
 type PingPong struct {
 	ch       chan int
 	cnt      int
-	pingtime time.Duration
+	lastping time.Time
 	w        io.WriteCloser
 }
 
-func NewPingPong(pingtime time.Duration, w io.WriteCloser) (p *PingPong) {
+func NewPingPong(w io.WriteCloser) (p *PingPong) {
 	p = &PingPong{
 		ch:       make(chan int, 3),
-		pingtime: pingtime,
 		w:        w,
+		lastping: time.Now(),
 	}
 	go p.Run()
 	return
@@ -34,7 +34,12 @@ func (p *PingPong) Ping() bool {
 	default:
 		return false
 	}
+	p.lastping = time.Now()
 	return true
+}
+
+func (p *PingPong) GetLastPing() (d time.Duration) {
+	return time.Now().Sub(p.lastping)
 }
 
 func (p *PingPong) Pong() {
@@ -49,7 +54,7 @@ func (p *PingPong) Pong() {
 
 func (p *PingPong) Run() {
 	for {
-		timeout := time.After(4 * p.pingtime)
+		timeout := time.After(4 * PINGTIME)
 		select {
 		case <-timeout:
 			logger.Warningf("pingpong timeout: %p.", p.w)
@@ -63,7 +68,7 @@ func (p *PingPong) Run() {
 				return
 			}
 
-			pingtime := p.pingtime + time.Duration(rand.Intn(10)-5)*time.Second
+			pingtime := PINGTIME + time.Duration(rand.Intn(10)-5)*time.Second
 			logger.Debugf("pingtime: %d", pingtime/time.Second)
 			time.Sleep(pingtime)
 			p.Pong()

@@ -114,9 +114,10 @@ func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
 	return
 }
 
-func (c ChanFrameSender) CloseSend() {
+func (c ChanFrameSender) Close() error {
 	defer func() { recover() }()
 	close(c)
+	return nil
 }
 
 type Conn struct {
@@ -238,7 +239,7 @@ func (c *Conn) remove_port() {
 		if err != nil {
 			logger.Err(err)
 		}
-		c.ChanFrameSender.CloseSend()
+		c.ChanFrameSender.Close()
 	})
 }
 

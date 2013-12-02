@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"text/template"
+	"time"
 )
 
 var hopHeaders = []string{
@@ -24,9 +26,16 @@ var hopHeaders = []string{
 
 var httplogger logging.Logger
 
+var tmpl_sess *template.Template
+
 func init() {
 	var err error
 	httplogger, err = logging.NewFileLogger("default", -1, "httproxy")
+	if err != nil {
+		panic(err)
+	}
+
+	tmpl_sess, err = template.New("session").Parse("LastPing: {{.LastPing}}")
 	if err != nil {
 		panic(err)
 	}
@@ -48,6 +57,7 @@ func NewProxy(dialer sutils.Dialer, ndialer *msocks.Dialer) (p *Proxy) {
 	}
 	p.mux.HandleFunc("/mem", p.HandlerMemory)
 	p.mux.HandleFunc("/stack", p.HandlerGoroutine)
+	p.mux.HandleFunc("/sess", p.HandlerSession)
 	return
 }
 
@@ -147,4 +157,15 @@ func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 	w.Write(buf[:n])
 	return
+}
+
+func (p *Proxy) HandlerSession(w http.ResponseWriter, req *http.Request) {
+	sess := p.ndialer.GetSess()
+	type DataSess struct {
+		LastPing time.Duration
+	}
+	ds := &DataSess{
+		LastPing: sess.GetLastPing(),
+	}
+	tmpl_sess.Execute(w, ds)
 }

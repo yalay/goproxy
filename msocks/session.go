@@ -38,7 +38,7 @@ func init() {
 
 type FrameSender interface {
 	SendFrame(Frame) bool
-	CloseSend()
+	Close() error
 }
 
 type Session struct {
@@ -60,7 +60,7 @@ func NewSession(conn net.Conn) (s *Session) {
 		conn:  conn,
 		ports: make(map[uint16]FrameSender, 0),
 	}
-	s.PingPong = *NewPingPong(PINGTIME, s)
+	s.PingPong = *NewPingPong(s)
 	logger.Noticef("session %p created.", s)
 	return
 }
@@ -103,7 +103,7 @@ func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
-		v.CloseSend()
+		v.Close()
 	}
 	return
 }
@@ -211,7 +211,7 @@ func (s *Session) on_rst(ft *FrameRst) {
 		return
 	}
 	s.RemovePorts(ft.Streamid)
-	c.CloseSend()
+	c.Close()
 }
 
 func (s *Session) on_dns(ft *FrameDns) {

@@ -161,6 +161,7 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		logger.Info("connect ok.")
 	}
 
+	defer func() { recover() }()
 	if err != nil {
 		sess.RemovePorts(streamid)
 		close(ch)
@@ -172,7 +173,8 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	ch.CloseSend()
 	logger.Noticef("new conn: %p(%d) => %s.",
 		sess, streamid, address)
-	return c, nil
+	close(ch)
+	return
 }
 
 func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
@@ -211,9 +213,13 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	case *FrameAddr: // OK
 		logger.Infof("lookup ip ok.")
 		ipaddr = frt.Ipaddr
-		return
 	}
 
-	logger.Err(err)
+	if err != nil {
+		logger.Err(err)
+	}
+	defer func() { recover() }()
+	sess.RemovePorts(streamid)
+	close(ch)
 	return
 }

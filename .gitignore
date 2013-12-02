@@ -9,3 +9,4 @@ key
 *.pwd
 *.html
 *.prof
+*.debhelper

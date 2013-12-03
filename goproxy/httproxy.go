@@ -156,11 +156,28 @@ func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) HandlerSession(w http.ResponseWriter, req *http.Request) {
 	if p.tmpl_sess == nil {
 		var err error
-		p.tmpl_sess, err = template.New("session").Parse(`LastPing: {{.GetLastPing}}
-index address status recvlen window
-{{range $index, $conn := .GetPorts}}
-{{$index}} {{$conn.Address}} {{$conn.GetStatus}} {{$conn.ChanFrameSender.Len}} {{$conn.GetWindowSize}}
-{{end}}
+		p.tmpl_sess, err = template.New("session").Parse(`
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>session list</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="author" content="Shell.Xu">
+  </head>
+  <body>
+    LastPing: {{.GetLastPing}}
+    <table>
+      <th>
+	<td>index</td><td>address</td><td>status</td><td>recvlen</td><td>window</td>
+      </th>
+      {{range $index, $conn := .GetPorts}}
+      <tr>
+	<td>{{$index}}</td><td>{{$conn.Address}}</td><td>{{$conn.GetStatus}}</td><td>{{$conn.ChanFrameSender.Len}}</td><td>{{$conn.GetWindowSize}}</td>
+      </tr>
+      {{end}}
+    </table>
+  </body>
+</html>
 `)
 		if err != nil {
 			panic(err)

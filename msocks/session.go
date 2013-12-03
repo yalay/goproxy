@@ -17,6 +17,7 @@ const (
 	WIN_SIZE       = 100
 	ACKDELAY       = 100 * time.Millisecond
 	PINGTIME       = 15 * time.Second
+	HALFCLOSE      = 75 * time.Second
 	GAMEOVER_COUNT = 40
 	DIAL_TIMEOUT   = 30 * time.Second
 	LOOKUP_TIMEOUT = 60 * time.Second

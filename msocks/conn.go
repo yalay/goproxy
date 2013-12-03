@@ -192,6 +192,8 @@ func (c *Conn) Run() {
 				c.sess, c.streamid)
 			if c.SeqWriter.Closed() {
 				c.remove_port()
+			} else {
+				c.DelayClose()
 			}
 			return
 		}
@@ -261,8 +263,18 @@ func (c *Conn) Close() (err error) {
 
 	if c.Pipe.Closed {
 		c.remove_port()
+	} else {
+		c.DelayClose()
 	}
 	return
+}
+
+func (c *Conn) DelayClose() {
+	time.AfterFunc(HALFCLOSE, func() {
+		c.SeqWriter.Close(c.streamid)
+		c.Pipe.Close()
+		c.remove_port()
+	})
 }
 
 func (c *Conn) CloseAll() {

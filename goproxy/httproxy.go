@@ -25,8 +25,6 @@ var hopHeaders = []string{
 
 var httplogger logging.Logger
 
-var tmpl_sess *template.Template
-
 func init() {
 	var err error
 	httplogger, err = logging.NewFileLogger("default", -1, "httproxy")
@@ -34,15 +32,6 @@ func init() {
 		panic(err)
 	}
 
-	tmpl_sess, err = template.New("session").Parse(`LastPing: {{.GetLastPing}}
-index address recvlen window
-{{range $index, $conn := .GetPorts}}
-{{$index}} {{$conn.Address}} {{$conn.ChanFrameSender.Len}} {{$conn.GetWindowSize}}
-{{end}}
-`)
-	if err != nil {
-		panic(err)
-	}
 }
 
 type Proxy struct {
@@ -50,6 +39,7 @@ type Proxy struct {
 	dialer    sutils.Dialer
 	mux       *http.ServeMux
 	ndialer   *msocks.Dialer
+	tmpl_sess *template.Template
 }
 
 func NewProxy(dialer sutils.Dialer, ndialer *msocks.Dialer) (p *Proxy) {
@@ -164,7 +154,25 @@ func (p *Proxy) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) HandlerSession(w http.ResponseWriter, req *http.Request) {
-	err := tmpl_sess.Execute(w, p.ndialer.GetSess())
+	if p.tmpl_sess == nil {
+		var err error
+		p.tmpl_sess, err = template.New("session").Parse(`LastPing: {{.GetLastPing}}
+index address status recvlen window
+{{range $index, $conn := .GetPorts}}
+{{$index}} {{$conn.Address}} {{$conn.GetStatus}} {{$conn.ChanFrameSender.Len}} {{$conn.GetWindowSize}}
+{{end}}
+`)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	sess := p.ndialer.GetSess(false)
+	if sess == nil {
+		w.Write([]byte("no session"))
+		return
+	}
+	err := p.tmpl_sess.Execute(w, sess)
 	if err != nil {
 		logger.Err(err)
 	}

@@ -116,8 +116,8 @@ func (d *Dialer) createSession() (err error) {
 	return
 }
 
-func (d *Dialer) GetSess() (sess *Session) {
-	if d.sess == nil {
+func (d *Dialer) GetSess(create bool) (sess *Session) {
+	if d.sess == nil && create {
 		err := d.createSession()
 		if err != nil {
 			return
@@ -127,7 +127,7 @@ func (d *Dialer) GetSess() (sess *Session) {
 }
 
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
-	sess := d.GetSess()
+	sess := d.GetSess(true)
 	logger.Infof("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
@@ -177,7 +177,7 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 
 func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 	logger.Noticef("lookup ip: %s", hostname)
-	sess := d.GetSess()
+	sess := d.GetSess(true)
 
 	// lock streamid and put chan for it
 	ch := NewChanFrameSender(1)

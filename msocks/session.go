@@ -230,24 +230,21 @@ func (s *Session) on_rst(ft *FrameRst) {
 
 func (s *Session) on_dns(ft *FrameDns) {
 	// This will toke long time...
-	go func() {
-		ipaddr, err := net.LookupIP(ft.Hostname)
-		if err != nil {
-			logger.Err(err)
-			ipaddr = make([]net.IP, 0)
-		}
+	ipaddr, err := net.LookupIP(ft.Hostname)
+	if err != nil {
+		logger.Err(err)
+		ipaddr = make([]net.IP, 0)
+	}
 
-		b, err := NewFrameAddr(ft.Streamid, ipaddr)
-		if err != nil {
-			logger.Err(err)
-			return
-		}
-		err = s.WriteStream(ft.Streamid, b)
-		if err != nil {
-			logger.Err(err)
-		}
+	b, err := NewFrameAddr(ft.Streamid, ipaddr)
+	if err != nil {
+		logger.Err(err)
 		return
-	}()
+	}
+	err = s.WriteStream(ft.Streamid, b)
+	if err != nil {
+		logger.Err(err)
+	}
 	return
 }
 
@@ -286,28 +283,24 @@ func (s *Session) Run() {
 			return
 		}
 
+		f.Debug()
 		switch ft := f.(type) {
 		default:
 			logger.Err("unexpected package")
 			return
 		case *FrameOK, *FrameFAILED, *FrameData, *FrameAck, *FrameFin, *FrameAddr:
-			f.Debug()
 			if !s.sendFrameInChan(f) {
 				return
 			}
 		case *FrameSyn:
-			f.Debug()
 			if !s.on_syn(ft) {
 				return
 			}
 		case *FrameRst:
-			f.Debug()
 			s.on_rst(ft)
 		case *FrameDns:
-			f.Debug()
 			go s.on_dns(ft)
 		case *FramePing:
-			f.Debug()
 			s.PingPong.Ping()
 		}
 	}

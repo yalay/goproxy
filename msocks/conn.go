@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type DelayDo struct {
+type DelayCnt struct {
 	lock  sync.Mutex
 	delay time.Duration
 	timer *time.Timer
@@ -17,15 +17,14 @@ type DelayDo struct {
 	do    func(int) error
 }
 
-func NewDelayDo(delay time.Duration, do func(int) error) (d *DelayDo) {
-	d = &DelayDo{
+func NewDelayCnt(delay time.Duration) (d *DelayCnt) {
+	d = &DelayCnt{
 		delay: delay,
-		do:    do,
 	}
 	return
 }
 
-func (d *DelayDo) Add() {
+func (d *DelayCnt) Add() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -127,25 +126,25 @@ func (c ChanFrameSender) CloseAll() {
 type Conn struct {
 	Pipe
 	ChanFrameSender
+	SeqWriter
+	DelayCnt
 	Address    string
 	sess       *Session
 	streamid   uint16
 	removefunc sync.Once
-	dd         *DelayDo
-	sw         *SeqWriter
 }
 
 func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
 	c = &Conn{
 		Pipe:            *NewPipe(),
 		ChanFrameSender: NewChanFrameSender(CHANLEN),
+		SeqWriter:       *NewSeqWriter(sess),
+		DelayCnt:        *NewDelayCnt(ACKDELAY),
 		Address:         address,
 		streamid:        streamid,
 		sess:            sess,
-		dd:              NewDelayDo(ACKDELAY, nil),
-		sw:              NewSeqWriter(sess),
 	}
-	c.dd.do = c.send_ack
+	c.DelayCnt.do = c.send_ack
 	go c.Run()
 	return
 }
@@ -159,14 +158,14 @@ func (c *Conn) Run() {
 			return
 		}
 
+		f.Debug()
 		switch ft := f.(type) {
 		default:
 			logger.Err("unexpected package")
 			c.CloseAll()
 			return
 		case *FrameData:
-			f.Debug()
-			c.dd.Add()
+			c.DelayCnt.Add()
 			logger.Infof("%p(%d) recved %d bytes from remote.",
 				c.sess, ft.Streamid, len(ft.Data))
 			_, err = c.Pipe.Write(ft.Data)
@@ -184,16 +183,14 @@ func (c *Conn) Run() {
 				return
 			}
 		case *FrameAck:
-			f.Debug()
-			n := c.sw.Release(ft.Window)
+			n := c.SeqWriter.Release(ft.Window)
 			logger.Debugf("remote readed %d, window size maybe: %d.",
 				ft.Window, n)
 		case *FrameFin:
-			f.Debug()
 			c.Pipe.Close()
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
-			if c.sw.Closed() {
+			if c.SeqWriter.Closed() {
 				c.remove_port()
 			}
 			return
@@ -205,7 +202,7 @@ func (c *Conn) send_ack(n int) (err error) {
 	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
 
-	err = c.sw.Ack(c.streamid, int32(n))
+	err = c.SeqWriter.Ack(c.streamid, int32(n))
 	if err != nil {
 		logger.Err(err)
 		c.Close()
@@ -224,7 +221,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 			size /= 2
 		}
 
-		err = c.sw.Data(c.streamid, data[:size])
+		err = c.SeqWriter.Data(c.streamid, data[:size])
 		// write closed, so we don't care window too much.
 		if err != nil {
 			return
@@ -251,7 +248,7 @@ func (c *Conn) remove_port() {
 
 func (c *Conn) Close() (err error) {
 	// make sure just one will enter this func
-	err = c.sw.Close(c.streamid)
+	err = c.SeqWriter.Close(c.streamid)
 	if err == io.EOF {
 		// ok for already closed
 		err = nil
@@ -269,7 +266,7 @@ func (c *Conn) Close() (err error) {
 }
 
 func (c *Conn) CloseAll() {
-	c.sw.Close(c.streamid)
+	c.SeqWriter.Close(c.streamid)
 	c.Pipe.Close()
 	c.remove_port()
 	logger.Infof("connection %p(%d) close all.", c.sess, c.streamid)
@@ -290,7 +287,23 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 func (c *Conn) GetWindowSize() (n uint32) {
-	return c.sw.win
+	return c.SeqWriter.win
+}
+
+func (c *Conn) GetStatus() (s string) {
+	if c.SeqWriter.Closed() {
+		if c.Pipe.Closed {
+			return "closed"
+		} else {
+			return "local"
+		}
+	} else {
+		if c.Pipe.Closed {
+			return "remote"
+		} else {
+			return "open"
+		}
+	}
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {

@@ -231,12 +231,17 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 }
 
 func (s *Session) on_rst(ft *FrameRst) {
+	s.plock.Lock()
+	defer s.plock.Unlock()
+
 	c, ok := s.ports[ft.Streamid]
 	if !ok {
 		return
 	}
-	s.RemovePorts(ft.Streamid)
-	c.Close()
+	delete(s.ports, ft.Streamid)
+	if c != nil {
+		c.Close()
+	}
 }
 
 func (s *Session) on_dns(ft *FrameDns) {

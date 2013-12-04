@@ -216,6 +216,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		err = c.SeqWriter.Data(c.streamid, data[:size])
 		// write closed, so we don't care window too much.
 		if err != nil {
+			logger.Err(err)
 			return
 		}
 		logger.Debugf("%p(%d) send chunk size %d at %d.",
@@ -229,8 +230,8 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 }
 
 func (c *Conn) Close() (err error) {
-	c.SeqWriter.Close(c.streamid)
 	c.removefunc.Do(func() {
+		c.SeqWriter.Close(c.streamid)
 		c.Pipe.Close()
 		err := c.sess.RemovePorts(c.streamid)
 		if err != nil {

@@ -114,8 +114,10 @@ func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {
 		return io.EOF
 	}
 	err = sw.sess.WriteStream(streamid, b)
-	if err == io.EOF {
+	switch err {
+	case io.EOF, ErrStreamNotExist:
 		sw.closed = true
+	default:
 	}
 	return
 }

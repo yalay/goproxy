@@ -27,6 +27,8 @@ const (
 
 var errClosing = "use of closed network connection"
 
+var ErrStreamNotExist = errors.New("stream not exist.")
+
 var logger logging.Logger
 
 func init() {
@@ -95,7 +97,7 @@ func (s *Session) RemoteAddr() net.Addr {
 func (s *Session) WriteStream(streamid uint16, b []byte) (err error) {
 	s.PingPong.Reset()
 	if _, ok := s.ports[streamid]; !ok {
-		return io.EOF
+		return ErrStreamNotExist
 	}
 	_, err = s.Write(b)
 	return

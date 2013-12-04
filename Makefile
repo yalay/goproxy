@@ -43,6 +43,6 @@ press: build press-clean
 # curl -x http://localhost:7002 http://www.microsoft.com > /dev/null
 # curl -x http://localhost:7002 http://mirror.steadfast.net/ubuntu-releases//precise/ubuntu-12.04.3-desktop-amd64.iso -o ubuntu-12.04.3-desktop-amd64.iso
 # curl -x http://srv:8118 http://go.googlecode.com/files/go1.2rc5.src.tar.gz
-	# killall goproxy
+	killall goproxy
 
 ### Makefile ends here

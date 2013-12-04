@@ -6,22 +6,20 @@ import (
 )
 
 type Window struct {
-	c       *sync.Cond
-	mu      *sync.Mutex
-	closed  bool
-	win     uint32
-	max     uint32
-	sendmsg bool
+	c      *sync.Cond
+	mu     *sync.Mutex
+	closed bool
+	win    uint32
+	max    uint32
 }
 
 func NewWindow(init uint32) (w *Window) {
 	var mu sync.Mutex
 	w = &Window{
-		c:       sync.NewCond(&mu),
-		mu:      &mu,
-		win:     init,
-		max:     init,
-		sendmsg: true,
+		c:   sync.NewCond(&mu),
+		mu:  &mu,
+		win: init,
+		max: init,
 	}
 	return
 }
@@ -122,10 +120,6 @@ func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {
 	return
 }
 
-func (sw *SeqWriter) DontSend() {
-	sw.sendmsg = false
-}
-
 // TODO: remove closed?
 func (sw *SeqWriter) Close(streamid uint16) (err error) {
 	sw.lock.Lock()
@@ -136,13 +130,11 @@ func (sw *SeqWriter) Close(streamid uint16) (err error) {
 	sw.closed = true
 	sw.Window.Close()
 
-	if sw.sendmsg {
-		// send fin if not closed yet.
-		b := NewFrameNoParam(MSG_FIN, streamid)
-		err = sw.sess.WriteStream(streamid, b)
-		if err == io.EOF {
-			err = nil
-		}
+	// send fin if not closed yet.
+	b := NewFrameNoParam(MSG_FIN, streamid)
+	err = sw.sess.WriteStream(streamid, b)
+	if err == io.EOF {
+		err = nil
 	}
 	return
 }

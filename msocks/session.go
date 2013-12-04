@@ -16,8 +16,8 @@ const (
 	CHANLEN        = 128
 	WIN_SIZE       = 100
 	ACKDELAY       = 100 * time.Millisecond
-	HALFCLOSE      = 20 * time.Second
-	PINGTIME       = 10 * time.Second
+	HALFCLOSE      = 20000 * time.Millisecond
+	PINGTIME       = 10000 * time.Millisecond
 	PINGRANDOM     = 3000
 	TIMEOUT_COUNT  = 4
 	GAMEOVER_COUNT = 60
@@ -270,7 +270,14 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	streamid := f.GetStreamid()
 	c, ok := s.ports[streamid]
 	if !ok {
-		logger.Errf("%p(%d) not exist.", s, streamid)
+		// logger.Errf("%p(%d) not exist.", s, streamid)
+		s.ports[streamid] = nil
+		time.AfterFunc(HALFCLOSE, func() {
+			s.plock.Lock()
+			defer s.plock.Unlock()
+			delete(s.ports, streamid)
+		})
+
 		buf := NewFrameNoParam(MSG_RST, streamid)
 		_, err := s.Write(buf)
 		return err == nil
@@ -282,6 +289,9 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	b = c.SendFrame(f)
 	if !b {
 		logger.Errf("%p(%d) fulled or closed.", s, streamid)
+		if c.Close() != nil {
+			return false
+		}
 		buf := NewFrameNoParam(MSG_RST, streamid)
 		_, err := s.Write(buf)
 		if err != nil {

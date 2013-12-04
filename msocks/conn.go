@@ -185,7 +185,6 @@ func (c *Conn) Run() {
 		case *FrameFin:
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
-			c.SeqWriter.DontSend()
 			return
 		}
 	}
@@ -230,15 +229,15 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 }
 
 func (c *Conn) Close() (err error) {
+	c.SeqWriter.Close(c.streamid)
 	c.removefunc.Do(func() {
-		c.SeqWriter.Close(c.streamid)
 		c.Pipe.Close()
 		err := c.sess.RemovePorts(c.streamid)
 		if err != nil {
 			logger.Err(err)
 		}
 		c.ChanFrameSender.Close()
-		logger.Infof("connection %p(%d) close all.", c.sess, c.streamid)
+		logger.Infof("connection %p(%d) closed.", c.sess, c.streamid)
 	})
 	return
 }

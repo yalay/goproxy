@@ -172,7 +172,9 @@ func run_httproxy() {
 		return
 	}
 
-	err = http.ListenAndServe(listenaddr, NewProxy(dialer, ndialer))
+	mux := http.NewServeMux()
+	NewMsocksManager(ndialer).Register(mux)
+	err = http.ListenAndServe(listenaddr, NewProxy(dialer, mux))
 	if err != nil {
 		logger.Err(err)
 	}

@@ -54,7 +54,7 @@ func (p *PingPong) Pong() {
 
 func (p *PingPong) Run() {
 	for {
-		timeout := time.After(4 * PINGTIME)
+		timeout := time.After(TIMEOUT_COUNT * PINGTIME)
 		select {
 		case <-timeout:
 			logger.Warningf("pingpong timeout: %p.", p.w)
@@ -68,8 +68,8 @@ func (p *PingPong) Run() {
 				return
 			}
 
-			pingtime := PINGTIME + time.Duration(rand.Intn(10)-5)*time.Second
-			logger.Debugf("pingtime: %d", pingtime/time.Second)
+			pingtime := PINGTIME + time.Duration(rand.Intn(2*PINGRANDOM)-PINGRANDOM)*time.Millisecond
+			logger.Debugf("pingtime: %d", pingtime/time.Millisecond)
 			time.Sleep(pingtime)
 			p.Pong()
 		}

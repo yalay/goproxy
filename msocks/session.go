@@ -16,9 +16,11 @@ const (
 	CHANLEN        = 128
 	WIN_SIZE       = 100
 	ACKDELAY       = 100 * time.Millisecond
-	PINGTIME       = 15 * time.Second
-	HALFCLOSE      = 75 * time.Second
-	GAMEOVER_COUNT = 40
+	HALFCLOSE      = 20 * time.Second
+	PINGTIME       = 10 * time.Second
+	PINGRANDOM     = 3000
+	TIMEOUT_COUNT  = 4
+	GAMEOVER_COUNT = 60
 	DIAL_TIMEOUT   = 30 * time.Second
 	LOOKUP_TIMEOUT = 60 * time.Second
 )
@@ -39,7 +41,7 @@ func init() {
 
 type FrameSender interface {
 	SendFrame(Frame) bool
-	CloseAll()
+	Close() error
 }
 
 type Session struct {
@@ -75,6 +77,8 @@ func (s *Session) GetPorts() (ports map[uint16]*Conn) {
 		switch c := fs.(type) {
 		case *Conn:
 			ports[i] = c
+		case nil:
+			ports[i] = nil
 		}
 	}
 	return ports
@@ -118,7 +122,9 @@ func (s *Session) Close() (err error) {
 	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
-		v.CloseAll()
+		if v != nil {
+			v.Close()
+		}
 	}
 	return
 }
@@ -160,11 +166,15 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 	_, ok := s.ports[streamid]
-	if ok {
-		delete(s.ports, streamid)
-	} else {
-		err = fmt.Errorf("streamid(%d) not exist.", streamid)
+	if !ok {
+		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
+	s.ports[streamid] = nil
+	time.AfterFunc(HALFCLOSE, func() {
+		s.plock.Lock()
+		defer s.plock.Unlock()
+		delete(s.ports, streamid)
+	})
 	return
 }
 
@@ -226,7 +236,7 @@ func (s *Session) on_rst(ft *FrameRst) {
 		return
 	}
 	s.RemovePorts(ft.Streamid)
-	c.CloseAll()
+	c.Close()
 }
 
 func (s *Session) on_dns(ft *FrameDns) {
@@ -256,22 +266,25 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	c, ok := s.ports[streamid]
 	if !ok {
 		logger.Errf("%p(%d) not exist.", s, streamid)
-		b := NewFrameNoParam(MSG_RST, streamid)
-		_, err := s.Write(b)
+		buf := NewFrameNoParam(MSG_RST, streamid)
+		_, err := s.Write(buf)
 		return err == nil
+	}
+	if c == nil {
+		return true
 	}
 
 	b = c.SendFrame(f)
 	if !b {
 		logger.Errf("%p(%d) fulled or closed.", s, streamid)
-		b := NewFrameNoParam(MSG_RST, streamid)
-		_, err := s.Write(b)
+		buf := NewFrameNoParam(MSG_RST, streamid)
+		_, err := s.Write(buf)
 		if err != nil {
 			return false
 		}
 		return s.RemovePorts(streamid) == nil
 	}
-	return
+	return true
 }
 
 func (s *Session) Run() {

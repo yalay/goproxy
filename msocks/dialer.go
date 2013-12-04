@@ -163,13 +163,13 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 
 	if err != nil {
 		sess.RemovePorts(streamid)
-		ch.CloseAll()
+		ch.Close()
 		return
 	}
 
 	c := NewConn(streamid, sess, address)
 	sess.PutIntoId(streamid, c)
-	ch.CloseAll()
+	ch.Close()
 	logger.Noticef("new conn: %p(%d) => %s.",
 		sess, streamid, address)
 	return c, nil
@@ -198,7 +198,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 
 	fr := ch.RecvWithTimeout(LOOKUP_TIMEOUT)
 	sess.RemovePorts(streamid)
-	ch.CloseAll()
+	ch.Close()
 
 	switch frt := fr.(type) {
 	default:

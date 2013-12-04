@@ -53,9 +53,8 @@ func (d *DelayCnt) Add() {
 }
 
 type Pipe struct {
-	Closed bool
-	pr     *io.PipeReader
-	pw     *io.PipeWriter
+	pr *io.PipeReader
+	pw *io.PipeWriter
 }
 
 func NewPipe() (p *Pipe) {
@@ -81,7 +80,6 @@ func (p *Pipe) Write(data []byte) (n int, err error) {
 }
 
 func (p *Pipe) Close() (err error) {
-	p.Closed = true
 	p.pr.Close()
 	p.pw.Close()
 	return
@@ -117,7 +115,7 @@ func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
 	return
 }
 
-func (c ChanFrameSender) CloseAll() {
+func (c ChanFrameSender) Close() (err error) {
 	defer func() { recover() }()
 	close(c)
 	return
@@ -150,11 +148,12 @@ func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
 }
 
 func (c *Conn) Run() {
+	defer c.Close()
+
 	var err error
 	for {
 		f, ok := <-c.ChanFrameSender
 		if !ok {
-			c.CloseAll()
 			return
 		}
 
@@ -162,24 +161,21 @@ func (c *Conn) Run() {
 		switch ft := f.(type) {
 		default:
 			logger.Err("unexpected package")
-			c.CloseAll()
 			return
 		case *FrameData:
-			c.DelayCnt.Add()
 			logger.Infof("%p(%d) recved %d bytes from remote.",
 				c.sess, ft.Streamid, len(ft.Data))
+			c.DelayCnt.Add()
 			_, err = c.Pipe.Write(ft.Data)
 			switch err {
 			case io.EOF:
 				logger.Errf("%p(%d) buf is closed.",
 					c.sess, c.streamid)
-				c.CloseAll()
 				return
 			case nil:
 			default:
 				logger.Errf("%p(%d) buf is full.",
 					c.sess, c.streamid)
-				c.CloseAll()
 				return
 			}
 		case *FrameAck:
@@ -187,14 +183,9 @@ func (c *Conn) Run() {
 			logger.Debugf("remote readed %d, window size maybe: %d.",
 				ft.Window, n)
 		case *FrameFin:
-			c.Pipe.Close()
 			logger.Infof("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
-			if c.SeqWriter.Closed() {
-				c.remove_port()
-			} else {
-				c.DelayClose()
-			}
+			c.SeqWriter.DontSend()
 			return
 		}
 	}
@@ -238,50 +229,18 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 	return
 }
 
-func (c *Conn) remove_port() {
+func (c *Conn) Close() (err error) {
 	c.removefunc.Do(func() {
+		c.SeqWriter.Close(c.streamid)
+		c.Pipe.Close()
 		err := c.sess.RemovePorts(c.streamid)
 		if err != nil {
 			logger.Err(err)
 		}
-		c.ChanFrameSender.CloseAll()
+		c.ChanFrameSender.Close()
+		logger.Infof("connection %p(%d) close all.", c.sess, c.streamid)
 	})
-}
-
-func (c *Conn) Close() (err error) {
-	// make sure just one will enter this func
-	err = c.SeqWriter.Close(c.streamid)
-	if err == io.EOF {
-		// ok for already closed
-		err = nil
-	}
-	if err != nil {
-		return err
-	}
-
-	logger.Infof("connection %p(%d) closing from local.", c.sess, c.streamid)
-
-	if c.Pipe.Closed {
-		c.remove_port()
-	} else {
-		c.DelayClose()
-	}
 	return
-}
-
-func (c *Conn) DelayClose() {
-	time.AfterFunc(HALFCLOSE, func() {
-		c.SeqWriter.Close(c.streamid)
-		c.Pipe.Close()
-		c.remove_port()
-	})
-}
-
-func (c *Conn) CloseAll() {
-	c.SeqWriter.Close(c.streamid)
-	c.Pipe.Close()
-	c.remove_port()
-	logger.Infof("connection %p(%d) close all.", c.sess, c.streamid)
 }
 
 func (c *Conn) LocalAddr() net.Addr {
@@ -304,17 +263,9 @@ func (c *Conn) GetWindowSize() (n uint32) {
 
 func (c *Conn) GetStatus() (s string) {
 	if c.SeqWriter.Closed() {
-		if c.Pipe.Closed {
-			return "closed"
-		} else {
-			return "local"
-		}
+		return "closed"
 	} else {
-		if c.Pipe.Closed {
-			return "remote"
-		} else {
-			return "open"
-		}
+		return "open"
 	}
 }
 

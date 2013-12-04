@@ -167,12 +167,16 @@ func (p *Proxy) HandlerSession(w http.ResponseWriter, req *http.Request) {
   <body>
     LastPing: {{.GetLastPing}}
     <table>
-      <th>
-	<td>index</td><td>address</td><td>status</td><td>recvlen</td><td>window</td>
-      </th>
+      <tr>
+	<th>index</th><th>address</th><th>status</th><th>recvlen</th><th>window</th>
+      </tr>
       {{range $index, $conn := .GetPorts}}
       <tr>
-	<td>{{$index}}</td><td>{{$conn.Address}}</td><td>{{$conn.GetStatus}}</td><td>{{$conn.ChanFrameSender.Len}}</td><td>{{$conn.GetWindowSize}}</td>
+        {{with $conn}}
+          <td>{{$index}}</td><td>{{$conn.Address}}</td><td>{{$conn.GetStatus}}</td><td>{{$conn.ChanFrameSender.Len}}</td><td>{{$conn.GetWindowSize}}</td>
+        {{else}}
+          <td>{{$index}}</td><td>half closed</td>
+        {{end}}
       </tr>
       {{end}}
     </table>

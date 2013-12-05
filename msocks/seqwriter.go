@@ -79,11 +79,7 @@ func NewSeqWriter(sess *Session) (sw *SeqWriter) {
 
 func (sw *SeqWriter) Ack(streamid uint16, n int32) (err error) {
 	b := NewFrameOneInt(MSG_ACK, streamid, uint32(n))
-	err = sw.WriteStream(streamid, b)
-	if err == io.EOF {
-		err = nil
-	}
-	return
+	return sw.Write(b)
 }
 
 func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
@@ -100,24 +96,19 @@ func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
 		logger.Err(err)
 		return
 	}
-	err = sw.WriteStream(streamid, b)
-	if err == io.EOF {
-		err = nil
-	}
-	return
+	return sw.Write(b)
 }
 
-func (sw *SeqWriter) WriteStream(streamid uint16, b []byte) (err error) {
+func (sw *SeqWriter) Write(b []byte) (err error) {
 	sw.lock.Lock()
 	defer sw.lock.Unlock()
 	if sw.closed {
 		return io.EOF
 	}
-	err = sw.sess.WriteStream(streamid, b)
-	switch err {
-	case io.EOF, ErrStreamNotExist:
+	_, err = sw.sess.Write(b)
+	if err != nil {
 		sw.closed = true
-	default:
+		return
 	}
 	return
 }
@@ -134,7 +125,7 @@ func (sw *SeqWriter) Close(streamid uint16) (err error) {
 
 	// send fin if not closed yet.
 	b := NewFrameNoParam(MSG_FIN, streamid)
-	err = sw.sess.WriteStream(streamid, b)
+	_, err = sw.sess.Write(b)
 	if err == io.EOF {
 		err = nil
 	}

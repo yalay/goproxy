@@ -94,16 +94,12 @@ func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *Session) WriteStream(streamid uint16, b []byte) (err error) {
+func (s *Session) Write(b []byte) (n int, err error) {
 	s.PingPong.Reset()
-	if _, ok := s.ports[streamid]; !ok {
-		return ErrStreamNotExist
-	}
-	_, err = s.Write(b)
-	return
+	return s.WriteWithoutReset(b)
 }
 
-func (s *Session) Write(b []byte) (n int, err error) {
+func (s *Session) WriteWithoutReset(b []byte) (n int, err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
 	n, err = s.conn.Write(b)
@@ -185,8 +181,9 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	if ok {
 		logger.Err("frame sync stream id exist.")
 		b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_IDEXIST)
-		err := s.WriteStream(ft.Streamid, b)
+		_, err := s.Write(b)
 		if err != nil {
+			logger.Err(err)
 			return false
 		}
 		return true
@@ -203,7 +200,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 			logger.Err(err)
 
 			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_CONNFAILED)
-			err = s.WriteStream(ft.Streamid, b)
+			_, err = s.Write(b)
 			if err != nil {
 				logger.Err(err)
 				return
@@ -220,7 +217,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		s.PutIntoId(ft.Streamid, fs)
 
 		b := NewFrameNoParam(MSG_OK, ft.Streamid)
-		err = s.WriteStream(ft.Streamid, b)
+		_, err = s.Write(b)
 		if err != nil {
 			logger.Err(err)
 			return
@@ -259,7 +256,7 @@ func (s *Session) on_dns(ft *FrameDns) {
 		logger.Err(err)
 		return
 	}
-	err = s.WriteStream(ft.Streamid, b)
+	_, err = s.Write(b)
 	if err != nil {
 		logger.Err(err)
 	}
@@ -281,7 +278,7 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 		})
 
 		buf := NewFrameNoParam(MSG_RST, streamid)
-		_, err := s.Write(buf)
+		_, err := s.WriteWithoutReset(buf)
 		return err == nil
 	}
 	if c == nil {
@@ -295,7 +292,7 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 			return false
 		}
 		buf := NewFrameNoParam(MSG_RST, streamid)
-		_, err := s.Write(buf)
+		_, err := s.WriteWithoutReset(buf)
 		if err != nil {
 			return false
 		}

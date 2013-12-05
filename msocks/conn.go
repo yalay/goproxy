@@ -1,6 +1,7 @@
 package msocks
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -116,7 +117,11 @@ func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
 }
 
 func (c ChanFrameSender) Close() (err error) {
-	defer func() { recover() }()
+	defer func() {
+		if recover() != nil {
+			err = errors.New("channel closed")
+		}
+	}()
 	close(c)
 	return
 }
@@ -195,7 +200,11 @@ func (c *Conn) send_ack(n int) (err error) {
 	// send readed bytes back
 
 	err = c.SeqWriter.Ack(c.streamid, int32(n))
-	if err != nil {
+	switch err {
+	case io.EOF:
+		c.Close()
+	case nil:
+	default:
 		logger.Err(err)
 		c.Close()
 	}
@@ -231,9 +240,12 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 func (c *Conn) Close() (err error) {
 	c.removefunc.Do(func() {
-		c.SeqWriter.Close(c.streamid)
+		err := c.SeqWriter.Close(c.streamid)
+		if err != nil {
+			logger.Err(err)
+		}
 		c.Pipe.Close()
-		err := c.sess.RemovePorts(c.streamid)
+		err = c.sess.RemovePorts(c.streamid)
 		if err != nil {
 			logger.Err(err)
 		}

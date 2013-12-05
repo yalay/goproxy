@@ -14,7 +14,6 @@ import (
 type MsocksService struct {
 	userpass map[string]string
 	dialer   sutils.Dialer
-	sess     *Session
 }
 
 func LoadPassfile(filename string) (userpass map[string]string, err error) {
@@ -62,20 +61,19 @@ func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err e
 	}
 	ms = &MsocksService{dialer: dialer}
 
-	if passfile == "" {
-		return ms, nil
+	if passfile != "" {
+		ms.userpass, err = LoadPassfile(passfile)
 	}
-	ms.userpass, err = LoadPassfile(passfile)
 	return
 }
 
-func (ms *MsocksService) on_conn(network, address string, streamid uint16) (fs FrameSender, err error) {
+func (ms *MsocksService) on_conn(sess *Session, address string, streamid uint16) (fs FrameSender, err error) {
 	conn, err := ms.dialer.Dial("tcp", address)
 	if err != nil {
 		return
 	}
 
-	c := NewConn(streamid, ms.sess, address)
+	c := NewConn(streamid, sess, address)
 	go sutils.CopyLink(conn, c)
 	return c, nil
 }
@@ -128,11 +126,11 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 		return
 	}
 
-	ms.sess = NewSession(conn)
-	ms.sess.on_conn = ms.on_conn
-	ms.sess.Run()
-	logger.Noticef("server session quit: %s => %s.",
-		conn.RemoteAddr(), conn.LocalAddr())
+	sess := NewSession(conn)
+	sess.on_conn = ms.on_conn
+	sess.Run()
+	logger.Noticef("server session %p quit: %s => %s.",
+		sess, conn.RemoteAddr(), conn.LocalAddr())
 }
 
 func (ms *MsocksService) Serve(listener net.Listener) (err error) {

@@ -59,6 +59,7 @@ func (w *Window) Release(num uint32) (n uint32) {
 	}
 	n = w.win
 	w.c.Broadcast()
+	logger.Debugf("window released num(%d), final %d", num, w.win)
 	return
 }
 
@@ -88,7 +89,6 @@ func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
 	}
 	// check for window
 	if sw.Acquire() == 0 {
-		// that mean closed
 		return io.EOF
 	}
 	b, err := NewFrameData(streamid, data)
@@ -108,13 +108,14 @@ func (sw *SeqWriter) Write(b []byte) (err error) {
 	_, err = sw.sess.Write(b)
 	if err != nil {
 		sw.closed = true
-		return
 	}
+	logger.Debugf("seqwriter write len(%d), result %s.", len(b), err)
 	return
 }
 
 // TODO: remove closed?
 func (sw *SeqWriter) Close(streamid uint16) (err error) {
+	logger.Debug("seqwriter close.")
 	sw.lock.Lock()
 	defer sw.lock.Unlock()
 	if sw.closed {

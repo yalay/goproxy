@@ -172,15 +172,8 @@ func (c *Conn) Run() {
 				c.sess, ft.Streamid, len(ft.Data))
 			c.DelayCnt.Add()
 			_, err = c.Pipe.Write(ft.Data)
-			switch err {
-			case io.EOF:
-				logger.Errf("%p(%d) buf is closed.",
-					c.sess, c.streamid)
-				return
-			case nil:
-			default:
-				logger.Errf("%p(%d) buf is full.",
-					c.sess, c.streamid)
+			if err != nil {
+				logger.Err(err)
 				return
 			}
 		case *FrameAck:
@@ -223,7 +216,6 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		}
 
 		err = c.SeqWriter.Data(c.streamid, data[:size])
-		// write closed, so we don't care window too much.
 		if err != nil {
 			logger.Err(err)
 			return
@@ -271,14 +263,6 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 func (c *Conn) GetWindowSize() (n uint32) {
 	return c.SeqWriter.win
-}
-
-func (c *Conn) GetStatus() (s string) {
-	if c.SeqWriter.Closed() {
-		return "closed"
-	} else {
-		return "open"
-	}
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {

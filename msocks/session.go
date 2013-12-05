@@ -55,7 +55,7 @@ type Session struct {
 	next_id uint16
 	ports   map[uint16]FrameSender
 
-	on_conn func(string, string, uint16) (FrameSender, error)
+	on_conn func(*Session, string, uint16) (FrameSender, error)
 
 	PingPong
 }
@@ -96,6 +96,7 @@ func (s *Session) RemoteAddr() net.Addr {
 
 func (s *Session) Write(b []byte) (n int, err error) {
 	s.PingPong.Reset()
+	logger.Debug("reset pingpong.")
 	return s.WriteWithoutReset(b)
 }
 
@@ -103,11 +104,11 @@ func (s *Session) WriteWithoutReset(b []byte) (n int, err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
 	n, err = s.conn.Write(b)
-	switch {
-	case err == nil:
-	case err.Error() == errClosing:
-		return 0, io.EOF
-	default:
+	if err.Error() == errClosing {
+		err = io.EOF
+	}
+	logger.Debugf("sess %p write len(%d), result %s.", s, len(b), err)
+	if err != nil {
 		return
 	}
 	if n != len(b) {
@@ -144,33 +145,31 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	}
 	id = s.next_id
 	s.next_id += 1
-	logger.Debugf("put into next id(%d): %p.", id, fs)
+	logger.Debugf("put into next id %p(%d): %p.", s, id, fs)
 
 	s.ports[id] = fs
 	return
 }
 
 func (s *Session) PutIntoId(id uint16, fs FrameSender) {
-	logger.Debugf("put into id(%d): %p.", id, fs)
-	s.plock.Lock()
-	defer s.plock.Unlock()
-
+	logger.Debugf("put into id %p(%d): %p.", s, id, fs)
 	s.ports[id] = fs
 	return
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
-	logger.Noticef("remove ports: %p(%d).", s, streamid)
-	logger.Stack()
 	_, ok := s.ports[streamid]
 	if !ok {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	s.ports[streamid] = nil
+	logger.Noticef("set %p(%d) => nil.", s, streamid)
+	logger.Stack()
 	time.AfterFunc(HALFCLOSE, func() {
 		s.plock.Lock()
 		defer s.plock.Unlock()
 		delete(s.ports, streamid)
+		logger.Noticef("remove ports %p(%d).", s, streamid)
 	})
 	return
 }
@@ -193,8 +192,9 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 
 	go func() {
 		// TODO: timeout
-		logger.Debugf("client(%p) try to connect: %s.", s, ft.Address)
-		fs, err := s.on_conn("tcp", ft.Address, ft.Streamid)
+		logger.Debugf("%p(%d) try to connect: %s.",
+			s, ft.Streamid, ft.Address)
+		fs, err := s.on_conn(s, ft.Address, ft.Streamid)
 		if err != nil {
 			logger.Err(err)
 
@@ -221,7 +221,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 			logger.Err(err)
 			return
 		}
-		logger.Noticef("connected %p(%d) => %s.",
+		logger.Noticef("%p(%d) connected %s.",
 			s, ft.Streamid, ft.Address)
 		return
 	}()
@@ -236,6 +236,7 @@ func (s *Session) on_rst(ft *FrameRst) {
 	if !ok {
 		return
 	}
+	logger.Debugf("reset %p(%d), sender %p.", s, ft.Streamid, c)
 	delete(s.ports, ft.Streamid)
 	if c != nil {
 		c.Close()

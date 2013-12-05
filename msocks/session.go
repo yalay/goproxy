@@ -104,7 +104,7 @@ func (s *Session) WriteWithoutReset(b []byte) (n int, err error) {
 	s.flock.Lock()
 	defer s.flock.Unlock()
 	n, err = s.conn.Write(b)
-	if err.Error() == errClosing {
+	if err != nil && err.Error() == errClosing {
 		err = io.EOF
 	}
 	logger.Debugf("sess %p write len(%d), result %s.", s, len(b), err)

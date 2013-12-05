@@ -29,6 +29,14 @@ func NewDialer(dialer sutils.Dialer, serveraddr string,
 	return
 }
 
+func (d *Dialer) Cutoff() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	if d.sess != nil {
+		d.sess.Close()
+	}
+}
+
 func (d *Dialer) createConn() (conn net.Conn, err error) {
 	logger.Noticef("create connect, serveraddr: %s.",
 		d.serveraddr)

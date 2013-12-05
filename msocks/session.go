@@ -161,8 +161,7 @@ func (s *Session) PutIntoId(id uint16, fs FrameSender) {
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
 	logger.Noticef("remove ports: %p(%d).", s, streamid)
-	s.plock.Lock()
-	defer s.plock.Unlock()
+	logger.Stack()
 	_, ok := s.ports[streamid]
 	if !ok {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)

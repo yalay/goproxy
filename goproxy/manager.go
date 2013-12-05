@@ -25,6 +25,7 @@ func (mm *MsocksManager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/mem", mm.HandlerMemory)
 	mux.HandleFunc("/stack", mm.HandlerGoroutine)
 	mux.HandleFunc("/sess", mm.HandlerSession)
+	mux.HandleFunc("/cutoff", mm.HandlerCutoff)
 }
 
 func (mm *MsocksManager) HandlerMemory(w http.ResponseWriter, req *http.Request) {
@@ -94,4 +95,9 @@ func (mm *MsocksManager) HandlerSession(w http.ResponseWriter, req *http.Request
 	if err != nil {
 		logger.Err(err)
 	}
+}
+
+func (mm *MsocksManager) HandlerCutoff(w http.ResponseWriter, req *http.Request) {
+	mm.ndialer.Cutoff()
+	return
 }

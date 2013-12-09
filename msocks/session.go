@@ -125,6 +125,7 @@ func (s *Session) Close() (err error) {
 			v.Close()
 		}
 	}
+	logger.Warningf("close done for session: %p.", len(s.ports), s)
 	return
 }
 

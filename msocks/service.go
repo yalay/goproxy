@@ -53,7 +53,7 @@ QUIT:
 	return
 }
 
-func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err error) {
+func NewService(auth map[string]string, dialer sutils.Dialer) (ms *MsocksService, err error) {
 	if dialer == nil {
 		err = errors.New("empty dialer")
 		logger.Err(err)
@@ -61,8 +61,8 @@ func NewService(passfile string, dialer sutils.Dialer) (ms *MsocksService, err e
 	}
 	ms = &MsocksService{dialer: dialer}
 
-	if passfile != "" {
-		ms.userpass, err = LoadPassfile(passfile)
+	if auth != nil {
+		ms.userpass = auth
 	}
 	return
 }

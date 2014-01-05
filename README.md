@@ -6,24 +6,13 @@ goproxy是基于go写的隧道代理服务器。主要分为两个部分，客�
 
 goproxy拥有众多参数，以下为参数解释。
 
-* mode: 工作在何种模式下。
-* cipher: 何种加密算法。目前支持aes/des/tripledes/rc4，默认aes。
-* keyfile: 密钥文件。
-* listen: 所监听的端口。默认:5233。
-* username: 连接到服务器的用户名（仅在客户端模式有效）。
-* password: 连接到服务器的密码（仅在客户端模式有效）。
-* passfile: 验证客户端身份的密码文件（仅在服务端模式有效）。
-* black: 黑名单文件。
-* logfile: 日志文件。默认输出到console。
-* loglevel: 日志级别。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG，默认WARNING。
+* config: 配置文件路径。
 
 # server模式 #
 
-服务器模式一般需要定义密码文件以验证客户端身份。如果没有定义，则允许匿名使用。
+服务器模式一般需要定义用户名/密码对以验证客户端身份。如果没有定义，则允许匿名使用。
 
-## 密码文件 ##
-
-密码文件使用文本格式，每个用户一行，以:分割。第一个:前的为用户名，后面直到换行为止是密码。因此用户名中不得带有:。
+用户名/密码对在配置文件的auth项目下定义。
 
 # socks5模式 #
 
@@ -59,38 +48,73 @@ http模式提供http协议的代理。推荐使用。
 
 ## 配置和路径 ##
 
-默认情况下，init脚本读取/etc/default/goproxy作为配置。刚安装的时候，RUNDAEMON关闭，直到配置完成后改为1，goproxy才可以启动。
+系统默认使用/etc/goproxy/config.json作为配置文件，这一路径可以通过-config来修改。
+
+配置文件内使用json格式，其中可以指定以下内容：
+
+* mode: 运行模式，可以为server/socks5/http。
+* listen: 监听地址，一般是:port，表示监听所有interface的该端口。
+* server: 服务地址，在socks5/http模式下需要，表示需要连接的目标地址。
+* logfile: log文件路径，留空表示输出到stdout。
+* loglevel: 日志级别。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG，默认WARNING。
+* cipher: 加密算法，可以为aes/des/tripledes/rc4，默认aes。
+* keyfile: 密钥文件。
+* blackfile: 流量分离文件，socks/http模式下需要。
+* username: 连接用户名，socks/http模式下需要。
+* password: 连接密码，socks/http模式下需要。
+* auth: 认证用户名/密码对，server模式下需要。
+
+另外需要注意，/etc/default/goproxy下有一个RUNDAEMON。刚安装的时候，RUNDAEMON关闭，直到配置完成后改为1，goproxy才可以启动。
 
 DAEMON_OPTS里面需要指名运行goproxy所需的参数。注意goproxy自身不算参数，不需要写在里面。
 
-系统自带的black文件在/usr/share/goproxy/routes.list.gz，但是如果需要用，必须在DAEMON_OPTS中以参数的形式显式指定。
+系统自带的black文件在/usr/share/goproxy/routes.list.gz。
 
 ## key文件的生成 ##
 
 可以使用以下语句生成。文件生成后，在服务器端和客户端使用keyfile指定即可。
 
-	dd if=/dev/random of=key count=32 bs=1
+	dd if=/dev/random of=key count=16 bs=1
 	chmod 400 key
 
-其中aes需要32字节的随机数，des/tripledes需要24字节，rc4需要16字节。当然，在默认情况下，debian打出的包会在安装时自动生成一个/etc/goproxy/key（如果没有的话）。
+其中aes/des/tripledes/rc4需要16字节的随机数。当然，在默认情况下，debian打出的包会在安装时自动生成一个/etc/goproxy/key（如果没有的话）。
 
 ## 配置样例 ##
 
-服务器端/etc/default/goproxy下。
+服务器端。
 
-	RUNDAEMON=1
-	LOGFILE="/var/log/$NAME.log"
-	RUNMODE="server"
-	KEYFILE="/etc/goproxy/key"
-	DAEMON_OPTS="-passfile=/etc/goproxy/users.pwd"
+	{
+		"mode": "server",
+		"listen": ":5233",
+	 
+		"logfile": "/var/log/goproxy.log",
+		"loglevel": "WARNING",
+	 
+		"cipher": "aes",
+		"keyfile": "/etc/goproxy/key",
+	 
+		"passwd": {
+			"shell": "123"
+		}
+	}
 
-客户端/etc/default/goproxy下。
+客户端。
 
-	RUNDAEMON=1
-	LOGFILE="/var/log/$NAME.log"
-	RUNMODE="http"
-	KEYFILE="/etc/goproxy/key"
-	DAEMON_OPTS="-black=/usr/share/goproxy/routes.list.gz -username=usr -password=pwd srv:5233"
+	{
+		"mode": "http",
+		"listen": ":5233",
+		"server": "srv:5233",
+	 
+		"logfile": "/var/log/goproxy.log",
+		"loglevel": "WARNING",
+	 
+		"cipher": "aes",
+		"keyfile": "/etc/goproxy/key",
+		"blackfile": "/usr/share/goproxy/routes.list.gz",
+	 
+		"username": "shell",
+		"password": "123"
+	}
 
 # msocks协议 #
 
@@ -100,7 +124,7 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 
 # 授权 #
 
-    Copyright (C) 2012-2013 Shell Xu
+    Copyright (C) 2012-2014 Shell Xu
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

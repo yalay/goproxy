@@ -1,0 +1,18 @@
+{
+    "mode": "http",
+    "listen": ":5233",
+    "server": "srv:5233",
+
+    "logfile": "/var/log/goproxy.log",
+    "loglevel": "WARNING",
+
+    "cipher": "aes",
+    "keyfile": "/etc/goproxy/key",
+    "blackfile": "/usr/share/goproxy/routes.list.gz",
+
+    "username": "shell",
+    "password": "123",
+    "auth": {
+	"shell": "123"
+    }
+}

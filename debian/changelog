@@ -1,3 +1,9 @@
+goproxy (2.0.7) unstable; urgency=medium
+
+  * config with json.
+
+ -- Shell Xu <shell909090@gmail.com>  Sun, 05 Jan 2014 15:23:18 +0800
+
 goproxy (2.0.6) unstable; urgency=low
 
   * fix issue which will crush system when close main connection with somebody dial.

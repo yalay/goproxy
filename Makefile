@@ -29,6 +29,7 @@ install: build
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/
 	install -d $(DESTDIR)/etc/goproxy/
 	install -m 644 debian/resolv.conf $(DESTDIR)/etc/goproxy/
+	install -m 644 debian/config.json $(DESTDIR)/etc/goproxy/
 
 press-clean:
 	rm -f server.log client.log httproxy.log

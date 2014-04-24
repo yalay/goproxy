@@ -1,8 +1,9 @@
 language: go
 go:
-  - 1.1
+  - 1.2
   - tip
 script: make build
+install: go get github.com/op/go-logging
 
 notifications:
   email:

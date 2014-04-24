@@ -17,11 +17,13 @@
 package dns
 
 import (
-	"github.com/shell909090/goproxy/logging"
+	"github.com/op/go-logging"
 	"math/rand"
 	"net"
 	"time"
 )
+
+var log = logging.MustGetLogger("")
 
 func check_black(msg *dnsMsg, name string, qtype uint16) bool {
 	if qtype != dnsTypeA {
@@ -36,11 +38,11 @@ func check_black(msg *dnsMsg, name string, qtype uint16) bool {
 		return false
 	}
 	if len(addrs) == 0 {
-		logging.Debug("no such host recved")
+		log.Debug("no such host recved")
 		return true
 	}
 	if cfg.CheckBlack(addrs) {
-		logging.Debug("fake dns resolv hited.")
+		log.Debug("fake dns resolv hited.")
 		return true
 	}
 	return false

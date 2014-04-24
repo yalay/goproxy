@@ -3,19 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/ipfilter"
-	"github.com/shell909090/goproxy/logging"
+	stdlog "log"
+	"os"
+	// "github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
 )
+
+var log = logging.MustGetLogger("package.example")
 
 var cipher string
 var keyfile string
 var username string
 var password string
 var blackfile string
-var logger logging.Logger
 
 // TODO: fit two mode
 
@@ -33,31 +37,36 @@ func init() {
 	flag.StringVar(&loglevel, "loglevel", "WARNING", "log level")
 	flag.Parse()
 
-	lv, err := logging.GetLevelByName(loglevel)
-	if err != nil {
-		panic(err.Error())
+	var err error
+	file := os.Stderr
+	if logfile != "" {
+		file, err = os.Open(logfile)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-	err = logging.SetupDefault(logfile, lv)
-	if err != nil {
-		panic(err.Error())
-	}
+	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lshortfile)
+	logging.SetBackend(logBackend)
 
-	logger, err = logging.NewFileLogger("default", -1, "glookup")
+	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
+
+	lv, err := logging.LogLevel(loglevel)
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
+	logging.SetLevel(lv, "")
 }
 
 func main() {
 	if len(flag.Args()) < 2 {
-		logger.Err("args not enough")
+		log.Error("args not enough")
 		return
 	}
 	serveraddr := flag.Args()[0]
 
 	blacklist, err := ipfilter.ReadIPListFile("routes.list.gz")
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 
@@ -66,11 +75,11 @@ func main() {
 	if len(keyfile) > 0 {
 		dialer, err = cryptconn.NewDialer(dialer, cipher, keyfile)
 		if err != nil {
-			logger.Err("crypto not work, cipher or keyfile wrong.")
+			log.Error("crypto not work, cipher or keyfile wrong.")
 			return
 		}
 	} else {
-		logger.Warning("no vaild keyfile.")
+		log.Warning("no vaild keyfile.")
 	}
 
 	ndialer, err := msocks.NewDialer(dialer, serveraddr, username, password)
@@ -81,7 +90,7 @@ func main() {
 	for _, hostname := range flag.Args()[1:] {
 		addrs, err := ndialer.LookupIP(hostname)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 		fmt.Println(hostname)

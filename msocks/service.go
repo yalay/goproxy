@@ -17,11 +17,11 @@ type MsocksService struct {
 }
 
 func LoadPassfile(filename string) (userpass map[string]string, err error) {
-	logger.Noticef("load passfile from file %s.", filename)
+	log.Notice("load passfile from file %s.", filename)
 
 	file, err := os.Open(filename)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	defer file.Close()
@@ -43,20 +43,20 @@ QUIT:
 		f := strings.SplitN(line, ":", 2)
 		if len(f) < 2 {
 			err = fmt.Errorf("format wrong: %s", line)
-			logger.Err(err)
+			log.Error("%s", err)
 			return nil, err
 		}
 		userpass[strings.Trim(f[0], "\r\n ")] = strings.Trim(f[1], "\r\n ")
 	}
 
-	logger.Infof("userinfo loaded %d record(s).", len(userpass))
+	log.Info("userinfo loaded %d record(s).", len(userpass))
 	return
 }
 
 func NewService(auth map[string]string, dialer sutils.Dialer) (ms *MsocksService, err error) {
 	if dialer == nil {
 		err = errors.New("empty dialer")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	ms = &MsocksService{dialer: dialer}
@@ -81,26 +81,26 @@ func (ms *MsocksService) on_conn(sess *Session, address string, streamid uint16)
 func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 	f, err := ReadFrame(stream)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return false
 	}
 
 	ft, ok := f.(*FrameAuth)
 	if !ok {
-		logger.Err("unexpected package type")
+		log.Error("unexpected package type")
 		return false
 	}
 
-	logger.Noticef("auth with username: %s, password: %s.",
+	log.Notice("auth with username: %s, password: %s.",
 		ft.Username, ft.Password)
 	if ms.userpass != nil {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
-			logger.Err("auth failed.")
+			log.Error("auth failed.")
 			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_AUTH)
 			_, err = stream.Write(b)
 			if err != nil {
-				logger.Err(err)
+				log.Error("%s", err)
 				return false
 			}
 			return false
@@ -109,7 +109,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 	b := NewFrameNoParam(MSG_OK, ft.Streamid)
 	_, err = stream.Write(b)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return false
 	}
 
@@ -118,7 +118,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 }
 
 func (ms *MsocksService) Handler(conn net.Conn) {
-	logger.Noticef("connection come from: %s => %s.",
+	log.Notice("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
 	if !ms.on_auth(conn) {
@@ -129,7 +129,7 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	sess := NewSession(conn)
 	sess.on_conn = ms.on_conn
 	sess.Run()
-	logger.Noticef("server session %p quit: %s => %s.",
+	log.Notice("server session %p quit: %s => %s.",
 		sess, conn.RemoteAddr(), conn.LocalAddr())
 }
 
@@ -139,7 +139,7 @@ func (ms *MsocksService) Serve(listener net.Listener) (err error) {
 	for {
 		conn, err = listener.Accept()
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 		go func() {

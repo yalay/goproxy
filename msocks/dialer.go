@@ -38,19 +38,19 @@ func (d *Dialer) Cutoff() {
 }
 
 func (d *Dialer) createConn() (conn net.Conn, err error) {
-	logger.Noticef("create connect, serveraddr: %s.",
+	log.Notice("create connect, serveraddr: %s.",
 		d.serveraddr)
 	conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 
-	logger.Noticef("auth with username: %s, password: %s.",
+	log.Notice("auth with username: %s, password: %s.",
 		d.username, d.password)
 	b, err := NewFrameAuth(0, d.username, d.password)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	_, err = conn.Write(b)
@@ -66,7 +66,7 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 	switch ft := f.(type) {
 	default:
 		err = errors.New("unexpected package")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	case *FrameOK:
 		logger.Notice("auth ok.")
@@ -74,7 +74,7 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
 			ft.Errno)
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 
@@ -94,18 +94,18 @@ func (d *Dialer) createSession() (err error) {
 	for i := uint(0); i < RETRY_TIMES; i++ {
 		conn, err = d.createConn()
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			time.Sleep((1 << i) * time.Second)
 		} else {
 			break
 		}
 	}
 	if err != nil {
-		logger.Crit("can't connect to host, quit.")
+		log.Critical("can't connect to host, quit.")
 		return
 	}
 
-	logger.Noticef("create session.")
+	log.Notice("create session.")
 	d.sess = NewSession(conn)
 	d.sess.Ping()
 
@@ -136,7 +136,7 @@ func (d *Dialer) GetSess(create bool) (sess *Session) {
 
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess := d.GetSess(true)
-	logger.Infof("try dial: %s => %s.",
+	log.Info("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 
 	// lock streamid and put chan for it
@@ -178,13 +178,13 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	c := NewConn(streamid, sess, address)
 	sess.PutIntoId(streamid, c)
 	ch.Close()
-	logger.Noticef("new conn: %p(%d) => %s.",
+	log.Notice("new conn: %p(%d) => %s.",
 		sess, streamid, address)
 	return c, nil
 }
 
 func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
-	logger.Noticef("lookup ip: %s", hostname)
+	log.Notice("lookup ip: %s", hostname)
 	sess := d.GetSess(true)
 
 	// lock streamid and put chan for it
@@ -196,7 +196,7 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 
 	b, err := NewFrameOneString(MSG_DNS, streamid, hostname)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	_, err = sess.Write(b)
@@ -217,12 +217,12 @@ func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
 		err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
 			streamid, frt.Errno)
 	case *FrameAddr: // OK
-		logger.Infof("lookup ip ok.")
+		log.Info("lookup ip ok.")
 		ipaddr = frt.Ipaddr
 	}
 
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 	}
 	return
 }

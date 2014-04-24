@@ -4,20 +4,13 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"github.com/shell909090/goproxy/logging"
+	// "github.com/shell909090/goproxy/logging"
+	"github.com/op/go-logging"
 	"io"
 	"net"
 )
 
-var logger logging.Logger
-
-func init() {
-	var err error
-	logger, err = logging.NewFileLogger("default", -1, "socks")
-	if err != nil {
-		panic(err)
-	}
-}
+var log = logging.MustGetLogger("")
 
 func readLeadByte(reader io.Reader) (b []byte, err error) {
 	var c [1]byte
@@ -115,7 +108,7 @@ func GetConnect(reader *bufio.Reader) (hostname string, port uint16, err error) 
 
 	switch c {
 	case 0x01: // IP V4 address
-		logger.Debug("hostname in ipaddr mode.")
+		log.Debug("hostname in ipaddr mode.")
 		buf := make([]byte, 4)
 		_, err = io.ReadFull(reader, buf)
 		if err != nil {
@@ -124,18 +117,18 @@ func GetConnect(reader *bufio.Reader) (hostname string, port uint16, err error) 
 		ip := net.IPv4(buf[0], buf[1], buf[2], buf[3])
 		hostname = ip.String()
 	case 0x03: // DOMAINNAME
-		logger.Debug("hostname in domain mode.")
+		log.Debug("hostname in domain mode.")
 		hostname, err = readString(reader)
 		if err != nil {
 			return
 		}
 	case 0x04: // IP V6 address
 		err = errors.New("ipv6 not support yet")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	default:
 		err = errors.New("unknown type")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 

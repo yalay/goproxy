@@ -59,7 +59,7 @@ func (w *Window) Release(num uint32) (n uint32) {
 	}
 	n = w.win
 	w.c.Broadcast()
-	logger.Debugf("window released num(%d), final %d", num, w.win)
+	log.Debug("window released num(%d), final %d", num, w.win)
 	return
 }
 
@@ -93,7 +93,7 @@ func (sw *SeqWriter) Data(streamid uint16, data []byte) (err error) {
 	}
 	b, err := NewFrameData(streamid, data)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	return sw.Write(b)
@@ -109,7 +109,7 @@ func (sw *SeqWriter) Write(b []byte) (err error) {
 	if err != nil {
 		sw.closed = true
 	}
-	logger.Debugf("seqwriter write len(%d), result %s.", len(b), err)
+	log.Debug("seqwriter write len(%d), result %s.", len(b), err)
 	return
 }
 

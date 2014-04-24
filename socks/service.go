@@ -17,7 +17,7 @@ func NewService(dialer sutils.Dialer) (ss *SocksService) {
 }
 
 func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error) {
-	logger.Debugf("connection come from: %s => %s",
+	log.Debug("connection come from: %s => %s",
 		conn.RemoteAddr(), conn.LocalAddr())
 
 	reader := bufio.NewReader(conn)
@@ -37,10 +37,10 @@ func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error
 	SendHandshakeResponse(writer, method)
 	if method == 0xff {
 		err = errors.New("auth method wrong")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
-	logger.Debug("handshark ok")
+	log.Debug("handshark ok")
 
 	hostname, port, err := GetConnect(reader)
 	if err != nil {
@@ -48,7 +48,7 @@ func (ss *SocksService) SocksHandler(conn net.Conn) (dstconn net.Conn, err error
 		SendConnectResponse(writer, 0x01)
 		return
 	}
-	logger.Debugf("dst: %s:%d", hostname, port)
+	log.Debug("dst: %s:%d", hostname, port)
 
 	dstconn, err = ss.dialer.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	if err != nil {
@@ -67,7 +67,7 @@ func (ss *SocksService) Serve(listener net.Listener) (err error) {
 	for {
 		conn, err = listener.Accept()
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 		go func() {

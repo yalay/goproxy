@@ -4,17 +4,21 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
-	"github.com/shell909090/goproxy/logging"
+	// "github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/socks"
 	"github.com/shell909090/goproxy/sutils"
+	stdlog "log"
 	"net"
 	"net/http"
 	"os"
 )
+
+var log = logging.MustGetLogger("")
 
 type Config struct {
 	Mode   string
@@ -32,8 +36,6 @@ type Config struct {
 	Password string
 	Auth     map[string]string
 }
-
-var logger logging.Logger
 
 func run_server(cfg *Config) (err error) {
 	listener, err := net.Listen("tcp", cfg.Listen)
@@ -115,39 +117,6 @@ func run_httproxy(cfg *Config) (err error) {
 	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, mux))
 }
 
-// func init() {
-// 	var logfile string
-// 	var loglevel string
-
-// 	flag.StringVar(&runmode, "mode", "http", "server/socks5/http mode")
-// 	flag.StringVar(&cipher, "cipher", "aes", "aes/des/tripledes/rc4")
-// 	flag.StringVar(&keyfile, "keyfile", "", "key and iv file")
-// 	flag.StringVar(&listenaddr, "listen", ":5233", "listen address")
-// 	flag.StringVar(&username, "username", "", "username for connect")
-// 	flag.StringVar(&password, "password", "", "password for connect")
-// 	flag.StringVar(&passfile, "passfile", "", "password file")
-// 	flag.StringVar(&blackfile, "black", "", "blacklist file")
-
-// 	flag.StringVar(&logfile, "logfile", "", "log file")
-// 	flag.StringVar(&loglevel, "loglevel", "WARNING", "log level")
-// 	flag.Parse()
-
-// 	lv, err := logging.GetLevelByName(loglevel)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	err = logging.SetupDefault(logfile, lv)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-
-// 	logger, err = logging.NewFileLogger("default", -1, "goproxy")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// }
-
 func LoadConfig() (cfg Config, err error) {
 	var configfile string
 	flag.StringVar(&configfile, "config",
@@ -166,21 +135,23 @@ func LoadConfig() (cfg Config, err error) {
 		return
 	}
 
-	lv, err := logging.GetLevelByName(cfg.Loglevel)
-	if err != nil {
-		return
+	file = os.Stderr
+	if cfg.Logfile != "" {
+		file, err = os.Open(cfg.Logfile)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lshortfile)
+	logging.SetBackend(logBackend)
 
-	err = logging.SetupDefault(cfg.Logfile, lv)
+	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
+
+	lv, err := logging.LogLevel(cfg.Loglevel)
 	if err != nil {
-		return
+		panic(err.Error())
 	}
-
-	logger, err = logging.NewFileLogger("default", -1, "goproxy")
-	if err != nil {
-		return
-	}
-
+	logging.SetLevel(lv, "")
 	return
 }
 
@@ -191,7 +162,7 @@ func main() {
 		return
 	}
 
-	logger.Infof("%s mode start.", cfg.Mode)
+	log.Info("%s mode start.", cfg.Mode)
 	switch cfg.Mode {
 	case "server":
 		err = run_server(&cfg)
@@ -200,10 +171,10 @@ func main() {
 	case "http":
 		err = run_httproxy(&cfg)
 	default:
-		logger.Warning("not supported mode.")
+		log.Warning("not supported mode.")
 	}
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 	}
-	logger.Info("server stopped")
+	log.Info("server stopped")
 }

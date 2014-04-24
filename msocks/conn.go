@@ -165,23 +165,23 @@ func (c *Conn) Run() {
 		f.Debug()
 		switch ft := f.(type) {
 		default:
-			logger.Err("unexpected package")
+			log.Error("unexpected package")
 			return
 		case *FrameData:
-			logger.Infof("%p(%d) recved %d bytes from remote.",
+			log.Info("%p(%d) recved %d bytes from remote.",
 				c.sess, ft.Streamid, len(ft.Data))
 			c.DelayCnt.Add()
 			_, err = c.Pipe.Write(ft.Data)
 			if err != nil {
-				logger.Err(err)
+				log.Error("%s", err)
 				return
 			}
 		case *FrameAck:
 			n := c.SeqWriter.Release(ft.Window)
-			logger.Debugf("remote readed %d, window size maybe: %d.",
+			log.Debug("remote readed %d, window size maybe: %d.",
 				ft.Window, n)
 		case *FrameFin:
-			logger.Infof("connection %p(%d) closed from remote.",
+			log.Info("connection %p(%d) closed from remote.",
 				c.sess, c.streamid)
 			return
 		}
@@ -189,7 +189,7 @@ func (c *Conn) Run() {
 }
 
 func (c *Conn) send_ack(n int) (err error) {
-	logger.Debugf("%p(%d) send ack %d.", c.sess, c.streamid, n)
+	log.Debug("%p(%d) send ack %d.", c.sess, c.streamid, n)
 	// send readed bytes back
 
 	err = c.SeqWriter.Ack(c.streamid, int32(n))
@@ -198,7 +198,7 @@ func (c *Conn) send_ack(n int) (err error) {
 		c.Close()
 	case nil:
 	default:
-		logger.Err(err)
+		log.Error("%s", err)
 		c.Close()
 	}
 	return
@@ -217,16 +217,16 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 
 		err = c.SeqWriter.Data(c.streamid, data[:size])
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
-		logger.Debugf("%p(%d) send chunk size %d at %d.",
+		log.Debug("%p(%d) send chunk size %d at %d.",
 			c.sess, c.streamid, size, n)
 
 		data = data[size:]
 		n += int(size)
 	}
-	logger.Infof("%p(%d) send size %d.", c.sess, c.streamid, n)
+	log.Info("%p(%d) send size %d.", c.sess, c.streamid, n)
 	return
 }
 
@@ -234,15 +234,15 @@ func (c *Conn) Close() (err error) {
 	c.removefunc.Do(func() {
 		err := c.SeqWriter.Close(c.streamid)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 		}
 		c.Pipe.Close()
 		err = c.sess.RemovePorts(c.streamid)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 		}
 		c.ChanFrameSender.Close()
-		logger.Infof("connection %p(%d) closed.", c.sess, c.streamid)
+		log.Info("connection %p(%d) closed.", c.sess, c.streamid)
 	})
 	return
 }

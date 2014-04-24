@@ -31,7 +31,7 @@ func (mm *MsocksManager) Register(mux *http.ServeMux) {
 func (mm *MsocksManager) HandlerMemory(w http.ResponseWriter, req *http.Request) {
 	f, err := os.Create("mem.prof")
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		w.WriteHeader(500)
 		return
 	}
@@ -96,7 +96,7 @@ func (mm *MsocksManager) HandlerSession(w http.ResponseWriter, req *http.Request
 	}
 	err := mm.tmpl_sess.Execute(w, sess)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 	}
 }
 

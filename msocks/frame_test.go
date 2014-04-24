@@ -1,15 +1,10 @@
 package msocks
 
 import (
-	"../logging"
 	"bytes"
 	"net"
 	"testing"
 )
-
-func init() {
-	logging.SetupDefault("", logging.LOG_INFO)
-}
 
 func TestFrameOKRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{MSG_OK, 0x00, 0x00, 0x0A, 0x0A})

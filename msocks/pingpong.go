@@ -28,7 +28,7 @@ func (p *PingPong) Reset() {
 }
 
 func (p *PingPong) Ping() bool {
-	logger.Debugf("ping: %p.", p.w)
+	log.Debug("ping: %p.", p.w)
 	select {
 	case p.ch <- 1:
 	default:
@@ -43,12 +43,12 @@ func (p *PingPong) GetLastPing() (d time.Duration) {
 }
 
 func (p *PingPong) Pong() {
-	logger.Debugf("pong: %p.", p.w)
+	log.Debug("pong: %p.", p.w)
 	// use Write without trigger the reset
 	b := NewFrameNoParam(MSG_PING, 0)
 	_, err := p.w.Write(b)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 	}
 }
 
@@ -57,19 +57,19 @@ func (p *PingPong) Run() {
 		timeout := time.After(TIMEOUT_COUNT * PINGTIME)
 		select {
 		case <-timeout:
-			logger.Warningf("pingpong timeout: %p.", p.w)
+			log.Warning("pingpong timeout: %p.", p.w)
 			p.w.Close()
 			return
 		case <-p.ch:
 			p.cnt += 1
 			if p.cnt >= GAMEOVER_COUNT {
-				logger.Warning("pingpong gameover.")
+				log.Warning("pingpong gameover.")
 				p.w.Close()
 				return
 			}
 
 			pingtime := PINGTIME + time.Duration(rand.Intn(2*PINGRANDOM)-PINGRANDOM)*time.Millisecond
-			logger.Debugf("pingtime: %d", pingtime/time.Millisecond)
+			log.Debug("pingtime: %d", pingtime/time.Millisecond)
 			time.Sleep(pingtime)
 			p.Pong()
 		}

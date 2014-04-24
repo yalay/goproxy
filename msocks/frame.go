@@ -122,7 +122,7 @@ func (f *FrameBase) Unpack(r io.Reader) (err error) {
 }
 
 func (f *FrameBase) Debug() {
-	logger.Debugf("get package: type(%d), stream(%d), len(%d).",
+	log.Debug("get package: type(%d), stream(%d), len(%d).",
 		f.Type, f.Streamid, f.Length)
 }
 
@@ -283,7 +283,7 @@ func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 }
 
 func (f *FrameSyn) Debug() {
-	logger.Debugf("get package syn: stream(%d), len(%d), addr(%s).",
+	log.Debug("get package syn: stream(%d), len(%d), addr(%s).",
 		f.Streamid, f.Length, f.Address)
 }
 
@@ -306,7 +306,7 @@ func (f *FrameAck) Unpack(r io.Reader) (err error) {
 }
 
 func (f *FrameAck) Debug() {
-	logger.Debugf("get package ack: stream(%d), len(%d), window(%d).",
+	log.Debug("get package ack: stream(%d), len(%d), window(%d).",
 		f.Streamid, f.Length, f.Window)
 }
 
@@ -350,7 +350,7 @@ func (f *FrameDns) Unpack(r io.Reader) (err error) {
 }
 
 func (f *FrameDns) Debug() {
-	logger.Debugf("get package dns: stream(%d), len(%d), host(%s).",
+	log.Debug("get package dns: stream(%d), len(%d), host(%s).",
 		f.Streamid, f.Length, f.Hostname)
 }
 

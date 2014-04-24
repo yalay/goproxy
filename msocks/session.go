@@ -3,10 +3,12 @@ package msocks
 import (
 	"errors"
 	"fmt"
-	"github.com/shell909090/goproxy/logging"
+	"github.com/op/go-logging"
+	// "github.com/shell909090/goproxy/logging"
 	"io"
 	"math/rand"
 	"net"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -30,13 +32,14 @@ var errClosing = "use of closed network connection"
 var ErrStreamNotExist = errors.New("stream not exist.")
 
 var logger logging.Logger
+var log = logging.MustGetLogger("msocks")
 
 func init() {
-	var err error
-	logger, err = logging.NewFileLogger("default", -1, "msocks")
-	if err != nil {
-		panic(err)
-	}
+	// var err error
+	// logger, err = logging.NewFileLogger("default", -1, "msocks")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	rand.Seed(time.Now().UnixNano())
 }
@@ -66,7 +69,7 @@ func NewSession(conn net.Conn) (s *Session) {
 		ports: make(map[uint16]FrameSender, 0),
 	}
 	s.PingPong = *NewPingPong(s)
-	logger.Noticef("session %p created.", s)
+	log.Notice("session %p created.", s)
 	return
 }
 
@@ -96,7 +99,7 @@ func (s *Session) RemoteAddr() net.Addr {
 
 func (s *Session) Write(b []byte) (n int, err error) {
 	s.PingPong.Reset()
-	logger.Debug("reset pingpong.")
+	log.Debug("reset pingpong.")
 	return s.WriteWithoutReset(b)
 }
 
@@ -107,7 +110,7 @@ func (s *Session) WriteWithoutReset(b []byte) (n int, err error) {
 	if err != nil && err.Error() == errClosing {
 		err = io.EOF
 	}
-	logger.Debugf("sess %p write len(%d), result %s.", s, len(b), err)
+	log.Debug("sess %p write len(%d), result %s.", s, len(b), err)
 	if err != nil {
 		return
 	}
@@ -118,7 +121,7 @@ func (s *Session) WriteWithoutReset(b []byte) (n int, err error) {
 }
 
 func (s *Session) Close() (err error) {
-	logger.Warningf("close all(len:%d) for session: %p.", len(s.ports), s)
+	log.Warning("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	for _, v := range s.ports {
 		if v != nil {
@@ -138,21 +141,21 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 		s.next_id += 1
 		if s.next_id == startid {
 			err = errors.New("run out of stream id")
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 		_, ok = s.ports[s.next_id]
 	}
 	id = s.next_id
 	s.next_id += 1
-	logger.Debugf("put into next id %p(%d): %p.", s, id, fs)
+	log.Debug("put into next id %p(%d): %p.", s, id, fs)
 
 	s.ports[id] = fs
 	return
 }
 
 func (s *Session) PutIntoId(id uint16, fs FrameSender) {
-	logger.Debugf("put into id %p(%d): %p.", s, id, fs)
+	log.Debug("put into id %p(%d): %p.", s, id, fs)
 	s.ports[id] = fs
 	return
 }
@@ -163,13 +166,13 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	s.ports[streamid] = nil
-	logger.Noticef("set %p(%d) => nil.", s, streamid)
-	logger.Stack()
+	log.Notice("set %p(%d) => nil.", s, streamid)
+	log.Debug("%s", debug.Stack())
 	time.AfterFunc(HALFCLOSE, func() {
 		s.plock.Lock()
 		defer s.plock.Unlock()
 		delete(s.ports, streamid)
-		logger.Noticef("remove ports %p(%d).", s, streamid)
+		log.Notice("remove ports %p(%d).", s, streamid)
 	})
 	return
 }
@@ -177,11 +180,11 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.Streamid]
 	if ok {
-		logger.Err("frame sync stream id exist.")
+		log.Error("frame sync stream id exist.")
 		b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_IDEXIST)
 		_, err := s.Write(b)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return false
 		}
 		return true
@@ -192,22 +195,22 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 
 	go func() {
 		// TODO: timeout
-		logger.Debugf("%p(%d) try to connect: %s.",
+		log.Debug("%p(%d) try to connect: %s.",
 			s, ft.Streamid, ft.Address)
 		fs, err := s.on_conn(s, ft.Address, ft.Streamid)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 
 			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_CONNFAILED)
 			_, err = s.Write(b)
 			if err != nil {
-				logger.Err(err)
+				log.Error("%s", err)
 				return
 			}
 
 			err = s.RemovePorts(ft.Streamid)
 			if err != nil {
-				logger.Err(err)
+				log.Error("%s", err)
 			}
 			return
 		}
@@ -218,10 +221,10 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		b := NewFrameNoParam(MSG_OK, ft.Streamid)
 		_, err = s.Write(b)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
-		logger.Noticef("%p(%d) connected %s.",
+		log.Notice("%p(%d) connected %s.",
 			s, ft.Streamid, ft.Address)
 		return
 	}()
@@ -236,7 +239,7 @@ func (s *Session) on_rst(ft *FrameRst) {
 	if !ok {
 		return
 	}
-	logger.Debugf("reset %p(%d), sender %p.", s, ft.Streamid, c)
+	log.Debug("reset %p(%d), sender %p.", s, ft.Streamid, c)
 	delete(s.ports, ft.Streamid)
 	if c != nil {
 		c.Close()
@@ -247,18 +250,18 @@ func (s *Session) on_dns(ft *FrameDns) {
 	// This will toke long time...
 	ipaddr, err := net.LookupIP(ft.Hostname)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		ipaddr = make([]net.IP, 0)
 	}
 
 	b, err := NewFrameAddr(ft.Streamid, ipaddr)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	_, err = s.Write(b)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 	}
 	return
 }
@@ -269,7 +272,6 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	streamid := f.GetStreamid()
 	c, ok := s.ports[streamid]
 	if !ok {
-		// logger.Errf("%p(%d) not exist.", s, streamid)
 		s.ports[streamid] = nil
 		time.AfterFunc(HALFCLOSE, func() {
 			s.plock.Lock()
@@ -287,7 +289,7 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 
 	b = c.SendFrame(f)
 	if !b {
-		logger.Errf("%p(%d) fulled or closed.", s, streamid)
+		log.Error("%p(%d) fulled or closed.", s, streamid)
 		if c.Close() != nil {
 			return false
 		}
@@ -307,14 +309,14 @@ func (s *Session) Run() {
 	for {
 		f, err := ReadFrame(s.conn)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 
 		f.Debug()
 		switch ft := f.(type) {
 		default:
-			logger.Err("unexpected package")
+			log.Error("unexpected package")
 			return
 		case *FrameOK, *FrameFAILED, *FrameData, *FrameAck, *FrameFin, *FrameAddr:
 			if !s.sendFrameInChan(f) {

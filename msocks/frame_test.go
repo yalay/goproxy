@@ -2,7 +2,6 @@ package msocks
 
 import (
 	"bytes"
-	"net"
 	"testing"
 )
 
@@ -84,7 +83,7 @@ func TestFrameAuthRead(t *testing.T) {
 }
 
 func TestFrameAuthWrite(t *testing.T) {
-	fb := NewFrameAuth(10, "username", "password")
+	f := NewFrameAuth(10, "username", "password")
 	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
@@ -234,7 +233,7 @@ func TestFrameRstRead(t *testing.T) {
 }
 
 func TestFrameRstWrite(t *testing.T) {
-	f := NewFrameRST(10)
+	f := NewFrameRst(10)
 	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
@@ -332,7 +331,7 @@ func TestFramePingWrite(t *testing.T) {
 		t.Error(err)
 	}
 
-	if bytes.Compare(b.Bytes(), []byte{MSG_PING, 0x00, 0x00, 0x00, 0x00}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{MSG_PING, 0x00, 0x00, 0x00, 0x00}) != 0 {
 		t.Fatalf("FramePing write wrong")
 	}
 }

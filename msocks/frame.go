@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 )
 
 // TODO: compressed session?
@@ -131,7 +132,7 @@ type FrameOK struct {
 	FrameBase
 }
 
-func NewFrameOK(streamid uint16) (buf *bytes.Buffer, err error) {
+func NewFrameOK(streamid uint16) (f *FrameOK) {
 	return &FrameOK{
 		FrameBase: FrameBase{
 			Type:     MSG_OK,
@@ -164,7 +165,10 @@ func NewFrameFAILED(streamid uint16, errno uint32) (f *FrameFAILED) {
 	}
 }
 func (f *FrameFAILED) Packed() (buf *bytes.Buffer, err error) {
-	buf = f.Packed()
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
 	binary.Write(buf, binary.BigEndian, f.Errno)
 	return
 }
@@ -200,7 +204,10 @@ func NewFrameAuth(streamid uint16, username, password string) (f *FrameAuth) {
 	}
 }
 func (f *FrameAuth) Packed() (buf *bytes.Buffer, err error) {
-	buf = f.Packed()
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
 	err = WriteString(buf, f.Username)
 	if err != nil {
 		return
@@ -243,8 +250,11 @@ func NewFrameData(streamid uint16, data []byte) (f *FrameData) {
 }
 
 func (f *FrameData) Packed() (buf *bytes.Buffer, err error) {
-	buf = f.Packed()
-	_, err = buf.Write(data)
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	_, err = buf.Write(f.Data)
 	return
 }
 
@@ -260,18 +270,21 @@ type FrameSyn struct {
 }
 
 func NewFrameSyn(streamid uint16, addr string) (f *FrameSyn) {
-	return &FrameBase{
+	return &FrameSyn{
 		FrameBase: FrameBase{
 			Type:     MSG_SYN,
 			Streamid: streamid,
-			Length:   uint16(len(s) + 2),
+			Length:   uint16(len(addr) + 2),
 		},
 		Address: addr,
 	}
 }
 func (f *FrameSyn) Packed() (buf *bytes.Buffer, err error) {
-	buf = f.Packed()
-	err = WriteString(buf, s)
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	err = WriteString(buf, f.Address)
 	return
 }
 
@@ -308,7 +321,10 @@ func NewFrameAck(streamid uint16, window uint32) (f *FrameAck) {
 	}
 }
 func (f *FrameAck) Packed() (buf *bytes.Buffer, err error) {
-	buf = f.Packed()
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
 	binary.Write(buf, binary.BigEndian, f.Window)
 	return
 }
@@ -356,8 +372,8 @@ type FrameRst struct {
 	FrameBase
 }
 
-func NewFrameRST(streamid uint16) (buf *bytes.Buffer, err error) {
-	return &FrameRST{
+func NewFrameRst(streamid uint16) (f *FrameRst) {
+	return &FrameRst{
 		FrameBase: FrameBase{
 			Type:     MSG_RST,
 			Streamid: streamid,
@@ -455,7 +471,7 @@ type FramePing struct {
 	FrameBase
 }
 
-func NewFramePing() (buf *bytes.Buffer, err error) {
+func NewFramePing() (f *FramePing) {
 	return &FramePing{
 		FrameBase: FrameBase{
 			Type:     MSG_PING,
@@ -475,4 +491,44 @@ func (f *FramePing) Unpack(r io.Reader) (err error) {
 type FrameSender interface {
 	SendFrame(Frame) bool
 	CloseFrame() error
+}
+
+type ChanFrameSender chan Frame
+
+func NewChanFrameSender(i int) ChanFrameSender {
+	return make(chan Frame, i)
+}
+
+func (c ChanFrameSender) Len() int {
+	return len(c)
+}
+
+func (c ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame) {
+	ch_timeout := time.After(t)
+	select {
+	case f := <-c:
+		return f
+	case <-ch_timeout: // timeout
+		return nil
+	}
+}
+
+func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
+	defer func() { recover() }()
+	select {
+	case c <- f:
+		return true
+	default:
+	}
+	return
+}
+
+func (c ChanFrameSender) CloseFrame() (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errors.New("channel closed")
+		}
+	}()
+	close(c)
+	return
 }

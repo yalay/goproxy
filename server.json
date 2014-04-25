@@ -1,0 +1,14 @@
+{
+    "mode": "server",
+    "listen": ":5233",
+
+    "logfile": "server.log",
+    "loglevel": "INFO",
+
+    "cipher": "aes",
+    "keyfile": "key",
+
+    "auth": {
+	"shell": "123"
+    }
+}

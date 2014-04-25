@@ -40,6 +40,15 @@ func init() {
 
 var frame_ping = NewFramePing()
 
+func CopyLink(dst, src io.ReadWriteCloser) {
+	go func() {
+		defer src.Close()
+		io.Copy(src, dst)
+	}()
+	defer dst.Close()
+	io.Copy(dst, src)
+}
+
 type PingPong struct {
 	ch       chan int
 	cnt      int
@@ -147,6 +156,9 @@ func (s *Session) RemoteAddr() net.Addr {
 }
 
 func (s *Session) SendFrame(f Frame) bool {
+	log.Debug("send frame")
+	f.Debug()
+
 	buf, err := f.Packed()
 	if err != nil {
 		log.Error("%s", err)
@@ -160,7 +172,7 @@ func (s *Session) SendFrame(f Frame) bool {
 	if err != nil && err.Error() == errClosing {
 		err = io.EOF
 	}
-	log.Debug("sess %p write len(%d), result %s.", s, len(b), err)
+	log.Debug("sess %p write len(%d), result %p.", s, len(b), err)
 	if n != len(b) {
 		err = io.ErrShortWrite
 	}
@@ -289,7 +301,6 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	}
 
 	if !c.SendFrame(f) {
-		// FIXME:
 		log.Error("%p(%d) send failed.", s, streamid)
 		if c.CloseFrame() != nil {
 			return false
@@ -322,7 +333,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		}
 
 		c = NewConn(ft.Streamid, s, ft.Address)
-		go io.Copy(conn, c)
+		go CopyLink(conn, c)
 		return c, nil
 	}
 

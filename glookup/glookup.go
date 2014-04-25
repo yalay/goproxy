@@ -4,34 +4,16 @@ import (
 	"flag"
 	"fmt"
 	"github.com/op/go-logging"
-	"github.com/shell909090/goproxy/cryptconn"
-	"github.com/shell909090/goproxy/ipfilter"
+	"github.com/shell909090/goproxy/dns"
 	stdlog "log"
 	"os"
-	// "github.com/shell909090/goproxy/logging"
-	"github.com/shell909090/goproxy/msocks"
-	"github.com/shell909090/goproxy/sutils"
 )
 
-var log = logging.MustGetLogger("package.example")
-
-var cipher string
-var keyfile string
-var username string
-var password string
-var blackfile string
-
-// TODO: fit two mode
+var log = logging.MustGetLogger("")
 
 func init() {
 	var logfile string
 	var loglevel string
-
-	flag.StringVar(&cipher, "cipher", "aes", "aes/des/tripledes/rc4")
-	flag.StringVar(&keyfile, "keyfile", "key", "key and iv file")
-	flag.StringVar(&username, "username", "", "username for connect")
-	flag.StringVar(&password, "password", "", "password for connect")
-	flag.StringVar(&blackfile, "black", "routes.list.gz", "blacklist file")
 
 	flag.StringVar(&logfile, "logfile", "", "log file")
 	flag.StringVar(&loglevel, "loglevel", "WARNING", "log level")
@@ -40,7 +22,7 @@ func init() {
 	var err error
 	file := os.Stderr
 	if logfile != "" {
-		file, err = os.Open(logfile)
+		file, err = os.OpenFile(logfile, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -58,44 +40,28 @@ func init() {
 }
 
 func main() {
-	if len(flag.Args()) < 2 {
+	if len(flag.Args()) < 1 {
 		log.Error("args not enough")
 		return
 	}
-	serveraddr := flag.Args()[0]
 
-	blacklist, err := ipfilter.ReadIPListFile("routes.list.gz")
+	err := dns.LoadConfig("resolv.conf")
 	if err != nil {
-		log.Error("%s", err)
-		return
-	}
-
-	var dialer sutils.Dialer
-	dialer = sutils.DefaultTcpDialer
-	if len(keyfile) > 0 {
-		dialer, err = cryptconn.NewDialer(dialer, cipher, keyfile)
+		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
 		if err != nil {
-			log.Error("crypto not work, cipher or keyfile wrong.")
 			return
 		}
-	} else {
-		log.Warning("no vaild keyfile.")
 	}
 
-	ndialer, err := msocks.NewDialer(dialer, serveraddr, username, password)
-	if err != nil {
-		return
-	}
-
-	for _, hostname := range flag.Args()[1:] {
-		addrs, err := ndialer.LookupIP(hostname)
+	for _, hostname := range flag.Args() {
+		addrs, err := dns.LookupIP(hostname)
 		if err != nil {
 			log.Error("%s", err)
 			return
 		}
 		fmt.Println(hostname)
 		for _, addr := range addrs {
-			fmt.Printf("\t%s\t%t\n", addr, blacklist.Contain(addr))
+			fmt.Printf("\t%s\n", addr)
 		}
 
 	}

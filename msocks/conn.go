@@ -12,7 +12,6 @@ import (
 
 const (
 	ST_UNKNOWN = iota
-	ST_SYN
 	ST_EST
 	ST_CLOSE_WAIT
 	ST_FIN_WAIT
@@ -46,13 +45,16 @@ func (q *Queue) Push(v interface{}) (err error) {
 	return
 }
 
-func (q *Queue) Pop() (v interface{}, err error) {
+func (q *Queue) Pop(block bool) (v interface{}, err error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	var e *list.Element
 	for e = q.queue.Front(); e == nil; e = q.queue.Front() {
 		if q.closed {
 			return nil, ErrQueueClosed
+		}
+		if !block {
+			return
 		}
 		q.ev.Wait()
 	}
@@ -87,7 +89,7 @@ type Conn struct {
 
 func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
 	c = &Conn{
-		status:   ST_UNKNOWN,
+		status:   ST_EST,
 		sess:     sess,
 		streamid: streamid,
 		sender:   sess,
@@ -140,6 +142,7 @@ func (c *Conn) SendFrame(f Frame) bool {
 			return false
 		}
 	case *FrameAck:
+		c.InAck(ft)
 	case *FrameFin:
 		c.InFin(ft)
 	}
@@ -169,8 +172,6 @@ func (c *Conn) InFin(ft *FrameFin) {
 		c.status = ST_TIME_WAIT
 		// wait for 2*MSL and final
 		time.AfterFunc(HALFCLOSE, c.Final)
-	case ST_SYN:
-		// reset
 	default:
 		// error
 	}
@@ -188,14 +189,19 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 	defer c.rlock.Unlock()
 
 	target := data[:]
+	block := true
 	for len(target) > 0 {
 		if c.r_rest == nil {
 			// reader should be blocked in here
-			v, err = c.rqueue.Pop()
-			// FIXME:
-			if err != ErrQueueClosed {
-				err = nil
+			v, err = c.rqueue.Pop(block)
+			if err == ErrQueueClosed {
+				err = io.EOF
+			}
+			if err != nil {
 				return
+			}
+			if v == nil {
+				break
 			}
 			c.r_rest = v.([]byte)
 		}
@@ -203,6 +209,7 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		size := copy(target, c.r_rest)
 		target = target[size:]
 		n += size
+		block = false
 
 		if len(c.r_rest) > size {
 			c.r_rest = c.r_rest[size:]
@@ -212,7 +219,6 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		}
 	}
 
-	// FIXME:
 	fb := NewFrameAck(c.streamid, uint32(n))
 	c.sender.SendFrame(fb)
 	// TODO: 合并
@@ -252,37 +258,24 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 func (c *Conn) WriteSlice(data []byte) (err error) {
 	f := NewFrameData(c.streamid, data)
 
-	// FIXME: check for status is EST || CLOSE_WAIT
+	if c.status != ST_EST && c.status != ST_CLOSE_WAIT {
+		log.Error("status %d found in write slice", c.status)
+		panic("status error")
+	}
 
+	log.Debug("used size: %d, write len: %d", c.used, len(data))
 	for c.used+uint32(len(data)) > WINDOWSIZE {
 		c.wev.Wait()
 	}
 
 	if !c.sender.SendFrame(f) {
-		// FIXME:
 		err = io.EOF
+		return
 	}
 	c.used += uint32(len(data))
 	c.wev.Signal()
 	return
 }
-
-// // ??
-// func (c *Conn) send_ack(n int) (err error) {
-// 	log.Debug("%p(%d) send ack %d.", c.sess, c.streamid, n)
-// 	// send readed bytes back
-
-// 	err = c.SeqWriter.Ack(c.streamid, int32(n))
-// 	switch err {
-// 	case io.EOF:
-// 		c.Close()
-// 	case nil:
-// 	default:
-// 		log.Error("%s", err)
-// 		c.Close()
-// 	}
-// 	return
-// }
 
 func (c *Conn) LocalAddr() net.Addr {
 	return &Addr{

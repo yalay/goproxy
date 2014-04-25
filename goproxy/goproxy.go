@@ -8,7 +8,6 @@ import (
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
-	// "github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/socks"
 	"github.com/shell909090/goproxy/sutils"
@@ -137,7 +136,7 @@ func LoadConfig() (cfg Config, err error) {
 
 	file = os.Stderr
 	if cfg.Logfile != "" {
-		file, err = os.Open(cfg.Logfile)
+		file, err = os.OpenFile(cfg.Logfile, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -152,6 +151,7 @@ func LoadConfig() (cfg Config, err error) {
 		panic(err.Error())
 	}
 	logging.SetLevel(lv, "")
+
 	return
 }
 

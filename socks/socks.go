@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	// "github.com/shell909090/goproxy/logging"
 	"github.com/op/go-logging"
 	"io"
 	"net"

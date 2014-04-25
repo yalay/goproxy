@@ -40,20 +40,21 @@ func (d *Dialer) Cutoff() {
 func (d *Dialer) createConn() (conn net.Conn, err error) {
 	log.Notice("create connect, serveraddr: %s.",
 		d.serveraddr)
+
 	conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 	if err != nil {
-		log.Error("%s", err)
 		return
 	}
 
 	log.Notice("auth with username: %s, password: %s.",
 		d.username, d.password)
-	b, err := NewFrameAuth(0, d.username, d.password)
+	fb := NewFrameAuth(0, d.username, d.password)
+	buf, err := fb.Packed()
 	if err != nil {
-		log.Error("%s", err)
 		return
 	}
-	_, err = conn.Write(b)
+
+	_, err = conn.Write(buf.Bytes())
 	if err != nil {
 		return
 	}
@@ -69,7 +70,7 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 		log.Error("%s", err)
 		return
 	case *FrameOK:
-		logger.Notice("auth ok.")
+		log.Notice("auth ok.")
 	case *FrameFAILED:
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
@@ -112,7 +113,7 @@ func (d *Dialer) createSession() (err error) {
 	go func() {
 		d.sess.Run()
 		// that's mean session is dead
-		logger.Warning("session runtime quit, reboot from connect.")
+		log.Warning("session runtime quit, reboot from connect.")
 
 		// remove from sess
 		d.lock.Lock()
@@ -128,7 +129,7 @@ func (d *Dialer) GetSess(create bool) (sess *Session) {
 	if d.sess == nil && create {
 		err := d.createSession()
 		if err != nil {
-			return
+			log.Error("%s", err)
 		}
 	}
 	return d.sess
@@ -146,12 +147,8 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 
-	b, err := NewFrameOneString(MSG_SYN, streamid, address)
-	if err != nil {
-		return
-	}
-	_, err = sess.Write(b)
-	if err != nil {
+	fb := NewFrameSyn(streamid, address)
+	if !sess.SendFrame(fb) {
 		return
 	}
 
@@ -161,68 +158,68 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	default:
 		err = errors.New("unknown status")
 	case nil: // close all or timeout
-		err = fmt.Errorf("connection failed for timeout(%d) or all closed(%p).", streamid, sess)
+		err = fmt.Errorf("connection failed for timeout(%d) or all closed(%p).",
+			streamid, sess)
 	case *FrameFAILED: // FAILED
 		err = fmt.Errorf("connection failed for remote failed(%d): %d.",
 			streamid, frt.Errno)
 	case *FrameOK: // OK
-		logger.Info("connect ok.")
+		log.Info("connect ok.")
 	}
 
 	if err != nil {
 		sess.RemovePorts(streamid)
-		ch.Close()
+		ch.CloseFrame()
 		return
 	}
 
 	c := NewConn(streamid, sess, address)
 	sess.PutIntoId(streamid, c)
-	ch.Close()
-	log.Notice("new conn: %p(%d) => %s.",
-		sess, streamid, address)
+	ch.CloseFrame()
+	log.Notice("new conn: %p(%d) => %s.", sess, streamid, address)
 	return c, nil
 }
 
-func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
-	log.Notice("lookup ip: %s", hostname)
-	sess := d.GetSess(true)
+// func (d *Dialer) LookupIP(hostname string) (ipaddr []net.IP, err error) {
+// 	log.Notice("lookup ip: %s", hostname)
+// 	sess := d.GetSess(true)
 
-	// lock streamid and put chan for it
-	ch := NewChanFrameSender(1)
-	streamid, err := sess.PutIntoNextId(ch)
-	if err != nil {
-		return
-	}
+// 	// lock streamid and put chan for it
+// 	ch := NewChanFrameSender(1)
+// 	streamid, err := sess.PutIntoNextId(ch)
+// 	if err != nil {
+// 		return
+// 	}
 
-	b, err := NewFrameOneString(MSG_DNS, streamid, hostname)
-	if err != nil {
-		log.Error("%s", err)
-		return
-	}
-	_, err = sess.Write(b)
-	if err != nil {
-		return
-	}
+// 	b, err := NewFrameOneString(MSG_DNS, streamid, hostname)
+// 	if err != nil {
+// 		log.Error("%s", err)
+// 		return
+// 	}
+// 	_, err = sess.Write(b)
+// 	if err != nil {
+// 		return
+// 	}
 
-	fr := ch.RecvWithTimeout(LOOKUP_TIMEOUT)
-	sess.RemovePorts(streamid)
-	ch.Close()
+// 	fr := ch.RecvWithTimeout(LOOKUP_TIMEOUT)
+// 	sess.RemovePorts(streamid)
+// 	ch.CloseFrame()
 
-	switch frt := fr.(type) {
-	default:
-		err = errors.New("unknown status")
-	case nil: // close all or timeout
-		err = fmt.Errorf("lookup ip failed for timeout(%d) or all closed(%p).", streamid, sess)
-	case *FrameFAILED: // FAILED
-		err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
-			streamid, frt.Errno)
-	case *FrameAddr: // OK
-		log.Info("lookup ip ok.")
-		ipaddr = frt.Ipaddr
-	}
+// 	switch frt := fr.(type) {
+// 	default:
+// 		err = errors.New("unknown status")
+// 	case nil: // close all or timeout
+// 		err = fmt.Errorf("lookup ip failed for timeout(%d) or all closed(%p).", streamid, sess)
+// 	case *FrameFAILED: // FAILED
+// 		err = fmt.Errorf("lookup ip failed for remote failed(%d): %d.",
+// 			streamid, frt.Errno)
+// 	case *FrameAddr: // OK
+// 		log.Info("lookup ip ok.")
+// 		ipaddr = frt.Ipaddr
+// 	}
 
-	if err != nil {
-		log.Error("%s", err)
-	}
-	return
-}
+// 	if err != nil {
+// 		log.Error("%s", err)
+// 	}
+// 	return
+// }

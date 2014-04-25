@@ -67,17 +67,6 @@ func NewService(auth map[string]string, dialer sutils.Dialer) (ms *MsocksService
 	return
 }
 
-func (ms *MsocksService) on_conn(sess *Session, address string, streamid uint16) (fs FrameSender, err error) {
-	conn, err := ms.dialer.Dial("tcp", address)
-	if err != nil {
-		return
-	}
-
-	c := NewConn(streamid, sess, address)
-	go sutils.CopyLink(conn, c)
-	return c, nil
-}
-
 func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 	f, err := ReadFrame(stream)
 	if err != nil {
@@ -97,8 +86,9 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
 			log.Error("auth failed.")
-			b := NewFrameOneInt(MSG_FAILED, ft.Streamid, ERR_AUTH)
-			_, err = stream.Write(b)
+			fb := NewFrameFAILED(ft.Streamid, ERR_AUTH)
+			buf, err := fb.Packed()
+			_, err = stream.Write(buf.Bytes())
 			if err != nil {
 				log.Error("%s", err)
 				return false
@@ -106,14 +96,19 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 			return false
 		}
 	}
-	b := NewFrameNoParam(MSG_OK, ft.Streamid)
-	_, err = stream.Write(b)
+	fb := NewFrameOK(ft.Streamid)
+	buf, err := fb.Packed()
+	if err != nil {
+		log.Error("%s", err)
+		return false
+	}
+	_, err = stream.Write(buf.Bytes())
 	if err != nil {
 		log.Error("%s", err)
 		return false
 	}
 
-	logger.Info("auth passed.")
+	log.Info("auth passed.")
 	return true
 }
 
@@ -127,7 +122,7 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	}
 
 	sess := NewSession(conn)
-	sess.on_conn = ms.on_conn
+	sess.dialer = ms.dialer
 	sess.Run()
 	log.Notice("server session %p quit: %s => %s.",
 		sess, conn.RemoteAddr(), conn.LocalAddr())

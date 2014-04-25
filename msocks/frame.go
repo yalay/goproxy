@@ -12,17 +12,18 @@ import (
 // TODO: compressed session?
 
 const (
-	MSG_OK     = 0x00
-	MSG_FAILED = 0x01
-	MSG_AUTH   = 0x02
-	MSG_DATA   = 0x03
-	MSG_SYN    = 0x04
-	MSG_ACK    = 0x05
-	MSG_FIN    = 0x06
-	MSG_RST    = 0x07
-	MSG_DNS    = 0x10
-	MSG_ADDR   = 0x11
-	MSG_PING   = 0x12
+	MSG_UNKNOWN = iota
+	MSG_OK
+	MSG_FAILED
+	MSG_AUTH
+	MSG_DATA
+	MSG_SYN
+	MSG_ACK
+	MSG_FIN
+	MSG_RST
+	// MSG_DNS
+	// MSG_ADDR
+	MSG_PING
 )
 
 const (
@@ -56,6 +57,7 @@ func WriteString(w io.Writer, s string) (err error) {
 
 type Frame interface {
 	GetStreamid() uint16
+	Packed() (buf *bufio.Buffer, err error)
 	Unpack(r io.Reader) error
 	Debug()
 }
@@ -88,10 +90,10 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FrameFin{FrameBase: *fb}
 	case MSG_RST:
 		f = &FrameRst{FrameBase: *fb}
-	case MSG_DNS:
-		f = &FrameDns{FrameBase: *fb}
-	case MSG_ADDR:
-		f = &FrameAddr{FrameBase: *fb}
+	// case MSG_DNS:
+	// 	f = &FrameDns{FrameBase: *fb}
+	// case MSG_ADDR:
+	// 	f = &FrameAddr{FrameBase: *fb}
 	case MSG_PING:
 		f = &FramePing{FrameBase: *fb}
 	}
@@ -109,7 +111,7 @@ func (f *FrameBase) GetStreamid() uint16 {
 	return f.Streamid
 }
 
-func (f *FrameBase) Packed() (buf *bytes.Buffer) {
+func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {
 	buf = bytes.NewBuffer(nil)
 	buf.Grow(int(5 + f.Length))
 	binary.Write(buf, binary.BigEndian, f)

@@ -21,9 +21,13 @@ func TestFrameOKRead(t *testing.T) {
 }
 
 func TestFrameOKWrite(t *testing.T) {
-	b := NewFrameNoParam(MSG_OK, 10)
+	f := NewFrameOK(10)
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_OK, 0x00, 0x00, 0x00, 0x0A}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{MSG_OK, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameOK write wrong")
 	}
 }
@@ -48,9 +52,13 @@ func TestFrameFailedRead(t *testing.T) {
 }
 
 func TestFrameFailedWrite(t *testing.T) {
-	b := NewFrameOneInt(MSG_FAILED, 10, 32)
+	f := NewFrameFAILED(10, 32)
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_FAILED, 0x00, 0x04, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_FAILED, 0x00, 0x04, 0x00, 0x0A,
 		0x00, 0x00, 0x00, 0x20}) != 0 {
 		t.Fatalf("FrameFailed write wrong")
 	}
@@ -76,12 +84,13 @@ func TestFrameAuthRead(t *testing.T) {
 }
 
 func TestFrameAuthWrite(t *testing.T) {
-	b, err := NewFrameAuth(10, "username", "password")
+	fb := NewFrameAuth(10, "username", "password")
+	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(b, []byte{MSG_AUTH, 0x00, 0x14, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_AUTH, 0x00, 0x14, 0x00, 0x0A,
 		0x00, 0x08, 0x75, 0x73, 0x65, 0x72, 0x6e, 0x61, 0x6d, 0x65,
 		0x00, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64}) != 0 {
 		t.Fatalf("FrameAuth write wrong")
@@ -108,12 +117,13 @@ func TestFrameDataRead(t *testing.T) {
 }
 
 func TestFrameDataWrite(t *testing.T) {
-	b, err := NewFrameData(10, []byte{0x01, 0x02, 0x03})
+	f := NewFrameData(10, []byte{0x01, 0x02, 0x03})
+	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(b, []byte{MSG_DATA, 0x00, 0x03, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_DATA, 0x00, 0x03, 0x00, 0x0A,
 		0x01, 0x02, 0x03}) != 0 {
 		t.Fatalf("FrameData write wrong")
 	}
@@ -139,12 +149,13 @@ func TestFrameSynRead(t *testing.T) {
 }
 
 func TestFrameSynWrite(t *testing.T) {
-	b, err := NewFrameOneString(MSG_SYN, 10, "cd")
+	f := NewFrameSyn(10, "cd")
+	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(b, []byte{MSG_SYN, 0x00, 0x04, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_SYN, 0x00, 0x04, 0x00, 0x0A,
 		0x00, 0x02, 0x63, 0x64}) != 0 {
 		t.Fatalf("FrameSyn write wrong")
 	}
@@ -170,9 +181,13 @@ func TestFrameAckRead(t *testing.T) {
 }
 
 func TestFrameAckWrite(t *testing.T) {
-	b := NewFrameOneInt(MSG_ACK, 10, 0x04050607)
+	f := NewFrameAck(10, 0x04050607)
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_ACK, 0x00, 0x04, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_ACK, 0x00, 0x04, 0x00, 0x0A,
 		0x04, 0x05, 0x06, 0x07}) != 0 {
 		t.Fatalf("FrameAck write wrong")
 	}
@@ -193,9 +208,13 @@ func TestFrameFinRead(t *testing.T) {
 }
 
 func TestFrameFinWrite(t *testing.T) {
-	b := NewFrameNoParam(MSG_FIN, 10)
+	f := NewFrameFin(10)
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_FIN, 0x00, 0x00, 0x00, 0x0A}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{MSG_FIN, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameFin write wrong")
 	}
 }
@@ -215,78 +234,82 @@ func TestFrameRstRead(t *testing.T) {
 }
 
 func TestFrameRstWrite(t *testing.T) {
-	b := NewFrameNoParam(MSG_RST, 10)
+	f := NewFrameRST(10)
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_RST, 0x00, 0x00, 0x00, 0x0A}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{MSG_RST, 0x00, 0x00, 0x00, 0x0A}) != 0 {
 		t.Fatalf("FrameFin write wrong")
 	}
 }
 
-func TestFrameDnsRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_DNS, 0x00, 0x04, 0x0A, 0x0A,
-		0x00, 0x02, 0x61, 0x62})
+// func TestFrameDnsRead(t *testing.T) {
+// 	buf := bytes.NewBuffer([]byte{MSG_DNS, 0x00, 0x04, 0x0A, 0x0A,
+// 		0x00, 0x02, 0x61, 0x62})
 
-	f, err := ReadFrame(buf)
-	if err != nil {
-		t.Fatalf("Read FrameDns failed")
-	}
+// 	f, err := ReadFrame(buf)
+// 	if err != nil {
+// 		t.Fatalf("Read FrameDns failed")
+// 	}
 
-	ft, ok := f.(*FrameDns)
-	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameDns format wrong")
-	}
+// 	ft, ok := f.(*FrameDns)
+// 	if !ok || ft.Streamid != 0x0a0a {
+// 		t.Fatalf("FrameDns format wrong")
+// 	}
 
-	if ft.Hostname != "ab" {
-		t.Fatalf("FrameDns body wrong")
-	}
-}
+// 	if ft.Hostname != "ab" {
+// 		t.Fatalf("FrameDns body wrong")
+// 	}
+// }
 
-func TestFrameDnsWrite(t *testing.T) {
-	b, err := NewFrameOneString(MSG_DNS, 10, "cd")
-	if err != nil {
-		t.Error(err)
-	}
+// func TestFrameDnsWrite(t *testing.T) {
+// 	b, err := NewFrameOneString(MSG_DNS, 10, "cd")
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
 
-	if bytes.Compare(b, []byte{MSG_DNS, 0x00, 0x04, 0x00, 0x0A,
-		0x00, 0x02, 0x63, 0x64}) != 0 {
-		t.Fatalf("FrameDns write wrong")
-	}
-}
+// 	if bytes.Compare(b, []byte{MSG_DNS, 0x00, 0x04, 0x00, 0x0A,
+// 		0x00, 0x02, 0x63, 0x64}) != 0 {
+// 		t.Fatalf("FrameDns write wrong")
+// 	}
+// }
 
-func TestFrameAddrRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_ADDR, 0x00, 0x05, 0x0A, 0x0A,
-		0x04, 0x01, 0x02, 0x03, 0x04})
+// func TestFrameAddrRead(t *testing.T) {
+// 	buf := bytes.NewBuffer([]byte{MSG_ADDR, 0x00, 0x05, 0x0A, 0x0A,
+// 		0x04, 0x01, 0x02, 0x03, 0x04})
 
-	f, err := ReadFrame(buf)
-	if err != nil {
-		t.Fatalf("Read FrameDns failed")
-	}
+// 	f, err := ReadFrame(buf)
+// 	if err != nil {
+// 		t.Fatalf("Read FrameDns failed")
+// 	}
 
-	ft, ok := f.(*FrameAddr)
-	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameDns format wrong")
-	}
+// 	ft, ok := f.(*FrameAddr)
+// 	if !ok || ft.Streamid != 0x0a0a {
+// 		t.Fatalf("FrameDns format wrong")
+// 	}
 
-	if len(ft.Ipaddr) != 1 {
-		t.Fatalf("length of ipaddr not match")
-	}
+// 	if len(ft.Ipaddr) != 1 {
+// 		t.Fatalf("length of ipaddr not match")
+// 	}
 
-	if bytes.Compare(ft.Ipaddr[0], []byte{0x01, 0x02, 0x03, 0x04}) != 0 {
-		t.Fatalf("FrameAddr body wrong")
-	}
-}
+// 	if bytes.Compare(ft.Ipaddr[0], []byte{0x01, 0x02, 0x03, 0x04}) != 0 {
+// 		t.Fatalf("FrameAddr body wrong")
+// 	}
+// }
 
-func TestFrameAddrWrite(t *testing.T) {
-	b, err := NewFrameAddr(10, []net.IP{[]byte{0x01, 0x02, 0x03, 0x04}})
-	if err != nil {
-		t.Error(err)
-	}
+// func TestFrameAddrWrite(t *testing.T) {
+// 	b, err := NewFrameAddr(10, []net.IP{[]byte{0x01, 0x02, 0x03, 0x04}})
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
 
-	if bytes.Compare(b, []byte{MSG_ADDR, 0x00, 0x05, 0x00, 0x0A,
-		0x04, 0x01, 0x02, 0x03, 0x04}) != 0 {
-		t.Fatalf("FrameAddr write wrong")
-	}
-}
+// 	if bytes.Compare(b, []byte{MSG_ADDR, 0x00, 0x05, 0x00, 0x0A,
+// 		0x04, 0x01, 0x02, 0x03, 0x04}) != 0 {
+// 		t.Fatalf("FrameAddr write wrong")
+// 	}
+// }
 
 func TestFramePingRead(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{MSG_PING, 0x00, 0x00, 0x0A, 0x0A})
@@ -303,9 +326,13 @@ func TestFramePingRead(t *testing.T) {
 }
 
 func TestFramePingWrite(t *testing.T) {
-	b := NewFrameNoParam(MSG_PING, 10)
+	f := NewFramePing()
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if bytes.Compare(b, []byte{MSG_PING, 0x00, 0x00, 0x00, 0x0A}) != 0 {
+	if bytes.Compare(b.Bytes(), []byte{MSG_PING, 0x00, 0x00, 0x00, 0x00}) != 0 {
 		t.Fatalf("FramePing write wrong")
 	}
 }

@@ -11,13 +11,11 @@ import (
 
 const (
 	MSG_UNKNOWN = iota
-	// TODO: MSG_RESULT
-	MSG_OK
-	MSG_FAILED
+	MSG_RESULT
 	MSG_AUTH
 	MSG_DATA
 	MSG_SYN
-	MSG_ACK
+	MSG_WND
 	MSG_FIN
 	MSG_RST
 	MSG_PING
@@ -73,18 +71,16 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		err = fmt.Errorf("unknown frame: type(%d), length(%d), streamid(%d).",
 			fb.Type, fb.Length, fb.Streamid)
 		return
-	case MSG_OK:
-		f = &FrameOK{FrameBase: *fb}
-	case MSG_FAILED:
-		f = &FrameFAILED{FrameBase: *fb}
+	case MSG_RESULT:
+		f = &FrameResult{FrameBase: *fb}
 	case MSG_AUTH:
 		f = &FrameAuth{FrameBase: *fb}
 	case MSG_DATA:
 		f = &FrameData{FrameBase: *fb}
 	case MSG_SYN:
 		f = &FrameSyn{FrameBase: *fb}
-	case MSG_ACK:
-		f = &FrameAck{FrameBase: *fb}
+	case MSG_WND:
+		f = &FrameWnd{FrameBase: *fb}
 	case MSG_FIN:
 		f = &FrameFin{FrameBase: *fb}
 	case MSG_RST:
@@ -123,43 +119,22 @@ func (f *FrameBase) Debug(prefix string) {
 		prefix, f.Type, f.Streamid, f.Length)
 }
 
-type FrameOK struct {
-	FrameBase
-}
-
-func NewFrameOK(streamid uint16) (f *FrameOK) {
-	return &FrameOK{
-		FrameBase: FrameBase{
-			Type:     MSG_OK,
-			Streamid: streamid,
-			Length:   0,
-		},
-	}
-}
-
-func (f *FrameOK) Unpack(r io.Reader) (err error) {
-	if f.Length != 0 {
-		err = errors.New("frame ok with length not 0.")
-	}
-	return
-}
-
-type FrameFAILED struct {
+type FrameResult struct {
 	FrameBase
 	Errno uint32
 }
 
-func NewFrameFAILED(streamid uint16, errno uint32) (f *FrameFAILED) {
-	return &FrameFAILED{
+func NewFrameResult(streamid uint16, errno uint32) (f *FrameResult) {
+	return &FrameResult{
 		FrameBase: FrameBase{
-			Type:     MSG_FAILED,
+			Type:     MSG_RESULT,
 			Streamid: streamid,
 			Length:   4,
 		},
 		Errno: errno,
 	}
 }
-func (f *FrameFAILED) Packed() (buf *bytes.Buffer, err error) {
+func (f *FrameResult) Packed() (buf *bytes.Buffer, err error) {
 	buf, err = f.FrameBase.Packed()
 	if err != nil {
 		return
@@ -168,14 +143,14 @@ func (f *FrameFAILED) Packed() (buf *bytes.Buffer, err error) {
 	return
 }
 
-func (f *FrameFAILED) Unpack(r io.Reader) (err error) {
+func (f *FrameResult) Unpack(r io.Reader) (err error) {
 	err = binary.Read(r, binary.BigEndian, &f.Errno)
 	if err != nil {
 		return
 	}
 
 	if f.Length != 4 {
-		err = errors.New("frame failed with length not 4.")
+		err = errors.New("frame result with length not 4.")
 		return
 	}
 	return
@@ -300,22 +275,22 @@ func (f *FrameSyn) Debug(prefix string) {
 		prefix, f.Streamid, f.Length, f.Address)
 }
 
-type FrameAck struct {
+type FrameWnd struct {
 	FrameBase
 	Window uint32
 }
 
-func NewFrameAck(streamid uint16, window uint32) (f *FrameAck) {
-	return &FrameAck{
+func NewFrameWnd(streamid uint16, window uint32) (f *FrameWnd) {
+	return &FrameWnd{
 		FrameBase: FrameBase{
-			Type:     MSG_ACK,
+			Type:     MSG_WND,
 			Streamid: streamid,
 			Length:   4,
 		},
 		Window: window,
 	}
 }
-func (f *FrameAck) Packed() (buf *bytes.Buffer, err error) {
+func (f *FrameWnd) Packed() (buf *bytes.Buffer, err error) {
 	buf, err = f.FrameBase.Packed()
 	if err != nil {
 		return
@@ -324,7 +299,7 @@ func (f *FrameAck) Packed() (buf *bytes.Buffer, err error) {
 	return
 }
 
-func (f *FrameAck) Unpack(r io.Reader) (err error) {
+func (f *FrameWnd) Unpack(r io.Reader) (err error) {
 	err = binary.Read(r, binary.BigEndian, &f.Window)
 	if err != nil {
 		return
@@ -337,8 +312,8 @@ func (f *FrameAck) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameAck) Debug(prefix string) {
-	log.Debug("%sframe ack: stream(%d), len(%d), window(%d).",
+func (f *FrameWnd) Debug(prefix string) {
+	log.Debug("%sframe wnd: stream(%d), len(%d), window(%d).",
 		prefix, f.Streamid, f.Length, f.Window)
 }
 

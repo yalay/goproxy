@@ -252,7 +252,7 @@ func (s *Session) Run() {
 		default:
 			log.Error("unexpected package")
 			return
-		case *FrameOK, *FrameFAILED, *FrameData, *FrameAck, *FrameFin, *FrameRst:
+		case *FrameResult, *FrameData, *FrameWnd, *FrameFin, *FrameRst:
 			if !s.sendFrameInChan(f) {
 				return
 			}
@@ -300,7 +300,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	_, ok := s.ports[ft.Streamid]
 	if ok {
 		log.Error("frame sync stream id exist.")
-		fb := NewFrameFAILED(ft.Streamid, ERR_IDEXIST)
+		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
 		return s.SendFrame(fb)
 	}
 
@@ -318,13 +318,13 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		conn, err := s.dialer.Dial("tcp", ft.Address)
 		if err != nil {
 			log.Error("%s", err)
-			fb := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
+			fb := NewFrameResult(ft.Streamid, ERR_CONNFAILED)
 			s.SendFrame(fb)
 			c.Final()
 			return
 		}
 
-		fb := NewFrameOK(ft.Streamid)
+		fb := NewFrameResult(ft.Streamid, ERR_NONE)
 		s.SendFrame(fb)
 		c.status = ST_EST
 		go sutils.CopyLink(conn, c)

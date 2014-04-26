@@ -140,14 +140,12 @@ func (c *Conn) SendFrame(f Frame) bool {
 		log.Error("unexpected package")
 		c.Close()
 		return false
-	case *FrameOK:
-		c.InConnect(ERR_NONE)
-	case *FrameFAILED:
+	case *FrameResult:
 		c.InConnect(ft.Errno)
 	case *FrameData:
 		return c.InData(ft)
-	case *FrameAck:
-		return c.InAck(ft)
+	case *FrameWnd:
+		return c.InWnd(ft)
 	case *FrameFin:
 		return c.InFin(ft)
 	case *FrameRst:
@@ -188,7 +186,7 @@ func (c *Conn) InData(ft *FrameData) bool {
 	return true
 }
 
-func (c *Conn) InAck(ft *FrameAck) bool {
+func (c *Conn) InWnd(ft *FrameWnd) bool {
 	c.wlock.Lock()
 	defer c.wlock.Unlock()
 	c.wbufsize -= ft.Window
@@ -267,7 +265,7 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 	}
 
 	c.rbufsize -= uint32(n)
-	fb := NewFrameAck(c.streamid, uint32(n))
+	fb := NewFrameWnd(c.streamid, uint32(n))
 	c.sender.SendFrame(fb)
 	// TODO: 合并
 	return

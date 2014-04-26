@@ -5,61 +5,35 @@ import (
 	"testing"
 )
 
-func TestFrameOKRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_OK, 0x00, 0x00, 0x0A, 0x0A})
-
-	f, err := ReadFrame(buf)
-	if err != nil {
-		t.Fatalf("Read FrameOK failed")
-	}
-
-	ft, ok := f.(*FrameOK)
-	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameOK format wrong")
-	}
-}
-
-func TestFrameOKWrite(t *testing.T) {
-	f := NewFrameOK(10)
-	buf, err := f.Packed()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if bytes.Compare(buf.Bytes(), []byte{MSG_OK, 0x00, 0x00, 0x00, 0x0A}) != 0 {
-		t.Fatalf("FrameOK write wrong")
-	}
-}
-
-func TestFrameFailedRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_FAILED, 0x00, 0x04, 0x0A, 0x0A,
+func TestFrameResultRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{MSG_RESULT, 0x00, 0x04, 0x0A, 0x0A,
 		0x00, 0x00, 0x00, 0x01})
 
 	f, err := ReadFrame(buf)
 	if err != nil {
-		t.Fatalf("Read FrameFailed failed")
+		t.Fatalf("Read FrameResult failed")
 	}
 
-	ft, ok := f.(*FrameFAILED)
+	ft, ok := f.(*FrameResult)
 	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameFailed format wrong")
+		t.Fatalf("FrameResult format wrong")
 	}
 
 	if ft.Errno != 1 {
-		t.Fatalf("FrameFailed body wrong")
+		t.Fatalf("FrameResult body wrong")
 	}
 }
 
-func TestFrameFailedWrite(t *testing.T) {
-	f := NewFrameFAILED(10, 32)
+func TestFrameResultWrite(t *testing.T) {
+	f := NewFrameResult(10, 32)
 	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(buf.Bytes(), []byte{MSG_FAILED, 0x00, 0x04, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_RESULT, 0x00, 0x04, 0x00, 0x0A,
 		0x00, 0x00, 0x00, 0x20}) != 0 {
-		t.Fatalf("FrameFailed write wrong")
+		t.Fatalf("FrameResult write wrong")
 	}
 }
 
@@ -160,35 +134,35 @@ func TestFrameSynWrite(t *testing.T) {
 	}
 }
 
-func TestFrameAckRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_ACK, 0x00, 0x04, 0x0A, 0x0A,
+func TestFrameWndRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{MSG_WND, 0x00, 0x04, 0x0A, 0x0A,
 		0x01, 0x02, 0x03, 0x04})
 
 	f, err := ReadFrame(buf)
 	if err != nil {
-		t.Fatalf("Read FrameAck failed")
+		t.Fatalf("Read FrameWnd failed")
 	}
 
-	ft, ok := f.(*FrameAck)
+	ft, ok := f.(*FrameWnd)
 	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameAck format wrong")
+		t.Fatalf("FrameWnd format wrong")
 	}
 
 	if ft.Window != 0x01020304 {
-		t.Fatalf("FrameAck body wrong")
+		t.Fatalf("FrameWnd body wrong")
 	}
 }
 
-func TestFrameAckWrite(t *testing.T) {
-	f := NewFrameAck(10, 0x04050607)
+func TestFrameWndWrite(t *testing.T) {
+	f := NewFrameWnd(10, 0x04050607)
 	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(buf.Bytes(), []byte{MSG_ACK, 0x00, 0x04, 0x00, 0x0A,
+	if bytes.Compare(buf.Bytes(), []byte{MSG_WND, 0x00, 0x04, 0x00, 0x0A,
 		0x04, 0x05, 0x06, 0x07}) != 0 {
-		t.Fatalf("FrameAck write wrong")
+		t.Fatalf("FrameWnd write wrong")
 	}
 }
 

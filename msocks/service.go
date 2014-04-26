@@ -78,14 +78,14 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 		return
 	}
 
-	switch ft := f.(type) {
-	default:
+	ft, ok := f.(*FrameResult)
+	if !ok {
 		err = errors.New("unexpected package")
 		log.Error("%s", err)
 		return
-	case *FrameOK:
-		log.Notice("auth ok.")
-	case *FrameFAILED:
+	}
+
+	if ft.Errno != ERR_NONE {
 		conn.Close()
 		err = fmt.Errorf("create connection failed with code: %d.",
 			ft.Errno)
@@ -93,6 +93,7 @@ func (d *Dialer) createConn() (conn net.Conn, err error) {
 		return
 	}
 
+	log.Notice("auth ok.")
 	return
 }
 
@@ -254,7 +255,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
 			log.Error("auth failed.")
-			fb := NewFrameFAILED(ft.Streamid, ERR_AUTH)
+			fb := NewFrameResult(ft.Streamid, ERR_AUTH)
 			buf, err := fb.Packed()
 			_, err = stream.Write(buf.Bytes())
 			if err != nil {
@@ -264,7 +265,7 @@ func (ms *MsocksService) on_auth(stream io.ReadWriteCloser) bool {
 			return false
 		}
 	}
-	fb := NewFrameOK(ft.Streamid)
+	fb := NewFrameResult(ft.Streamid, ERR_NONE)
 	buf, err := fb.Packed()
 	if err != nil {
 		log.Error("%s", err)

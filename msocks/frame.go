@@ -21,8 +21,6 @@ const (
 	MSG_ACK
 	MSG_FIN
 	MSG_RST
-	// MSG_DNS
-	// MSG_ADDR
 	MSG_PING
 )
 
@@ -90,10 +88,6 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FrameFin{FrameBase: *fb}
 	case MSG_RST:
 		f = &FrameRst{FrameBase: *fb}
-	// case MSG_DNS:
-	// 	f = &FrameDns{FrameBase: *fb}
-	// case MSG_ADDR:
-	// 	f = &FrameAddr{FrameBase: *fb}
 	case MSG_PING:
 		f = &FramePing{FrameBase: *fb}
 	}
@@ -388,84 +382,6 @@ func (f *FrameRst) Unpack(r io.Reader) (err error) {
 	}
 	return
 }
-
-// type FrameDns struct {
-// 	FrameBase
-// 	Hostname string
-// }
-
-// func (f *FrameDns) Unpack(r io.Reader) (err error) {
-// 	f.Hostname, err = ReadString(r)
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	if f.Length != uint16(len(f.Hostname)+2) {
-// 		err = errors.New("frame dns length not match.")
-// 	}
-// 	return
-// }
-
-// func (f *FrameDns) Debug() {
-// 	log.Debug("get package dns: stream(%d), len(%d), host(%s).",
-// 		f.Streamid, f.Length, f.Hostname)
-// }
-
-// type FrameAddr struct {
-// 	FrameBase
-// 	Ipaddr []net.IP
-// }
-
-// func NewFrameAddr(streamid uint16, ipaddr []net.IP) (b []byte, err error) {
-// 	size := uint16(0)
-// 	for _, o := range ipaddr {
-// 		size += uint16(len(o) + 1)
-// 	}
-// 	f := &FrameBase{
-// 		Type:     MSG_ADDR,
-// 		Streamid: streamid,
-// 		Length:   size,
-// 	}
-// 	buf := f.Packed()
-
-// 	for _, o := range ipaddr {
-// 		n := uint8(len(o))
-// 		binary.Write(buf, binary.BigEndian, n)
-
-// 		_, err = buf.Write(o)
-// 		if err != nil {
-// 			return
-// 		}
-// 	}
-
-// 	return buf.Bytes(), nil
-// }
-
-// func (f *FrameAddr) Unpack(r io.Reader) (err error) {
-// 	var n uint8
-// 	size := uint16(0)
-
-// 	for size < f.Length {
-// 		err = binary.Read(r, binary.BigEndian, &n)
-// 		if err != nil {
-// 			return
-// 		}
-
-// 		ip := make([]byte, n)
-// 		_, err = io.ReadFull(r, ip)
-// 		if err != nil {
-// 			return
-// 		}
-
-// 		f.Ipaddr = append(f.Ipaddr, ip)
-// 		size += uint16(n + 1)
-// 	}
-
-// 	if f.Length != size {
-// 		return errors.New("frame addr length not match.")
-// 	}
-// 	return
-// }
 
 type FramePing struct {
 	FrameBase

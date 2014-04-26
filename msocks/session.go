@@ -129,6 +129,9 @@ func NewSession(conn net.Conn) (s *Session) {
 func (s *Session) Close() (err error) {
 	log.Warning("close all(len:%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
+	s.plock.Lock()
+	defer s.plock.Unlock()
+
 	for _, v := range s.ports {
 		if v != nil {
 			v.CloseFrame()
@@ -249,8 +252,7 @@ func (s *Session) Run() {
 		default:
 			log.Error("unexpected package")
 			return
-		case *FrameOK, *FrameFAILED, *FrameData, *FrameAck, *FrameFin:
-			// , *FrameAddr:
+		case *FrameOK, *FrameFAILED, *FrameData, *FrameAck, *FrameFin, *FrameRst:
 			if !s.sendFrameInChan(f) {
 				return
 			}
@@ -260,10 +262,6 @@ func (s *Session) Run() {
 				return
 			}
 			s.PingPong.Reset()
-		case *FrameRst:
-			s.on_rst(ft)
-		// case *FrameDns:
-		// 	go s.on_dns(ft)
 		case *FramePing:
 			s.PingPong.Ping()
 		}
@@ -276,12 +274,6 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	streamid := f.GetStreamid()
 	c, ok := s.ports[streamid]
 	if !ok {
-		// s.ports[streamid] = nil
-		// time.AfterFunc(HALFCLOSE, func() {
-		// 	s.plock.Lock()
-		// 	defer s.plock.Unlock()
-		// 	delete(s.ports, streamid)
-		// })
 		fb := NewFrameRst(streamid)
 		return s.SendFrame(fb)
 	}
@@ -359,30 +351,3 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	}()
 	return true
 }
-
-func (s *Session) on_rst(ft *FrameRst) {
-	s.plock.Lock()
-	defer s.plock.Unlock()
-
-	c, ok := s.ports[ft.Streamid]
-	if !ok {
-		return
-	}
-	log.Debug("reset %p(%d), sender %p.", s, ft.Streamid, c)
-	delete(s.ports, ft.Streamid)
-	if c != nil {
-		c.CloseFrame()
-	}
-}
-
-// func (s *Session) on_dns(ft *FrameDns) {
-// 	// This will toke long time...
-// 	ipaddr, err := net.LookupIP(ft.Hostname)
-// 	if err != nil {
-// 		log.Error("%s", err)
-// 		ipaddr = make([]net.IP, 0)
-// 	}
-
-// 	fb := NewFrameAddr(ft.Streamid, ipaddr)
-// 	s.SendFrame(fb)
-// }

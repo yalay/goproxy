@@ -147,6 +147,9 @@ func (c *Conn) SendFrame(f Frame) bool {
 		c.InAck(ft)
 	case *FrameFin:
 		c.InFin(ft)
+	case *FrameRst:
+		log.Debug("reset %p(%d), sender %p.", c.sess, ft.Streamid, c)
+		c.Final()
 	}
 	return true
 }

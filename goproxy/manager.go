@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"text/template"
+	"time"
 )
 
 type MsocksManager struct {
@@ -22,10 +23,28 @@ func NewMsocksManager(ndialer *msocks.Dialer) (mm *MsocksManager) {
 }
 
 func (mm *MsocksManager) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/cpu", mm.HandlerCPU)
 	mux.HandleFunc("/mem", mm.HandlerMemory)
 	mux.HandleFunc("/stack", mm.HandlerGoroutine)
 	mux.HandleFunc("/sess", mm.HandlerSession)
 	mux.HandleFunc("/cutoff", mm.HandlerCutoff)
+}
+
+func (mm *MsocksManager) HandlerCPU(w http.ResponseWriter, req *http.Request) {
+	f, err := os.Create("cpu.prof")
+	if err != nil {
+		log.Error("%s", err)
+		w.WriteHeader(500)
+		return
+	}
+	defer f.Close()
+
+	pprof.StartCPUProfile(f)
+	time.Sleep(10 * time.Second)
+	pprof.StopCPUProfile()
+
+	w.WriteHeader(200)
+	return
 }
 
 func (mm *MsocksManager) HandlerMemory(w http.ResponseWriter, req *http.Request) {

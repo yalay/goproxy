@@ -40,15 +40,6 @@ func init() {
 
 var frame_ping = NewFramePing()
 
-func CopyLink(dst, src io.ReadWriteCloser) {
-	go func() {
-		defer src.Close()
-		io.Copy(src, dst)
-	}()
-	defer dst.Close()
-	io.Copy(dst, src)
-}
-
 type PingPong struct {
 	ch       chan int
 	cnt      int
@@ -117,7 +108,6 @@ type Session struct {
 	wlock sync.Mutex
 	conn  net.Conn
 
-	// lock ports before any ports op and id op
 	plock   sync.Mutex
 	next_id uint16
 	ports   map[uint16]FrameSender
@@ -156,8 +146,7 @@ func (s *Session) RemoteAddr() net.Addr {
 }
 
 func (s *Session) SendFrame(f Frame) bool {
-	log.Debug("send frame")
-	f.Debug()
+	f.Debug("send ")
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -257,7 +246,7 @@ func (s *Session) Run() {
 			return
 		}
 
-		f.Debug()
+		f.Debug("recv ")
 		switch ft := f.(type) {
 		default:
 			log.Error("unexpected package")
@@ -267,10 +256,12 @@ func (s *Session) Run() {
 			if !s.sendFrameInChan(f) {
 				return
 			}
+			s.PingPong.Reset()
 		case *FrameSyn:
 			if !s.on_syn(ft) {
 				return
 			}
+			s.PingPong.Reset()
 		case *FrameRst:
 			s.on_rst(ft)
 		// case *FrameDns:
@@ -333,7 +324,7 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		}
 
 		c = NewConn(ft.Streamid, s, ft.Address)
-		go CopyLink(conn, c)
+		go sutils.CopyLink(conn, c)
 		return c, nil
 	}
 

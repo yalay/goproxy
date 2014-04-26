@@ -59,7 +59,7 @@ type Frame interface {
 	GetStreamid() uint16
 	Packed() (buf *bytes.Buffer, err error)
 	Unpack(r io.Reader) error
-	Debug()
+	Debug(prefix string)
 }
 
 func ReadFrame(r io.Reader) (f Frame, err error) {
@@ -123,9 +123,9 @@ func (f *FrameBase) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameBase) Debug() {
-	log.Debug("frame: type(%d), stream(%d), len(%d).",
-		f.Type, f.Streamid, f.Length)
+func (f *FrameBase) Debug(prefix string) {
+	log.Debug("%sframe: type(%d), stream(%d), len(%d).",
+		prefix, f.Type, f.Streamid, f.Length)
 }
 
 type FrameOK struct {
@@ -300,9 +300,9 @@ func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameSyn) Debug() {
-	log.Debug("frame syn: stream(%d), len(%d), addr(%s).",
-		f.Streamid, f.Length, f.Address)
+func (f *FrameSyn) Debug(prefix string) {
+	log.Debug("%sframe syn: stream(%d), len(%d), addr(%s).",
+		prefix, f.Streamid, f.Length, f.Address)
 }
 
 type FrameAck struct {
@@ -342,9 +342,9 @@ func (f *FrameAck) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameAck) Debug() {
-	log.Debug("frame ack: stream(%d), len(%d), window(%d).",
-		f.Streamid, f.Length, f.Window)
+func (f *FrameAck) Debug(prefix string) {
+	log.Debug("%sframe ack: stream(%d), len(%d), window(%d).",
+		prefix, f.Streamid, f.Length, f.Window)
 }
 
 type FrameFin struct {

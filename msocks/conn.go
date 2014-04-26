@@ -127,7 +127,6 @@ func (c *Conn) Close() (err error) {
 }
 
 func (c *Conn) SendFrame(f Frame) bool {
-	f.Debug()
 	switch ft := f.(type) {
 	default:
 		log.Error("unexpected package")

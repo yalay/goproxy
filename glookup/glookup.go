@@ -22,7 +22,8 @@ func init() {
 	var err error
 	file := os.Stderr
 	if logfile != "" {
-		file, err = os.OpenFile(logfile, os.O_RDWR|os.O_CREATE, 0666)
+		file, err = os.OpenFile(logfile,
+			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			log.Fatal(err)
 		}

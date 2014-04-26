@@ -38,11 +38,12 @@ press: build press-clean
 	bin/goproxy -config=server.json &
 	bin/goproxy -config=client.json &
 	sleep 1
-	# ab -X localhost:5234 -c 100 -n 10000 http://127.0.0.1:6060/
-	# curl -x http://localhost:5234 http://localhost:6060/ > /dev/null
-	# curl -x http://localhost:5234 http://www.microsoft.com > /dev/null
-	curl -x http://localhost:5234 http://202.141.176.110/ubuntu-releases/14.04/ubuntu-14.04-server-amd64.iso -o ubuntu-14.04-server-amd64.iso
-	# curl -x http://localhost:5234 http://go.googlecode.com/files/go1.2rc5.src.tar.gz
+# ab -X localhost:5234 -c 100 -n 10000 http://127.0.0.1:6060/
+	curl -x http://localhost:5234 http://localhost:6060/ > /dev/null
+	curl -x http://localhost:5234 http://www.microsoft.com > /dev/null
+	curl -x http://localhost:5234 http://web/shell/goproxy_2.0.7_amd64.deb > /dev/null
+# curl -x http://localhost:5234 http://202.141.176.110/ubuntu-releases/14.04/ubuntu-14.04-server-amd64.iso -o ubuntu-14.04-server-amd64.iso
+# curl -x http://localhost:5234 http://go.googlecode.com/files/go1.2rc5.src.tar.gz
 	killall goproxy
 
 ### Makefile ends here

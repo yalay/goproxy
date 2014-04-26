@@ -9,10 +9,9 @@ import (
 	"time"
 )
 
-// TODO: compressed session?
-
 const (
 	MSG_UNKNOWN = iota
+	// TODO: MSG_RESULT
 	MSG_OK
 	MSG_FAILED
 	MSG_AUTH
@@ -25,9 +24,11 @@ const (
 )
 
 const (
-	ERR_AUTH = iota
+	ERR_NONE = iota
+	ERR_AUTH
 	ERR_IDEXIST
 	ERR_CONNFAILED
+	ERR_TIMEOUT
 )
 
 func ReadString(r io.Reader) (s string, err error) {

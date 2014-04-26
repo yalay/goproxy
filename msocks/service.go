@@ -9,7 +9,175 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
+
+func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
+	ch_timeout := time.After(t)
+	select {
+	case errno = <-ch:
+	case <-ch_timeout:
+		return ERR_TIMEOUT
+	}
+	return
+}
+
+type Dialer struct {
+	sutils.Dialer
+	serveraddr string
+	username   string
+	password   string
+	lock       sync.Mutex
+	sess       *Session
+}
+
+func NewDialer(dialer sutils.Dialer, serveraddr string,
+	username, password string) (d *Dialer, err error) {
+	d = &Dialer{
+		Dialer:     dialer,
+		serveraddr: serveraddr,
+		username:   username,
+		password:   password,
+	}
+	return
+}
+
+func (d *Dialer) Cutoff() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	if d.sess != nil {
+		d.sess.Close()
+	}
+}
+
+func (d *Dialer) createConn() (conn net.Conn, err error) {
+	log.Notice("create connect, serveraddr: %s.",
+		d.serveraddr)
+
+	conn, err = d.Dialer.Dial("tcp", d.serveraddr)
+	if err != nil {
+		return
+	}
+
+	log.Notice("auth with username: %s, password: %s.",
+		d.username, d.password)
+	fb := NewFrameAuth(0, d.username, d.password)
+	buf, err := fb.Packed()
+	if err != nil {
+		return
+	}
+
+	_, err = conn.Write(buf.Bytes())
+	if err != nil {
+		return
+	}
+
+	f, err := ReadFrame(conn)
+	if err != nil {
+		return
+	}
+
+	switch ft := f.(type) {
+	default:
+		err = errors.New("unexpected package")
+		log.Error("%s", err)
+		return
+	case *FrameOK:
+		log.Notice("auth ok.")
+	case *FrameFAILED:
+		conn.Close()
+		err = fmt.Errorf("create connection failed with code: %d.",
+			ft.Errno)
+		log.Error("%s", err)
+		return
+	}
+
+	return
+}
+
+func (d *Dialer) createSession() (err error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if d.sess != nil {
+		return
+	}
+
+	// retry
+	var conn net.Conn
+	for i := uint(0); i < RETRY_TIMES; i++ {
+		conn, err = d.createConn()
+		if err != nil {
+			log.Error("%s", err)
+			time.Sleep((1 << i) * time.Second)
+		} else {
+			break
+		}
+	}
+	if err != nil {
+		log.Critical("can't connect to host, quit.")
+		return
+	}
+
+	log.Notice("create session.")
+	d.sess = NewSession(conn)
+	d.sess.Ping()
+
+	go func() {
+		d.sess.Run()
+		// that's mean session is dead
+		log.Warning("session runtime quit, reboot from connect.")
+
+		// remove from sess
+		d.lock.Lock()
+		d.sess = nil
+		d.lock.Unlock()
+
+		d.createSession()
+	}()
+	return
+}
+
+func (d *Dialer) GetSess(create bool) (sess *Session) {
+	if d.sess == nil && create {
+		err := d.createSession()
+		if err != nil {
+			log.Error("%s", err)
+		}
+	}
+	return d.sess
+}
+
+func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
+	sess := d.GetSess(true)
+	log.Info("try dial: %s => %s.",
+		sess.conn.RemoteAddr().String(), address)
+
+	c := NewConn(ST_SYN_SENT, 0, sess, address)
+	c.ch = make(chan uint32, 0)
+	streamid, err := sess.PutIntoNextId(c)
+	if err != nil {
+		return
+	}
+	c.streamid = streamid
+
+	fb := NewFrameSyn(streamid, address)
+	if !sess.SendFrame(fb) {
+		return
+	}
+
+	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT)
+	if errno != ERR_NONE {
+		log.Error("connection failed for remote failed(%d): %d.",
+			streamid, errno)
+		c.Final()
+	}
+	c.ch = nil
+	log.Notice("new conn: %p(%d) => %s.", sess, streamid, address)
+
+	return c, nil
+}
 
 type MsocksService struct {
 	userpass map[string]string

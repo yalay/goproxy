@@ -12,6 +12,8 @@ import (
 
 const (
 	ST_UNKNOWN = iota
+	ST_SYN_RECV
+	ST_SYN_SENT
 	ST_EST
 	ST_CLOSE_WAIT
 	ST_FIN_WAIT
@@ -66,6 +68,9 @@ func (q *Queue) Pop(block bool) (v interface{}, err error) {
 func (q *Queue) Close() (err error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
+	if q.closed {
+		return
+	}
 	q.closed = true
 	q.ev.Broadcast()
 	return
@@ -77,6 +82,7 @@ type Conn struct {
 	sess     *Session
 	streamid uint16
 	sender   FrameSender
+	ch       chan uint32
 	Address  string
 
 	rlock    sync.Mutex // this should used to block reader and reader, not writer
@@ -89,9 +95,9 @@ type Conn struct {
 	wev      *sync.Cond
 }
 
-func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
+func NewConn(status uint8, streamid uint16, sess *Session, address string) (c *Conn) {
 	c = &Conn{
-		status:   ST_EST,
+		status:   status,
 		sess:     sess,
 		streamid: streamid,
 		sender:   sess,
@@ -134,19 +140,16 @@ func (c *Conn) SendFrame(f Frame) bool {
 		log.Error("unexpected package")
 		c.Close()
 		return false
+	case *FrameOK:
+		c.InConnect(ERR_NONE)
+	case *FrameFAILED:
+		c.InConnect(ft.Errno)
 	case *FrameData:
-		log.Info("%p(%d) recved %d bytes from remote.",
-			c.sess, ft.Streamid, len(ft.Data))
-		err := c.rqueue.Push(ft.Data)
-		if err != nil {
-			log.Debug("%s", err)
-			return false
-		}
-		c.rbufsize += uint32(len(ft.Data))
+		return c.InData(ft)
 	case *FrameAck:
-		c.InAck(ft)
+		return c.InAck(ft)
 	case *FrameFin:
-		c.InFin(ft)
+		return c.InFin(ft)
 	case *FrameRst:
 		log.Debug("reset %p(%d), sender %p.", c.sess, ft.Streamid, c)
 		c.Final()
@@ -154,32 +157,71 @@ func (c *Conn) SendFrame(f Frame) bool {
 	return true
 }
 
-func (c *Conn) InAck(ft *FrameAck) {
-	c.wlock.Lock()
-	c.wbufsize -= ft.Window
-	c.wev.Signal()
-	c.wlock.Unlock()
-	log.Debug("remote readed %d, write buffer size: %d.",
-		ft.Window, c.wbufsize)
-	return
+func (c *Conn) InConnect(errno uint32) bool {
+	if c.status != ST_SYN_SENT {
+		log.Error("frame ok or failed in conn which status is not syn")
+		return false
+	}
+	if errno == ERR_NONE {
+		c.status = ST_EST
+		log.Notice("new conn: %p(%d) => %s.",
+			c.sess, c.streamid, c.Address)
+	} else {
+		c.Final()
+	}
+	select {
+	case c.ch <- errno:
+	default:
+	}
+	return true
 }
 
-func (c *Conn) InFin(ft *FrameFin) {
+func (c *Conn) InData(ft *FrameData) bool {
+	log.Info("%p(%d) recved %d bytes from remote.",
+		c.sess, ft.Streamid, len(ft.Data))
+	err := c.rqueue.Push(ft.Data)
+	if err != nil {
+		log.Debug("%s", err)
+		return false
+	}
+	c.rbufsize += uint32(len(ft.Data))
+	return true
+}
+
+func (c *Conn) InAck(ft *FrameAck) bool {
+	c.wlock.Lock()
+	defer c.wlock.Unlock()
+	c.wbufsize -= ft.Window
+	c.wev.Signal()
+	log.Debug("remote readed %d, write buffer size: %d.",
+		ft.Window, c.wbufsize)
+	return true
+}
+
+func (c *Conn) InFin(ft *FrameFin) bool {
 	log.Info("connection %p(%d) closed from remote.",
 		c.sess, c.streamid)
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	// always need to close read pipe
+	// coz fin means remote will never send data anymore
+	c.rqueue.Close()
 	switch c.status {
 	case ST_EST:
-		// send fin back
 		c.status = ST_CLOSE_WAIT
+		// close read pipe but not sent fin back
+		// wait reader to close
+		return true
 	case ST_FIN_WAIT:
 		c.status = ST_TIME_WAIT
 		// wait for 2*MSL and final
 		time.AfterFunc(HALFCLOSE, c.Final)
-	default:
-		// error
+		// in final rqueue.close will be call again, that's ok
+		return true
 	}
+	// error
+	return false
 }
 
 func (c *Conn) CloseFrame() error {

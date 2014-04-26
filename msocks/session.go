@@ -304,47 +304,30 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		return s.SendFrame(fb)
 	}
 
-	// lock streamid temporary, do I need this?
-	s.PutIntoId(ft.Streamid, nil)
+	// lock streamid temporary, with status sync recved
+	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Address)
+	s.PutIntoId(ft.Streamid, c)
 
-	connect := func() (c *Conn, err error) {
-		conn, err := s.dialer.Dial("tcp", ft.Address)
-		if err != nil {
-			return
-		}
-
-		c = NewConn(ft.Streamid, s, ft.Address)
-		go sutils.CopyLink(conn, c)
-		return c, nil
-	}
-
+	// it may toke long time to connect with target address
+	// so we use goroutine to return back loop
 	go func() {
-		// TODO: timeout
 		log.Debug("%p(%d) try to connect: %s.",
 			s, ft.Streamid, ft.Address)
-		c, err := connect()
+
+		// TODO: timeout
+		conn, err := s.dialer.Dial("tcp", ft.Address)
 		if err != nil {
 			log.Error("%s", err)
-
 			fb := NewFrameFAILED(ft.Streamid, ERR_CONNFAILED)
-			if !s.SendFrame(fb) {
-				return
-			}
-
-			err = s.RemovePorts(ft.Streamid)
-			if err != nil {
-				log.Error("%s", err)
-			}
+			s.SendFrame(fb)
+			c.Final()
 			return
 		}
-
-		// update it, don't need to lock
-		s.PutIntoId(ft.Streamid, c)
 
 		fb := NewFrameOK(ft.Streamid)
-		if !s.SendFrame(fb) {
-			return
-		}
+		s.SendFrame(fb)
+		c.status = ST_EST
+		go sutils.CopyLink(conn, c)
 		log.Notice("%p(%d) connected %s.",
 			s, ft.Streamid, ft.Address)
 		return

@@ -92,8 +92,8 @@ func (mm *MsocksManager) HandlerSession(w http.ResponseWriter, req *http.Request
         {{with $conn}}
           <td>{{$index}}</td>
           <td>{{$conn.Address}}</td>
-          <td>{{$conn.ChanFrameSender.Len}}</td>
-          <td>{{$conn.GetWindowSize}}</td>
+          <td>{{$conn.GetReadBufSize}}</td>
+          <td>{{$conn.GetWriteBufSize}}</td>
         {{else}}
           <td>{{$index}}</td><td>half closed</td>
         {{end}}

@@ -77,14 +77,16 @@ type Conn struct {
 	sess     *Session
 	streamid uint16
 	sender   FrameSender
+	Address  string
 
-	rlock  sync.Mutex // this should used to block reader and reader, not writer
-	r_rest []byte
-	rqueue *Queue
+	rlock    sync.Mutex // this should used to block reader and reader, not writer
+	rbufsize uint32
+	r_rest   []byte
+	rqueue   *Queue
 
-	wlock sync.Mutex
-	used  uint32
-	wev   *sync.Cond
+	wlock    sync.Mutex
+	wbufsize uint32
+	wev      *sync.Cond
 }
 
 func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
@@ -93,8 +95,8 @@ func NewConn(streamid uint16, sess *Session, address string) (c *Conn) {
 		sess:     sess,
 		streamid: streamid,
 		sender:   sess,
+		Address:  address,
 		rqueue:   NewQueue(),
-		used:     0,
 	}
 	c.wev = sync.NewCond(&c.wlock)
 	return
@@ -140,6 +142,7 @@ func (c *Conn) SendFrame(f Frame) bool {
 			log.Debug("%s", err)
 			return false
 		}
+		c.rbufsize += uint32(len(ft.Data))
 	case *FrameAck:
 		c.InAck(ft)
 	case *FrameFin:
@@ -150,11 +153,11 @@ func (c *Conn) SendFrame(f Frame) bool {
 
 func (c *Conn) InAck(ft *FrameAck) {
 	c.wlock.Lock()
-	c.used -= ft.Window
+	c.wbufsize -= ft.Window
 	c.wev.Signal()
 	c.wlock.Unlock()
-	log.Debug("remote readed %d, used size: %d.",
-		ft.Window, c.used)
+	log.Debug("remote readed %d, write buffer size: %d.",
+		ft.Window, c.wbufsize)
 	return
 }
 
@@ -218,6 +221,7 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 		}
 	}
 
+	c.rbufsize -= uint32(n)
 	fb := NewFrameAck(c.streamid, uint32(n))
 	c.sender.SendFrame(fb)
 	// TODO: 合并
@@ -262,8 +266,8 @@ func (c *Conn) WriteSlice(data []byte) (err error) {
 		panic("status error")
 	}
 
-	log.Debug("used size: %d, write len: %d", c.used, len(data))
-	for c.used+uint32(len(data)) > WINDOWSIZE {
+	log.Debug("write buffer size: %d, write len: %d", c.wbufsize, len(data))
+	for c.wbufsize+uint32(len(data)) > WINDOWSIZE {
 		c.wev.Wait()
 	}
 
@@ -271,7 +275,7 @@ func (c *Conn) WriteSlice(data []byte) (err error) {
 		err = io.EOF
 		return
 	}
-	c.used += uint32(len(data))
+	c.wbufsize += uint32(len(data))
 	c.wev.Signal()
 	return
 }
@@ -290,8 +294,12 @@ func (c *Conn) RemoteAddr() net.Addr {
 	}
 }
 
-func (c *Conn) GetWindowSize() (n uint32) {
-	return WINDOWSIZE - c.used
+func (c *Conn) GetReadBufSize() (n uint32) {
+	return c.rbufsize
+}
+
+func (c *Conn) GetWriteBufSize() (n uint32) {
+	return c.wbufsize
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {

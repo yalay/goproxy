@@ -142,7 +142,7 @@ func LoadConfig() (cfg Config, err error) {
 			log.Fatal(err)
 		}
 	}
-	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lshortfile)
+	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
 	logging.SetBackend(logBackend)
 
 	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
@@ -163,7 +163,7 @@ func main() {
 		return
 	}
 
-	log.Info("%s mode start.", cfg.Mode)
+	log.Notice("%s mode start.", cfg.Mode)
 	switch cfg.Mode {
 	case "server":
 		err = run_server(&cfg)

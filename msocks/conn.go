@@ -37,6 +37,7 @@ func NewQueue() (q *Queue) {
 }
 
 func (q *Queue) Push(v interface{}) (err error) {
+	log.Debug("push queue: %p", q)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if q.closed {
@@ -48,6 +49,7 @@ func (q *Queue) Push(v interface{}) (err error) {
 }
 
 func (q *Queue) Pop(block bool) (v interface{}, err error) {
+	log.Debug("pop queue: %p, block: %t", q, block)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	var e *list.Element
@@ -66,6 +68,7 @@ func (q *Queue) Pop(block bool) (v interface{}, err error) {
 }
 
 func (q *Queue) Close() (err error) {
+	log.Debug("close queue: %p", q)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if q.closed {
@@ -119,6 +122,7 @@ func (c *Conn) Final() {
 }
 
 func (c *Conn) Close() (err error) {
+	log.Info("call close to %p.", c)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -128,7 +132,11 @@ func (c *Conn) Close() (err error) {
 		c.sender.SendFrame(fb)
 		c.status = ST_FIN_WAIT
 	case ST_CLOSE_WAIT:
+		fb := NewFrameFin(c.streamid)
+		c.sender.SendFrame(fb)
 		c.Final()
+	default:
+		log.Error("unknown status %d called close.", c.status)
 	}
 
 	return
@@ -339,14 +347,18 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 func (c *Conn) GetStatus() (st string) {
 	switch c.status {
+	case ST_SYN_RECV:
+		return "SYN_SENT"
+	case ST_SYN_SENT:
+		return "SYN_RECV"
 	case ST_EST:
-		return "ESTABLISHED"
+		return "ESTAB"
 	case ST_CLOSE_WAIT:
-		return "CLOSEWAIT"
+		return "CLOSE_WAIT"
 	case ST_FIN_WAIT:
-		return "FINWAIT"
+		return "FIN_WAIT"
 	case ST_TIME_WAIT:
-		return "TIMEWAIT"
+		return "TIME_WAIT"
 	}
 	return "UNKNOWN"
 }

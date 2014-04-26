@@ -28,7 +28,7 @@ func init() {
 			log.Fatal(err)
 		}
 	}
-	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lshortfile)
+	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
 	logging.SetBackend(logBackend)
 
 	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))

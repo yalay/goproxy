@@ -294,6 +294,20 @@ func (c *Conn) RemoteAddr() net.Addr {
 	}
 }
 
+func (c *Conn) GetStatus() (st string) {
+	switch c.status {
+	case ST_EST:
+		return "established"
+	case ST_CLOSE_WAIT:
+		return "CLOSEWAIT"
+	case ST_FIN_WAIT:
+		return "FINWAIT"
+	case ST_TIME_WAIT:
+		return "TIMEWAIT"
+	}
+	return "UNKNOWN"
+}
+
 func (c *Conn) GetReadBufSize() (n uint32) {
 	return c.rbufsize
 }

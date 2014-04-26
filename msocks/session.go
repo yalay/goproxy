@@ -185,8 +185,6 @@ func (s *Session) GetPorts() (ports map[uint16]*Conn) {
 		switch c := fs.(type) {
 		case *Conn:
 			ports[i] = c
-		case nil:
-			ports[i] = nil
 		}
 	}
 	return ports

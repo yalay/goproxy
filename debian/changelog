@@ -1,12 +1,13 @@
-goproxy (2.1.1) UNRELEASED; urgency=medium
+goproxy (2.1.1) unstable; urgency=medium
 
   [ Shell.Xu ]
   * use github.com/op/go-logging as logging system.
 
   [ Shell Xu ]
   * new session page.
+  * status based system.
 
- -- Shell Xu <shell909090@gmail.com>  Sat, 26 Apr 2014 15:36:42 +0800
+ -- Shell Xu <shell909090@gmail.com>  Sun, 27 Apr 2014 01:13:50 +0800
 
 goproxy (2.0.7) unstable; urgency=medium
 

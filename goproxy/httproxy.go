@@ -42,7 +42,7 @@ func copyHeader(dst, src http.Header) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	log.Info("%s: %s", req.Method, req.URL)
+	log.Notice("%s: %s", req.Method, req.URL)
 
 	if req.Method == "CONNECT" {
 		p.Connect(w, req)

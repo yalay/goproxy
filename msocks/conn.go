@@ -348,9 +348,9 @@ func (c *Conn) RemoteAddr() net.Addr {
 func (c *Conn) GetStatus() (st string) {
 	switch c.status {
 	case ST_SYN_RECV:
-		return "SYN_SENT"
-	case ST_SYN_SENT:
 		return "SYN_RECV"
+	case ST_SYN_SENT:
+		return "SYN_SENT"
 	case ST_EST:
 		return "ESTAB"
 	case ST_CLOSE_WAIT:

@@ -164,14 +164,16 @@ func (s *Session) SendFrame(f Frame) bool {
 	if err != nil && err.Error() == errClosing {
 		err = io.EOF
 	}
-	log.Debug("sess %p write len(%d), result %p.", s, len(b), err)
-	if n != len(b) {
-		err = io.ErrShortWrite
-	}
 	if err != nil {
 		log.Error("%s", err)
 		return false
 	}
+	if n != len(b) {
+		err = io.ErrShortWrite
+		log.Error("%s", err)
+		return false
+	}
+	log.Debug("sess %p write len(%d), result %p.", s, len(b), err)
 	return true
 }
 

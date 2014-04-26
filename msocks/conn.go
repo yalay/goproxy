@@ -141,7 +141,7 @@ func (c *Conn) SendFrame(f Frame) bool {
 		c.Close()
 		return false
 	case *FrameResult:
-		c.InConnect(ft.Errno)
+		return c.InConnect(ft.Errno)
 	case *FrameData:
 		return c.InData(ft)
 	case *FrameWnd:

@@ -85,16 +85,16 @@ func (mm *MsocksManager) HandlerSession(w http.ResponseWriter, req *http.Request
     LastPing: {{.GetLastPing}}
     <table>
       <tr>
-	<th>index</th><th>status</th><th>address</th><th>recvlen</th><th>window</th>
+	<th>index</th><th>State</th><th>Recv-Q</th><th>Send-Q</th><th>address</th>
       </tr>
       {{range $index, $conn := .GetPorts}}
       <tr>
         {{with $conn}}
           <td>{{$index}}</td>
           <td>{{$conn.GetStatus}}</td>
-          <td>{{$conn.Address}}</td>
           <td>{{$conn.GetReadBufSize}}</td>
           <td>{{$conn.GetWriteBufSize}}</td>
+          <td>{{$conn.Address}}</td>
         {{else}}
           <td>{{$index}}</td><td>half closed</td>
         {{end}}

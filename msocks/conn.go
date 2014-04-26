@@ -297,7 +297,7 @@ func (c *Conn) RemoteAddr() net.Addr {
 func (c *Conn) GetStatus() (st string) {
 	switch c.status {
 	case ST_EST:
-		return "established"
+		return "ESTABLISHED"
 	case ST_CLOSE_WAIT:
 		return "CLOSEWAIT"
 	case ST_FIN_WAIT:

@@ -13,32 +13,41 @@ import (
 )
 
 const (
-	RETRY_TIMES    = 6
-	CHANLEN        = 128
-	WIN_SIZE       = 100
-	ACKDELAY       = 100 * time.Millisecond
-	HALFCLOSE      = 20000 * time.Millisecond
-	PINGTIME       = 10000 * time.Millisecond
-	PINGRANDOM     = 3000
+	DIAL_RETRY   = 6
+	DIAL_TIMEOUT = 30000
+	MSL          = 10000
+	WINDOWSIZE   = 2 * 1024 * 1024
+	WND_DELAY    = 100
+
+	PINGTIME       = 10000
+	PINGRANDOM     = 5000
 	TIMEOUT_COUNT  = 4
 	GAMEOVER_COUNT = 60
-	DIAL_TIMEOUT   = 30 * time.Second
-	LOOKUP_TIMEOUT = 60 * time.Second
-	WINDOWSIZE     = 1024 * 1024
+)
+
+const (
+	ERR_NONE = iota
+	ERR_AUTH
+	ERR_IDEXIST
+	ERR_CONNFAILED
+	ERR_TIMEOUT
+)
+
+var (
+	ErrStreamNotExist = errors.New("stream not exist.")
+	ErrQueueClosed    = errors.New("queue closed")
+	ErrUnexpectedPkg  = errors.New("unexpected package")
+	ErrNotSyn         = errors.New("frame result in conn which status is not syn")
+	ErrFinState       = errors.New("status not est or fin wait when get fin")
 )
 
 var errClosing = "use of closed network connection"
-
-var ErrStreamNotExist = errors.New("stream not exist.")
-var ErrQueueClosed = errors.New("queue closed")
-
 var log = logging.MustGetLogger("msocks")
+var frame_ping = NewFramePing()
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
-
-var frame_ping = NewFramePing()
 
 type PingPong struct {
 	ch       chan int
@@ -75,14 +84,15 @@ func (p *PingPong) Ping() bool {
 		return false
 	}
 
-	pingtime := PINGTIME + time.Duration(rand.Intn(2*PINGRANDOM)-PINGRANDOM)*time.Millisecond
-	log.Debug("pingtime: %d", pingtime/time.Millisecond)
+	pingtime := PINGTIME + rand.Intn(2*PINGRANDOM) - PINGRANDOM
+	log.Debug("pingtime: %d", pingtime)
 
 	go func() {
-		time.Sleep(pingtime)
+		time.Sleep(time.Duration(pingtime) * time.Millisecond)
 		p.Pong()
 
-		timeout := time.After(TIMEOUT_COUNT * PINGTIME)
+		timeout := time.After(
+			TIMEOUT_COUNT * PINGTIME * time.Millisecond)
 		select {
 		case <-timeout:
 			log.Warning("pingpong timeout: %p.", p.sender)
@@ -101,7 +111,10 @@ func (p *PingPong) GetLastPing() (d time.Duration) {
 
 func (p *PingPong) Pong() {
 	log.Debug("pong: %p.", p.sender)
-	p.sender.SendFrame(frame_ping)
+	err := p.sender.SendFrame(frame_ping)
+	if err != nil {
+		log.Error("%s", err)
+	}
 }
 
 type Session struct {
@@ -127,15 +140,13 @@ func NewSession(conn net.Conn) (s *Session) {
 }
 
 func (s *Session) Close() (err error) {
-	log.Warning("close all(len:%d) for session: %p.", len(s.ports), s)
+	log.Warning("close all connects (%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
 	for _, v := range s.ports {
-		if v != nil {
-			v.CloseFrame()
-		}
+		v.CloseFrame()
 	}
 	return
 }
@@ -148,13 +159,12 @@ func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *Session) SendFrame(f Frame) bool {
+func (s *Session) SendFrame(f Frame) (err error) {
 	f.Debug("send ")
 
 	buf, err := f.Packed()
 	if err != nil {
-		log.Error("%s", err)
-		return false
+		return
 	}
 	b := buf.Bytes()
 	s.wlock.Lock()
@@ -165,16 +175,13 @@ func (s *Session) SendFrame(f Frame) bool {
 		err = io.EOF
 	}
 	if err != nil {
-		log.Error("%s", err)
-		return false
+		return
 	}
 	if n != len(b) {
-		err = io.ErrShortWrite
-		log.Error("%s", err)
-		return false
+		return io.ErrShortWrite
 	}
-	log.Debug("sess %p write len(%d), result %p.", s, len(b), err)
-	return true
+	log.Debug("sess %p write len(%d).", s, len(b))
+	return
 }
 
 func (s *Session) CloseFrame() error {
@@ -270,30 +277,19 @@ func (s *Session) Run() {
 	}
 }
 
-// In all of situation, drop frame if chan full.
-// And if frame finally come, drop it too.
+// no drop, any error will reset main connection
 func (s *Session) sendFrameInChan(f Frame) (b bool) {
+	var err error
 	streamid := f.GetStreamid()
 	c, ok := s.ports[streamid]
-	if !ok {
-		fb := NewFrameRst(streamid)
-		return s.SendFrame(fb)
-	}
-	if c == nil {
-		return true
+	if !ok || c == nil {
+		return false
 	}
 
-	if !c.SendFrame(f) {
-		log.Error("%p(%d) send failed.", s, streamid)
-		if c.CloseFrame() != nil {
-			return false
-		}
-
-		fb := NewFrameRst(streamid)
-		if !s.SendFrame(fb) {
-			return false
-		}
-		return s.RemovePorts(streamid) == nil
+	err = c.SendFrame(f)
+	if err != nil {
+		log.Error("%p(%d) send failed, err: %s.", s, streamid, err)
+		return false
 	}
 	return true
 }
@@ -303,7 +299,11 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	if ok {
 		log.Error("frame sync stream id exist.")
 		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
-		return s.SendFrame(fb)
+		err := s.SendFrame(fb)
+		if err != nil {
+			log.Error("%s", err)
+		}
+		return err == nil
 	}
 
 	// lock streamid temporary, with status sync recved
@@ -321,16 +321,24 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		if err != nil {
 			log.Error("%s", err)
 			fb := NewFrameResult(ft.Streamid, ERR_CONNFAILED)
-			s.SendFrame(fb)
+			err = s.SendFrame(fb)
+			if err != nil {
+				log.Error("%s", err)
+			}
 			c.Final()
 			return
 		}
 
 		fb := NewFrameResult(ft.Streamid, ERR_NONE)
-		s.SendFrame(fb)
+		err = s.SendFrame(fb)
+		if err != nil {
+			log.Error("%s", err)
+			return
+		}
 		c.status = ST_EST
+
 		go sutils.CopyLink(conn, c)
-		log.Notice("%p(%d) connected %s.",
+		log.Notice("server side %p(%d) connected %s.",
 			s, ft.Streamid, ft.Address)
 		return
 	}()

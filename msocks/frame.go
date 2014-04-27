@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 )
 
 const (
@@ -19,14 +18,6 @@ const (
 	MSG_FIN
 	MSG_RST
 	MSG_PING
-)
-
-const (
-	ERR_NONE = iota
-	ERR_AUTH
-	ERR_IDEXIST
-	ERR_CONNFAILED
-	ERR_TIMEOUT
 )
 
 func ReadString(r io.Reader) (s string, err error) {
@@ -381,46 +372,6 @@ func (f *FramePing) Unpack(r io.Reader) (err error) {
 }
 
 type FrameSender interface {
-	SendFrame(Frame) bool
+	SendFrame(Frame) error
 	CloseFrame() error
-}
-
-type ChanFrameSender chan Frame
-
-func NewChanFrameSender(i int) ChanFrameSender {
-	return make(chan Frame, i)
-}
-
-func (c ChanFrameSender) Len() int {
-	return len(c)
-}
-
-func (c ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame) {
-	ch_timeout := time.After(t)
-	select {
-	case f := <-c:
-		return f
-	case <-ch_timeout: // timeout
-		return nil
-	}
-}
-
-func (c ChanFrameSender) SendFrame(f Frame) (b bool) {
-	defer func() { recover() }()
-	select {
-	case c <- f:
-		return true
-	default:
-	}
-	return
-}
-
-func (c ChanFrameSender) CloseFrame() (err error) {
-	defer func() {
-		if recover() != nil {
-			err = errors.New("channel closed")
-		}
-	}()
-	close(c)
-	return
 }

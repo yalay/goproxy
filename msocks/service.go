@@ -107,7 +107,7 @@ func (d *Dialer) createSession() (err error) {
 
 	// retry
 	var conn net.Conn
-	for i := uint(0); i < RETRY_TIMES; i++ {
+	for i := uint(0); i < DIAL_RETRY; i++ {
 		conn, err = d.createConn()
 		if err != nil {
 			log.Error("%s", err)
@@ -164,18 +164,22 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	c.streamid = streamid
 
 	fb := NewFrameSyn(streamid, address)
-	if !sess.SendFrame(fb) {
+	err = sess.SendFrame(fb)
+	if err != nil {
+		log.Error("%s", err)
 		return
 	}
 
-	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT)
+	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Millisecond)
 	if errno != ERR_NONE {
 		log.Error("connection failed for remote failed(%d): %d.",
 			streamid, errno)
 		c.Final()
+	} else {
+		log.Notice("connect successed: %p(%d) => %s.",
+			sess, streamid, address)
 	}
 	c.ch = nil
-	log.Notice("new conn: %p(%d) => %s.", sess, streamid, address)
 
 	return c, nil
 }

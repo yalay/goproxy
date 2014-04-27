@@ -113,12 +113,18 @@ func NewConn(status uint8, streamid uint16, sess *Session, address string) (c *C
 
 func (c *Conn) Final() {
 	c.rqueue.Close()
+
 	err := c.sess.RemovePorts(c.streamid)
 	if err != nil {
 		log.Error("%s", err)
 	}
+
 	log.Info("connection %p(%d) closed.", c.sess, c.streamid)
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.status = ST_UNKNOWN
+	return
 }
 
 func (c *Conn) Close() (err error) {
@@ -127,13 +133,24 @@ func (c *Conn) Close() (err error) {
 	defer c.lock.Unlock()
 
 	switch c.status {
+	case ST_UNKNOWN:
+		return
 	case ST_EST:
 		fb := NewFrameFin(c.streamid)
-		c.sender.SendFrame(fb)
+		err = c.sender.SendFrame(fb)
+		if err != nil {
+			log.Error("%s", err)
+			return
+		}
 		c.status = ST_FIN_WAIT
 	case ST_CLOSE_WAIT:
 		fb := NewFrameFin(c.streamid)
-		c.sender.SendFrame(fb)
+		err = c.sender.SendFrame(fb)
+		if err != nil {
+			log.Error("%s", err)
+			return
+		}
+		c.lock.Unlock()
 		c.Final()
 	default:
 		log.Error("unknown status %d called close.", c.status)
@@ -142,12 +159,13 @@ func (c *Conn) Close() (err error) {
 	return
 }
 
-func (c *Conn) SendFrame(f Frame) bool {
+func (c *Conn) SendFrame(f Frame) (err error) {
 	switch ft := f.(type) {
 	default:
-		log.Error("unexpected package")
+		err = ErrUnexpectedPkg
+		log.Error("%s", err)
 		c.Close()
-		return false
+		return
 	case *FrameResult:
 		return c.InConnect(ft.Errno)
 	case *FrameData:
@@ -160,74 +178,76 @@ func (c *Conn) SendFrame(f Frame) bool {
 		log.Debug("reset %p(%d), sender %p.", c.sess, ft.Streamid, c)
 		c.Final()
 	}
-	return true
+	return
 }
 
-func (c *Conn) InConnect(errno uint32) bool {
+func (c *Conn) InConnect(errno uint32) (err error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	if c.status != ST_SYN_SENT {
-		log.Error("frame ok or failed in conn which status is not syn")
-		return false
+		return ErrNotSyn
 	}
+
 	if errno == ERR_NONE {
 		c.status = ST_EST
-		log.Notice("new conn: %p(%d) => %s.",
-			c.sess, c.streamid, c.Address)
 	} else {
+		c.lock.Unlock()
 		c.Final()
 	}
+
 	select {
 	case c.ch <- errno:
 	default:
 	}
-	return true
+	return
 }
 
-func (c *Conn) InData(ft *FrameData) bool {
+func (c *Conn) InData(ft *FrameData) (err error) {
 	log.Info("%p(%d) recved %d bytes from remote.",
 		c.sess, ft.Streamid, len(ft.Data))
-	err := c.rqueue.Push(ft.Data)
+	err = c.rqueue.Push(ft.Data)
 	if err != nil {
-		log.Debug("%s", err)
-		return false
+		return
 	}
 	c.rbufsize += uint32(len(ft.Data))
-	return true
+	return
 }
 
-func (c *Conn) InWnd(ft *FrameWnd) bool {
+func (c *Conn) InWnd(ft *FrameWnd) (err error) {
 	c.wlock.Lock()
 	defer c.wlock.Unlock()
 	c.wbufsize -= ft.Window
 	c.wev.Signal()
 	log.Debug("remote readed %d, write buffer size: %d.",
 		ft.Window, c.wbufsize)
-	return true
+	return nil
 }
 
-func (c *Conn) InFin(ft *FrameFin) bool {
-	log.Info("connection %p(%d) closed from remote.",
-		c.sess, c.streamid)
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+func (c *Conn) InFin(ft *FrameFin) (err error) {
+	log.Info("connection %p(%d) closed from remote.", c.sess, c.streamid)
 	// always need to close read pipe
 	// coz fin means remote will never send data anymore
 	c.rqueue.Close()
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	switch c.status {
 	case ST_EST:
-		c.status = ST_CLOSE_WAIT
 		// close read pipe but not sent fin back
 		// wait reader to close
-		return true
+		c.status = ST_CLOSE_WAIT
+		return
 	case ST_FIN_WAIT:
 		c.status = ST_TIME_WAIT
 		// wait for 2*MSL and final
-		time.AfterFunc(HALFCLOSE, c.Final)
+		time.AfterFunc(2*MSL*time.Millisecond, c.Final)
 		// in final rqueue.close will be call again, that's ok
-		return true
+		return
 	}
 	// error
-	return false
+	return ErrFinState
 }
 
 func (c *Conn) CloseFrame() error {
@@ -274,7 +294,10 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 
 	c.rbufsize -= uint32(n)
 	fb := NewFrameWnd(c.streamid, uint32(n))
-	c.sender.SendFrame(fb)
+	err = c.sender.SendFrame(fb)
+	if err != nil {
+		log.Error("%s", err)
+	}
 	// TODO: 合并
 	return
 }
@@ -322,8 +345,9 @@ func (c *Conn) WriteSlice(data []byte) (err error) {
 		c.wev.Wait()
 	}
 
-	if !c.sender.SendFrame(f) {
-		err = io.EOF
+	err = c.sender.SendFrame(f)
+	if err != nil {
+		log.Error("%s", err)
 		return
 	}
 	c.wbufsize += uint32(len(data))

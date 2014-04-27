@@ -19,13 +19,11 @@ const (
 	WINDOWSIZE   = 2 * 1024 * 1024
 	WND_DELAY    = 100
 
-	PINGTIME       = 10000
-	PINGRANDOM     = 5000
-	TIMEOUT_COUNT  = 4
+	PINGTIME       = 5000
+	PINGRANDOM     = 1000
+	TIMEOUT_COUNT  = 6
 	GAMEOVER_COUNT = 60
-)
 
-const (
 	ERR_NONE = iota
 	ERR_AUTH
 	ERR_IDEXIST
@@ -39,11 +37,11 @@ var (
 	ErrUnexpectedPkg  = errors.New("unexpected package")
 	ErrNotSyn         = errors.New("frame result in conn which status is not syn")
 	ErrFinState       = errors.New("status not est or fin wait when get fin")
-)
 
-var errClosing = "use of closed network connection"
-var log = logging.MustGetLogger("msocks")
-var frame_ping = NewFramePing()
+	errClosing = "use of closed network connection"
+	log        = logging.MustGetLogger("msocks")
+	frame_ping = NewFramePing()
+)
 
 func init() {
 	rand.Seed(time.Now().UnixNano())

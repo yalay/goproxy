@@ -133,7 +133,8 @@ func (c *Conn) Close() (err error) {
 	defer c.lock.Unlock()
 
 	switch c.status {
-	case ST_UNKNOWN:
+	case ST_UNKNOWN, ST_FIN_WAIT:
+		// maybe call close twice
 		return
 	case ST_EST:
 		fb := NewFrameFin(c.streamid)

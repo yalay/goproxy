@@ -134,7 +134,7 @@ func LoadConfig() (cfg Config, err error) {
 		return
 	}
 
-	file = os.Stderr
+	file = os.Stdout
 	if cfg.Logfile != "" {
 		file, err = os.OpenFile(cfg.Logfile,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)

@@ -152,6 +152,9 @@ func (d *Dialer) GetSess(create bool) (sess *Session) {
 
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess := d.GetSess(true)
+	if sess == nil {
+		panic("can't connect to host")
+	}
 	log.Info("try dial: %s => %s.",
 		sess.conn.RemoteAddr().String(), address)
 

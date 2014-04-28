@@ -18,12 +18,10 @@ test:
 build:
 	mkdir -p bin
 	go build -o bin/goproxy github.com/shell909090/goproxy/goproxy
-	go build -o bin/glookup github.com/shell909090/goproxy/glookup
 
 install: build
 	install -d $(DESTDIR)/usr/bin/
 	install -m 755 -s bin/goproxy $(DESTDIR)/usr/bin/
-	install -m 755 -s bin/glookup $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/usr/share/goproxy/
 	install -m 644 debian/routes.list.gz $(DESTDIR)/usr/share/goproxy/
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/

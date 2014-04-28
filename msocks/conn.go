@@ -121,8 +121,6 @@ func (c *Conn) Final() {
 
 	log.Info("connection %p(%d) closed.", c.sess, c.streamid)
 
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	c.status = ST_UNKNOWN
 	return
 }
@@ -151,7 +149,6 @@ func (c *Conn) Close() (err error) {
 			log.Error("%s", err)
 			return
 		}
-		c.lock.Unlock()
 		c.Final()
 	default:
 		log.Error("unknown status %d called close.", c.status)

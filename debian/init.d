@@ -51,8 +51,8 @@ do_start()
 	fi
 	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon -S -q -p $PIDFILE -x $DAEMON -b -m -- \
-	    $DAEMON_OPTS \
+	start-stop-daemon -S -q -p $PIDFILE -x $DAEMON -b -C -m -- \
+	    $DAEMON_OPTS >> /var/log/goproxy.err 2>&1 \
 		|| return 2
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend

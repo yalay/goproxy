@@ -1,4 +1,5 @@
 *.exe
+*.iso
 
 bin
 pkg

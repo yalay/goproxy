@@ -27,8 +27,6 @@ SCRIPTNAME=/etc/init.d/$NAME
 # Read configuration variable file if it is present
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
 
-DAEMON_ARGS="-mode=$RUNMODE -keyfile=$KEYFILE" # Arguments to run the daemon with
-
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
 
@@ -51,10 +49,11 @@ do_start()
 	    echo "daemon not start due to /etc/default/$NAME rundaemon set to 0."
 	    return 3
 	fi
+	chmod 600 $LOGFILE
 	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon -S -q -p $PIDFILE -x $DAEMON -b -m --no-close -- \
-	    $DAEMON_ARGS $DAEMON_OPTS >> $LOGFILE 2>&1 \
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --background \
+	     --no-close -m -- $DAEMON_OPTS >> $LOGFILE 2>&1 \
 		|| return 2
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend

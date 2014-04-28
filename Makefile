@@ -18,31 +18,30 @@ test:
 build:
 	mkdir -p bin
 	go build -o bin/goproxy github.com/shell909090/goproxy/goproxy
-	go build -o bin/glookup github.com/shell909090/goproxy/glookup
 
 install: build
 	install -d $(DESTDIR)/usr/bin/
 	install -m 755 -s bin/goproxy $(DESTDIR)/usr/bin/
-	install -m 755 -s bin/glookup $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/usr/share/goproxy/
 	install -m 644 debian/routes.list.gz $(DESTDIR)/usr/share/goproxy/
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/
 	install -d $(DESTDIR)/etc/goproxy/
 	install -m 644 debian/resolv.conf $(DESTDIR)/etc/goproxy/
+	install -m 644 debian/config.json $(DESTDIR)/etc/goproxy/
 
 press-clean:
 	rm -f server.log client.log httproxy.log
 
 press: build press-clean
-	bin/goproxy -loglevel=$(LEVEL) -logfile=server.log -mode server -listen=:7000 -keyfile=key -passfile=users.pwd &
-	bin/goproxy -loglevel=$(LEVEL) -logfile=httproxy.log -mode http -listen=:7002 -keyfile=key -username=usr -password=pwd localhost:7000 &
-# -black=/usr/share/goproxy/routes.list.gz
+	bin/goproxy -config=server.json &
+	bin/goproxy -config=client.json &
 	sleep 1
-	ab -X localhost:7002 -c 100 -n 10000 http://127.0.0.1:6060/
-# curl -x http://localhost:7002 http://www.baidu.com > /dev/null
-# curl -x http://localhost:7002 http://www.microsoft.com > /dev/null
-# curl -x http://localhost:7002 http://mirror.steadfast.net/ubuntu-releases//precise/ubuntu-12.04.3-desktop-amd64.iso -o ubuntu-12.04.3-desktop-amd64.iso
-# curl -x http://srv:8118 http://go.googlecode.com/files/go1.2rc5.src.tar.gz
+# ab -X localhost:5234 -c 100 -n 10000 http://127.0.0.1:6060/
+	curl -x http://localhost:5234 http://localhost:6060/ > /dev/null
+	curl -x http://localhost:5234 http://www.microsoft.com > /dev/null
+	curl -x http://localhost:5234 http://web/shell/goproxy_2.0.7_amd64.deb > /dev/null
+# curl -x http://localhost:5234 http://202.141.176.110/ubuntu-releases/14.04/ubuntu-14.04-server-amd64.iso -o ubuntu-14.04-server-amd64.iso
+# curl -x http://localhost:5234 http://go.googlecode.com/files/go1.2rc5.src.tar.gz
 	killall goproxy
 
 ### Makefile ends here

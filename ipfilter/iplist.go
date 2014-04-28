@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"compress/gzip"
 	"errors"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/dns"
-	"github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"net"
@@ -13,17 +13,9 @@ import (
 	"strings"
 )
 
+var log = logging.MustGetLogger("")
+
 type IPList []net.IPNet
-
-var logger logging.Logger
-
-func init() {
-	var err error
-	logger, err = logging.NewFileLogger("default", -1, "ipfilter")
-	if err != nil {
-		panic(err)
-	}
-}
 
 func ReadIPList(f io.Reader) (iplist IPList, err error) {
 	reader := bufio.NewReader(f)
@@ -38,7 +30,7 @@ QUIT:
 			}
 		case nil:
 		default:
-			logger.Err(err)
+			log.Error("%s", err)
 			return nil, err
 		}
 		addrs := strings.Split(strings.Trim(line, "\r\n "), " ")
@@ -49,17 +41,17 @@ QUIT:
 		iplist = append(iplist, ipnet)
 	}
 
-	logger.Infof("blacklist loaded %d record(s).", len(iplist))
+	log.Info("blacklist loaded %d record(s).", len(iplist))
 	return
 }
 
 func ReadIPListFile(filename string) (iplist IPList, err error) {
-	logger.Infof("load iplist from file %s.", filename)
+	log.Info("load iplist from file %s.", filename)
 
 	var f io.ReadCloser
 	f, err = os.Open(filename)
 	if err != nil {
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	defer f.Close()
@@ -67,7 +59,7 @@ func ReadIPListFile(filename string) (iplist IPList, err error) {
 	if strings.HasSuffix(filename, ".gz") {
 		f, err = gzip.NewReader(f)
 		if err != nil {
-			logger.Err(err)
+			log.Error("%s", err)
 			return
 		}
 	}
@@ -78,11 +70,11 @@ func ReadIPListFile(filename string) (iplist IPList, err error) {
 func (iplist IPList) Contain(ip net.IP) bool {
 	for _, ipnet := range iplist {
 		if ipnet.Contains(ip) {
-			logger.Debugf("%s matched %s", ipnet, ip)
+			log.Debug("%s matched %s", ipnet, ip)
 			return true
 		}
 	}
-	logger.Debugf("%s not matched.", ip)
+	log.Debug("%s not matched.", ip)
 	return false
 }
 
@@ -113,7 +105,7 @@ func NewFilteredDialer(dialer sutils.Dialer, dialer2 sutils.Dialer,
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
-	logger.Infof("address: %s", address)
+	log.Info("address: %s", address)
 	if fd.iplist == nil {
 		return fd.Dialer.Dial(network, address)
 	}
@@ -121,7 +113,7 @@ func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err erro
 	idx := strings.LastIndex(address, ":")
 	if idx == -1 {
 		err = errors.New("invaild address")
-		logger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	hostname := address[:idx]

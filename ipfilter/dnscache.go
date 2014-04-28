@@ -1,7 +1,6 @@
 package ipfilter
 
 import (
-	"github.com/shell909090/goproxy/logging"
 	"net"
 	"time"
 )
@@ -27,14 +26,14 @@ func (dc DNSCache) free() {
 	for _, k := range dellist {
 		delete(dc.cache, k)
 	}
-	logging.Infof("%d dnscache records freed.", len(dellist))
+	log.Info("%d dnscache records freed.", len(dellist))
 	return
 }
 
 func (dc DNSCache) Lookup(hostname string) (ip net.IP, err error) {
 	ipe, ok := dc.cache[hostname]
 	if ok {
-		logging.Debugf("hostname %s cached.", hostname)
+		log.Debug("hostname %s cached.", hostname)
 		return ipe.ip, nil
 	}
 

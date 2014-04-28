@@ -6,29 +6,21 @@ import (
 	"crypto/des"
 	"crypto/rand"
 	"encoding/hex"
-	"github.com/shell909090/goproxy/logging"
+	"github.com/op/go-logging"
 	"io"
 	"net"
 	"os"
 )
 
-var logger logging.Logger
+var log = logging.MustGetLogger("")
 
 const (
 	KEYSIZE     = 16
 	DEBUGOUTPUT = false
 )
 
-func init() {
-	var err error
-	logger, err = logging.NewFileLogger("default", -1, "crypt")
-	if err != nil {
-		panic(err)
-	}
-}
-
 func NewBlock(method string, keyfile string) (c cipher.Block, err error) {
-	logger.Debugf("Crypt Wrapper with %s preparing.", method)
+	log.Debug("Crypt Wrapper with %s preparing.", method)
 
 	file, err := os.Open(keyfile)
 	if err != nil {
@@ -108,14 +100,14 @@ func (sc CryptConn) Read(b []byte) (n int, err error) {
 	}
 	sc.in.XORKeyStream(b[:n], b[:n])
 	if DEBUGOUTPUT {
-		logger.Debug("recv\n", hex.Dump(b[:n]))
+		log.Debug("recv\n", hex.Dump(b[:n]))
 	}
 	return
 }
 
 func (sc CryptConn) Write(b []byte) (n int, err error) {
 	if DEBUGOUTPUT {
-		logger.Debug("send\n", hex.Dump(b))
+		log.Debug("send\n", hex.Dump(b))
 	}
 	sc.out.XORKeyStream(b[:], b[:])
 	return sc.Conn.Write(b)

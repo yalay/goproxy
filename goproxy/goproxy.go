@@ -1,97 +1,62 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
-	"github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/socks"
 	"github.com/shell909090/goproxy/sutils"
+	stdlog "log"
 	"net"
 	"net/http"
+	"os"
 )
 
-var cipher string
-var keyfile string
-var listenaddr string
-var username string
-var password string
-var passfile string
-var blackfile string
-var runmode string
-var logger logging.Logger
+var log = logging.MustGetLogger("")
 
-func init() {
-	var logfile string
-	var loglevel string
+type Config struct {
+	Mode   string
+	Listen string
+	Server string
 
-	flag.StringVar(&runmode, "mode", "http", "server/socks5/http mode")
-	flag.StringVar(&cipher, "cipher", "aes", "aes/des/tripledes/rc4")
-	flag.StringVar(&keyfile, "keyfile", "", "key and iv file")
-	flag.StringVar(&listenaddr, "listen", ":5233", "listen address")
-	flag.StringVar(&username, "username", "", "username for connect")
-	flag.StringVar(&password, "password", "", "password for connect")
-	flag.StringVar(&passfile, "passfile", "", "password file")
-	flag.StringVar(&blackfile, "black", "", "blacklist file")
+	Logfile  string
+	Loglevel string
 
-	flag.StringVar(&logfile, "logfile", "", "log file")
-	flag.StringVar(&loglevel, "loglevel", "WARNING", "log level")
-	flag.Parse()
+	Cipher    string
+	Keyfile   string
+	Blackfile string
 
-	lv, err := logging.GetLevelByName(loglevel)
-	if err != nil {
-		panic(err.Error())
-	}
-	err = logging.SetupDefault(logfile, lv)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	logger, err = logging.NewFileLogger("default", -1, "goproxy")
-	if err != nil {
-		panic(err)
-	}
-
+	Username string
+	Password string
+	Auth     map[string]string
 }
 
-func run_server() {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
-	if err != nil {
-		logger.Err(err)
-		return
-	}
-
-	var listener net.Listener
-	listener, err = net.ListenTCP("tcp", tcpAddr)
-	if err != nil {
-		logger.Err(err)
-		return
-	}
-
-	if len(keyfile) > 0 {
-		listener, err = cryptconn.NewListener(listener, cipher, keyfile)
-		if err != nil {
-			logger.Err("crypto not work, cipher or keyfile wrong.")
-			return
-		}
-	} else {
-		logger.Warning("no vaild keyfile.")
-	}
-
-	qs, err := msocks.NewService(passfile, sutils.DefaultTcpDialer)
+func run_server(cfg *Config) (err error) {
+	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return
 	}
 
-	err = qs.Serve(listener)
+	listener, err = cryptconn.NewListener(
+		listener, cfg.Cipher, cfg.Keyfile)
 	if err != nil {
-		logger.Err(err)
+		return
 	}
+
+	s, err := msocks.NewService(cfg.Auth, sutils.DefaultTcpDialer)
+	if err != nil {
+		return
+	}
+
+	return s.Serve(listener)
 }
 
-func get_dialer(serveraddr string) (dialer sutils.Dialer, ndialer *msocks.Dialer, err error) {
+func get_dialer(cfg *Config) (dialer sutils.Dialer, ndialer *msocks.Dialer, err error) {
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
@@ -102,25 +67,21 @@ func get_dialer(serveraddr string) (dialer sutils.Dialer, ndialer *msocks.Dialer
 
 	dialer = sutils.DefaultTcpDialer
 
-	if len(keyfile) > 0 {
-		dialer, err = cryptconn.NewDialer(dialer, cipher, keyfile)
-		if err != nil {
-			logger.Err("crypto not work, cipher or keyfile wrong.")
-			return
-		}
-	} else {
-		logger.Warning("no vaild keyfile.")
+	dialer, err = cryptconn.NewDialer(dialer, cfg.Cipher, cfg.Keyfile)
+	if err != nil {
+		return
 	}
 
-	ndialer, err = msocks.NewDialer(dialer, serveraddr, username, password)
+	ndialer, err = msocks.NewDialer(
+		dialer, cfg.Server, cfg.Username, cfg.Password)
 	if err != nil {
 		return
 	}
 	dialer = ndialer
 
-	if blackfile != "" {
+	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer, blackfile)
+			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
 		if err != nil {
 			return
 		}
@@ -129,66 +90,92 @@ func get_dialer(serveraddr string) (dialer sutils.Dialer, ndialer *msocks.Dialer
 	return
 }
 
-func run_client() {
-	if len(flag.Args()) < 1 {
-		logger.Err("args not enough")
-		return
-	}
-	serveraddr := flag.Args()[0]
-
-	dialer, _, err := get_dialer(serveraddr)
+func run_client(cfg *Config) (err error) {
+	dialer, _, err := get_dialer(cfg)
 	if err != nil {
 		return
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", listenaddr)
+	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
-		logger.Err(err)
 		return
 	}
 
-	listener, err := net.ListenTCP("tcp", tcpAddr)
-	if err != nil {
-		logger.Err(err)
-		return
-	}
-
-	ss := socks.NewService(dialer)
-	err = ss.Serve(listener)
-	if err != nil {
-		logger.Err(err)
-	}
+	s := socks.NewService(dialer)
+	return s.Serve(listener)
 }
 
-func run_httproxy() {
-	if len(flag.Args()) < 1 {
-		logger.Err("args not enough")
-		return
-	}
-	serveraddr := flag.Args()[0]
-
-	dialer, ndialer, err := get_dialer(serveraddr)
+func run_httproxy(cfg *Config) (err error) {
+	dialer, ndialer, err := get_dialer(cfg)
 	if err != nil {
 		return
 	}
 
 	mux := http.NewServeMux()
 	NewMsocksManager(ndialer).Register(mux)
-	err = http.ListenAndServe(listenaddr, NewProxy(dialer, mux))
+	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, mux))
+}
+
+func LoadConfig() (cfg Config, err error) {
+	var configfile string
+	flag.StringVar(&configfile, "config",
+		"/etc/goproxy/config.json", "config file")
+	flag.Parse()
+
+	file, err := os.Open(configfile)
 	if err != nil {
-		logger.Err(err)
+		return
 	}
+	defer file.Close()
+
+	dec := json.NewDecoder(file)
+	err = dec.Decode(&cfg)
+	if err != nil {
+		return
+	}
+
+	file = os.Stdout
+	if cfg.Logfile != "" {
+		file, err = os.OpenFile(cfg.Logfile,
+			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
+	logging.SetBackend(logBackend)
+
+	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
+
+	lv, err := logging.LogLevel(cfg.Loglevel)
+	if err != nil {
+		panic(err.Error())
+	}
+	logging.SetLevel(lv, "")
+
+	return
 }
 
 func main() {
-	logger.Infof("%s mode start.", runmode)
-	switch runmode {
-	case "server":
-		run_server()
-	case "socks5":
-		run_client()
-	case "http":
-		run_httproxy()
+	cfg, err := LoadConfig()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
 	}
-	logger.Info("server stopped")
+
+	log.Notice("%s mode start.", cfg.Mode)
+	switch cfg.Mode {
+	case "server":
+		err = run_server(&cfg)
+	case "socks5":
+		err = run_client(&cfg)
+	case "http":
+		err = run_httproxy(&cfg)
+	default:
+		log.Warning("not supported mode.")
+	}
+	if err != nil {
+		log.Error("%s", err)
+	}
+	log.Info("server stopped")
 }

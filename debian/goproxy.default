@@ -3,13 +3,6 @@
 # installed at /etc/default/goproxy by the maintainer scripts
 
 RUNDAEMON=0
-LOGFILE="/var/log/$NAME.log"
-RUNMODE="http"
-KEYFILE="/etc/goproxy/key"
 
 # Additional options that are passed to the Daemon.
-# server options like this
-# DAEMON_OPTS="-passfile=/etc/goproxy/users.pwd"
-# client options like this
-# DAEMON_OPTS="-listen=:8118 -black=/usr/share/goproxy/routes.list.gz -username=usr -password=pwd srv:5233
 DAEMON_OPTS=""

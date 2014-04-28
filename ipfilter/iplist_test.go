@@ -2,16 +2,12 @@ package ipfilter
 
 import (
 	"bytes"
-	"github.com/shell909090/goproxy/logging"
+	// "github.com/shell909090/goproxy/logging"
 	"net"
 	"testing"
 )
 
 const iplist = "10.0.0.0 255.0.0.0\n172.16.0.0 255.240.0.0\n192.168.0.0 255.255.0.0"
-
-func init() {
-	logging.SetupDefault("", logging.LOG_INFO)
-}
 
 func TestIPList(t *testing.T) {
 	buf := bytes.NewBufferString(iplist)

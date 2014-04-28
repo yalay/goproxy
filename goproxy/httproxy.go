@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/shell909090/goproxy/logging"
+	// "github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"strings"
@@ -16,17 +16,6 @@ var hopHeaders = []string{
 	"Trailers",
 	"Transfer-Encoding",
 	"Upgrade",
-}
-
-var httplogger logging.Logger
-
-func init() {
-	var err error
-	httplogger, err = logging.NewFileLogger("default", -1, "httproxy")
-	if err != nil {
-		panic(err)
-	}
-
 }
 
 type Proxy struct {
@@ -53,7 +42,7 @@ func copyHeader(dst, src http.Header) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	httplogger.Infof("%s: %s", req.Method, req.URL)
+	log.Notice("%s: %s", req.Method, req.URL)
 
 	if req.Method == "CONNECT" {
 		p.Connect(w, req)
@@ -74,7 +63,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	resp, err := p.transport.RoundTrip(req)
 	if err != nil {
-		httplogger.Err(err)
+		log.Error("%s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -84,7 +73,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
-		httplogger.Err(err)
+		log.Error("%s", err)
 		return
 	}
 	return
@@ -93,12 +82,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	hij, ok := w.(http.Hijacker)
 	if !ok {
-		httplogger.Err("httpserver does not support hijacking")
+		log.Error("httpserver does not support hijacking")
 		return
 	}
 	srcconn, _, err := hij.Hijack()
 	if err != nil {
-		httplogger.Err("Cannot hijack connection ", err)
+		log.Error("Cannot hijack connection ", err)
 		return
 	}
 	defer srcconn.Close()
@@ -109,7 +98,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 	dstconn, err := p.dialer.Dial("tcp", host)
 	if err != nil {
-		httplogger.Err("dial failed:", err)
+		log.Error("dial failed:", err)
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}

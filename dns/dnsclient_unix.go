@@ -17,7 +17,7 @@
 package dns
 
 import (
-	"github.com/op/go-logging"
+	"github.com/shell909090/go-logging"
 	"math/rand"
 	"net"
 	"time"
@@ -25,11 +25,13 @@ import (
 
 var log = logging.MustGetLogger("")
 
-func check_black(msg *dnsMsg, name string, qtype uint16) bool {
+func check_black(name, server string, msg *dnsMsg, qtype uint16) bool {
 	if qtype != dnsTypeA {
 		return false
 	}
-	server := "8.8.8.8"
+	if len(cfg.servers) == 0 {
+		return false
+	}
 	cname, addrs, err := answer(name, server, msg, qtype)
 	if err != nil {
 		return false
@@ -64,6 +66,10 @@ func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, e
 	if !ok {
 		return nil, &DNSError{Err: "internal error - cannot pack message", Name: name}
 	}
+	var server string
+	if a := c.RemoteAddr(); a != nil {
+		server = a.String()
+	}
 
 	for attempt := 0; attempt < cfg.attempts; attempt++ {
 		n, err := c.Write(msg)
@@ -92,14 +98,10 @@ func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, e
 			continue
 		}
 
-		if check_black(in, name, qtype) {
+		if check_black(name, server, in, qtype) {
 			goto Reread
 		}
 		return in, nil
-	}
-	var server string
-	if a := c.RemoteAddr(); a != nil {
-		server = a.String()
 	}
 	return nil, &DNSError{Err: "no answer from server", Name: name, Server: server, IsTimeout: true}
 }

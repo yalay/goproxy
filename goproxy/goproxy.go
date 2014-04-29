@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/op/go-logging"
+	"github.com/shell909090/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
-	"github.com/shell909090/goproxy/socks"
 	"github.com/shell909090/goproxy/sutils"
 	stdlog "log"
 	"net"
@@ -56,7 +55,7 @@ func run_server(cfg *Config) (err error) {
 	return s.Serve(listener)
 }
 
-func get_dialer(cfg *Config) (dialer sutils.Dialer, ndialer *msocks.Dialer, err error) {
+func run_httproxy(cfg *Config) (err error) {
 	err = dns.LoadConfig("resolv.conf")
 	if err != nil {
 		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
@@ -65,19 +64,19 @@ func get_dialer(cfg *Config) (dialer sutils.Dialer, ndialer *msocks.Dialer, err 
 		}
 	}
 
-	dialer = sutils.DefaultTcpDialer
-
-	dialer, err = cryptconn.NewDialer(dialer, cfg.Cipher, cfg.Keyfile)
+	var dialer sutils.Dialer
+	dialer, err = cryptconn.NewDialer(
+		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Keyfile)
 	if err != nil {
 		return
 	}
 
-	ndialer, err = msocks.NewDialer(
+	dialer, err = msocks.NewDialer(
 		dialer, cfg.Server, cfg.Username, cfg.Password)
 	if err != nil {
 		return
 	}
-	dialer = ndialer
+	ndialer := dialer.(*msocks.Dialer)
 
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
@@ -85,30 +84,6 @@ func get_dialer(cfg *Config) (dialer sutils.Dialer, ndialer *msocks.Dialer, err 
 		if err != nil {
 			return
 		}
-	}
-
-	return
-}
-
-func run_client(cfg *Config) (err error) {
-	dialer, _, err := get_dialer(cfg)
-	if err != nil {
-		return
-	}
-
-	listener, err := net.Listen("tcp", cfg.Listen)
-	if err != nil {
-		return
-	}
-
-	s := socks.NewService(dialer)
-	return s.Serve(listener)
-}
-
-func run_httproxy(cfg *Config) (err error) {
-	dialer, ndialer, err := get_dialer(cfg)
-	if err != nil {
-		return
 	}
 
 	mux := http.NewServeMux()
@@ -142,7 +117,8 @@ func LoadConfig() (cfg Config, err error) {
 			log.Fatal(err)
 		}
 	}
-	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
+	logBackend := logging.NewLogBackend(
+		file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
 	logging.SetBackend(logBackend)
 
 	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
@@ -167,8 +143,6 @@ func main() {
 	switch cfg.Mode {
 	case "server":
 		err = run_server(&cfg)
-	case "socks5":
-		err = run_client(&cfg)
 	case "http":
 		err = run_httproxy(&cfg)
 	default:

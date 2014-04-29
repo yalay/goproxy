@@ -3,7 +3,7 @@ go:
   - 1.2
   - tip
 script: make build
-install: go get github.com/op/go-logging
+install: go get github.com/shell909090/go-logging
 
 notifications:
   email:

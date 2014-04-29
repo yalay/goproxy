@@ -120,7 +120,6 @@ func (c *Conn) Final() {
 	}
 
 	log.Info("connection %p(%d) closed.", c.sess, c.streamid)
-
 	c.status = ST_UNKNOWN
 	return
 }

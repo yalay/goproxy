@@ -3,7 +3,7 @@ package msocks
 import (
 	"errors"
 	"fmt"
-	"github.com/op/go-logging"
+	"github.com/shell909090/go-logging"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"math/rand"
@@ -37,8 +37,10 @@ var (
 	ErrUnexpectedPkg  = errors.New("unexpected package")
 	ErrNotSyn         = errors.New("frame result in conn which status is not syn")
 	ErrFinState       = errors.New("status not est or fin wait when get fin")
+	ErrIdExist        = errors.New("frame sync stream id exist.")
 
-	errClosing = "use of closed network connection"
+	// errClosing = "use of closed network connection"
+	// errReset   = "connection reset by peer"
 	log        = logging.MustGetLogger("msocks")
 	frame_ping = NewFramePing()
 )
@@ -169,10 +171,11 @@ func (s *Session) SendFrame(f Frame) (err error) {
 	defer s.wlock.Unlock()
 
 	n, err := s.conn.Write(b)
-	if err != nil && err.Error() == errClosing {
-		err = io.EOF
-	}
 	if err != nil {
+		// switch err.Error() {
+		// case errClosing, errReset:
+		// 	err = io.EOF
+		// }
 		return
 	}
 	if n != len(b) {
@@ -192,12 +195,11 @@ func (s *Session) GetPorts() (ports map[uint16]*Conn) {
 
 	ports = make(map[uint16]*Conn, 0)
 	for i, fs := range s.ports {
-		switch c := fs.(type) {
-		case *Conn:
+		if c, ok := fs.(*Conn); ok {
 			ports[i] = c
 		}
 	}
-	return ports
+	return
 }
 
 func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
@@ -205,15 +207,13 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	defer s.plock.Unlock()
 
 	startid := s.next_id
-	_, ok := s.ports[s.next_id]
-	for ok {
+	for _, ok := s.ports[s.next_id]; ok; _, ok = s.ports[s.next_id] {
 		s.next_id += 1
 		if s.next_id == startid {
 			err = errors.New("run out of stream id")
 			log.Error("%s", err)
 			return
 		}
-		_, ok = s.ports[s.next_id]
 	}
 	id = s.next_id
 	s.next_id += 1
@@ -223,12 +223,18 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	return
 }
 
-func (s *Session) PutIntoId(id uint16, fs FrameSender) {
+func (s *Session) PutIntoId(id uint16, fs FrameSender) (err error) {
 	log.Debug("put into id %p(%d): %p.", s, id, fs)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
+	_, ok := s.ports[id]
+	if !ok {
+		return ErrIdExist
+	}
+
 	s.ports[id] = fs
+	return
 }
 
 func (s *Session) RemovePorts(streamid uint16) (err error) {
@@ -293,20 +299,20 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 }
 
 func (s *Session) on_syn(ft *FrameSyn) bool {
-	_, ok := s.ports[ft.Streamid]
-	if ok {
-		log.Error("frame sync stream id exist.")
+	// lock streamid temporary, with status sync recved
+	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Address)
+	err := s.PutIntoId(ft.Streamid, c)
+	if err != nil {
+		log.Error("%s", err)
+
 		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
 		err := s.SendFrame(fb)
 		if err != nil {
 			log.Error("%s", err)
+			return false
 		}
-		return err == nil
+		return true
 	}
-
-	// lock streamid temporary, with status sync recved
-	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Address)
-	s.PutIntoId(ft.Streamid, c)
 
 	// it may toke long time to connect with target address
 	// so we use goroutine to return back loop

@@ -170,6 +170,7 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	err = sess.SendFrame(fb)
 	if err != nil {
 		log.Error("%s", err)
+		c.Final()
 		return
 	}
 

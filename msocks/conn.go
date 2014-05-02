@@ -188,7 +188,6 @@ func (c *Conn) InConnect(errno uint32) (err error) {
 	if errno == ERR_NONE {
 		c.status = ST_EST
 	} else {
-		c.lock.Unlock()
 		c.Final()
 	}
 

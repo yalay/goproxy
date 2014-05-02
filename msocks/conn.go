@@ -17,7 +17,6 @@ const (
 	ST_EST
 	ST_CLOSE_WAIT
 	ST_FIN_WAIT
-	ST_TIME_WAIT
 )
 
 type Queue struct {
@@ -237,9 +236,10 @@ func (c *Conn) InFin(ft *FrameFin) (err error) {
 		c.status = ST_CLOSE_WAIT
 		return
 	case ST_FIN_WAIT:
-		c.status = ST_TIME_WAIT
-		// wait for 2*MSL and final
-		time.AfterFunc(2*MSL*time.Millisecond, c.Final)
+		// actually we don't need to *REALLY* wait 2MSL
+		// because tcp will make sure fin arrival
+		// don't need last ack or time wait to make sure that last ack will be received
+		c.Final()
 		// in final rqueue.close will be call again, that's ok
 		return
 	}
@@ -378,8 +378,6 @@ func (c *Conn) GetStatus() (st string) {
 		return "CLOSE_WAIT"
 	case ST_FIN_WAIT:
 		return "FIN_WAIT"
-	case ST_TIME_WAIT:
-		return "TIME_WAIT"
 	}
 	return "UNKNOWN"
 }

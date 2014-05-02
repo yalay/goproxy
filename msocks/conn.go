@@ -333,7 +333,7 @@ func (c *Conn) WriteSlice(data []byte) (err error) {
 
 	if c.status != ST_EST && c.status != ST_CLOSE_WAIT {
 		log.Error("status %d found in write slice", c.status)
-		panic("status error")
+		return ErrState
 	}
 
 	log.Debug("write buffer size: %d, write len: %d", c.wbufsize, len(data))

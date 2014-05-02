@@ -39,6 +39,7 @@ var (
 	ErrNotSyn         = errors.New("frame result in conn which status is not syn")
 	ErrFinState       = errors.New("status not est or fin wait when get fin")
 	ErrIdExist        = errors.New("frame sync stream id exist.")
+	ErrState          = errors.New("status error")
 )
 
 var (
@@ -230,7 +231,7 @@ func (s *Session) PutIntoId(id uint16, fs FrameSender) (err error) {
 	defer s.plock.Unlock()
 
 	_, ok := s.ports[id]
-	if !ok {
+	if ok {
 		return ErrIdExist
 	}
 

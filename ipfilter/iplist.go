@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"compress/gzip"
 	"errors"
-	"github.com/shell909090/go-logging"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/sutils"
 	"io"

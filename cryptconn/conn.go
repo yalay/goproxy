@@ -6,7 +6,7 @@ import (
 	"crypto/des"
 	"crypto/rand"
 	"encoding/hex"
-	"github.com/shell909090/go-logging"
+	"github.com/op/go-logging"
 	"io"
 	"net"
 	"os"

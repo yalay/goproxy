@@ -17,7 +17,7 @@
 package dns
 
 import (
-	"github.com/shell909090/go-logging"
+	"github.com/op/go-logging"
 	"math/rand"
 	"net"
 	"time"

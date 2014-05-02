@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "github.com/shell909090/goproxy/logging"
 	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"strings"

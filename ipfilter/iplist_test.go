@@ -2,7 +2,6 @@ package ipfilter
 
 import (
 	"bytes"
-	// "github.com/shell909090/goproxy/logging"
 	"net"
 	"testing"
 )

@@ -3,7 +3,7 @@ package msocks
 import (
 	"errors"
 	"fmt"
-	"github.com/shell909090/go-logging"
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"math/rand"

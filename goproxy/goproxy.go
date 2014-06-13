@@ -133,8 +133,13 @@ func LoadConfig() (cfg Config, err error) {
 	if err != nil {
 		return
 	}
+	return
+}
 
+func SetLogging(cfg Config) (err error) {
+	var file *os.File
 	file = os.Stdout
+
 	if cfg.Logfile != "" {
 		file, err = os.OpenFile(cfg.Logfile,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
@@ -142,7 +147,8 @@ func LoadConfig() (cfg Config, err error) {
 			log.Fatal(err)
 		}
 	}
-	logBackend := logging.NewLogBackend(file, "", stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
+	logBackend := logging.NewLogBackend(file, "",
+		stdlog.LstdFlags|stdlog.Lmicroseconds|stdlog.Lshortfile)
 	logging.SetBackend(logBackend)
 
 	logging.SetFormatter(logging.MustStringFormatter("%{level}: %{message}"))
@@ -158,6 +164,11 @@ func LoadConfig() (cfg Config, err error) {
 
 func main() {
 	cfg, err := LoadConfig()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	err = SetLogging(cfg)
 	if err != nil {
 		fmt.Println(err.Error())
 		return

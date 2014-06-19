@@ -8,6 +8,10 @@ LEVEL=NOTICE
 
 all: build
 
+buildtar: build
+	strip bin/goproxy
+	tar cJf ../goproxy-`uname -m`.tar.xz bin/goproxy debian/config.json debian/resolv.conf debian/routes.list.gz
+
 clean:
 	rm -rf bin
 

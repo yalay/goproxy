@@ -49,12 +49,12 @@ do_start()
 	    echo "daemon not start due to /etc/default/$NAME rundaemon set to 0."
 	    return 3
 	fi
-	chmod 600 $LOGFILE
 	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
 	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --background \
 	     --no-close -m -- $DAEMON_OPTS >> $LOGFILE 2>&1 \
 		|| return 2
+	chmod -f 600 $LOGFILE
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend
 	# on this one.  As a last resort, sleep for some time.

@@ -8,6 +8,7 @@ key
 *.log
 *.pyc
 *.pwd
+*.json
 *.html
 *.prof
 *.debhelper

@@ -26,9 +26,10 @@ type Config struct {
 	Logfile  string
 	Loglevel string
 
-	Cipher    string
-	Keyfile   string
-	Blackfile string
+	Cipher     string
+	Key        string
+	Blackfile  string
+	ResolvConf string
 
 	Username string
 	Password string
@@ -42,7 +43,7 @@ func run_server(cfg *Config) (err error) {
 	}
 
 	listener, err = cryptconn.NewListener(
-		listener, cfg.Cipher, cfg.Keyfile)
+		listener, cfg.Cipher, cfg.Key)
 	if err != nil {
 		return
 	}
@@ -55,18 +56,28 @@ func run_server(cfg *Config) (err error) {
 	return s.Serve(listener)
 }
 
-func run_httproxy(cfg *Config) (err error) {
+func load_resolv_conf(cfg *Config) (err error) {
+	if cfg.ResolvConf != "" {
+		err = dns.LoadConfig(cfg.ResolvConf)
+		return
+	}
 	err = dns.LoadConfig("resolv.conf")
+	if err == nil {
+		return
+	}
+	err = dns.LoadConfig("/etc/goproxy/resolv.conf")
+	return
+}
+
+func run_httproxy(cfg *Config) (err error) {
+	err = load_resolv_conf(cfg)
 	if err != nil {
-		err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-		if err != nil {
-			return
-		}
+		return
 	}
 
 	var dialer sutils.Dialer
 	dialer, err = cryptconn.NewDialer(
-		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Keyfile)
+		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
 	if err != nil {
 		return
 	}
@@ -151,6 +162,9 @@ func main() {
 
 	log.Notice("%s mode start.", cfg.Mode)
 	switch cfg.Mode {
+	case "stop":
+		log.Info("server stopped in stop mode")
+		return
 	case "server":
 		err = run_server(&cfg)
 	case "http":

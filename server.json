@@ -6,7 +6,7 @@
     "loglevel": "INFO",
 
     "cipher": "aes",
-    "keyfile": "key",
+    "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 
     "auth": {
 	"shell": "123"

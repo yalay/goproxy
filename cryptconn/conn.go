@@ -5,11 +5,11 @@ import (
 	"crypto/cipher"
 	"crypto/des"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"github.com/op/go-logging"
 	"io"
 	"net"
-	"os"
 )
 
 var log = logging.MustGetLogger("")
@@ -19,28 +19,20 @@ const (
 	DEBUGOUTPUT = false
 )
 
-func NewBlock(method string, keyfile string) (c cipher.Block, err error) {
+func NewBlock(method string, key string) (c cipher.Block, err error) {
 	log.Debug("Crypt Wrapper with %s preparing.", method)
-
-	file, err := os.Open(keyfile)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-
-	key := make([]byte, KEYSIZE)
-	_, err = io.ReadFull(file, key)
+	byteKey, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
 		return
 	}
 
 	switch method {
 	case "aes":
-		c, err = aes.NewCipher(key)
+		c, err = aes.NewCipher(byteKey)
 	case "des":
-		c, err = des.NewCipher(key)
+		c, err = des.NewCipher(byteKey)
 	case "tripledes":
-		c, err = des.NewTripleDESCipher(key)
+		c, err = des.NewTripleDESCipher(byteKey)
 	}
 	return
 }

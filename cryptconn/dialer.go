@@ -11,9 +11,9 @@ type Dialer struct {
 	block cipher.Block
 }
 
-func NewDialer(dialer sutils.Dialer, method string, keyfile string) (d *Dialer, err error) {
+func NewDialer(dialer sutils.Dialer, method string, key string) (d *Dialer, err error) {
 	log.Info("Crypt Dialer with %s preparing.", method)
-	c, err := NewBlock(method, keyfile)
+	c, err := NewBlock(method, key)
 	if err != nil {
 		return
 	}

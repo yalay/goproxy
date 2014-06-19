@@ -1,8 +1,14 @@
-goproxy (2.1.2) UNRELEASED; urgency=medium
+goproxy (2.1.3) UNRELEASED; urgency=medium
 
-  * remove time wait
+  * new config set
 
- -- Shell.Xu <shell909090@gmail.com>  Mon, 28 Apr 2014 20:13:17 +0800
+ -- Shell.Xu <shell909090@gmail.com>  Thu, 19 Jun 2014 16:57:10 +0800
+
+goproxy (2.1.2) unstable; urgency=medium
+
+  * remove time wait.
+
+ -- Shell.Xu <shell909090@gmail.com>  Thu, 19 Jun 2014 16:57:01 +0800
 
 goproxy (2.1.1) unstable; urgency=medium
 

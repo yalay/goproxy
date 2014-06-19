@@ -52,14 +52,15 @@ http模式提供http协议的代理。推荐使用。
 
 配置文件内使用json格式，其中可以指定以下内容：
 
-* mode: 运行模式，可以为server/socks5/http。
+* mode: 运行模式，可以为server/socks5/http。stop是个特殊模式，表示不要启动。
 * listen: 监听地址，一般是:port，表示监听所有interface的该端口。
 * server: 服务地址，在socks5/http模式下需要，表示需要连接的目标地址。
 * logfile: log文件路径，留空表示输出到stdout。
 * loglevel: 日志级别。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG，默认WARNING。
 * cipher: 加密算法，可以为aes/des/tripledes/rc4，默认aes。
-* keyfile: 密钥文件。
+* key: 密钥。
 * blackfile: 流量分离文件，socks/http模式下需要。
+* resolvconf: resolv文件的位置，默认/etc/goproxy/resolv.conf。
 * username: 连接用户名，socks/http模式下需要。
 * password: 连接密码，socks/http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。
@@ -70,14 +71,11 @@ DAEMON_OPTS里面需要指名运行goproxy所需的参数。注意goproxy自身�
 
 系统自带的black文件在/usr/share/goproxy/routes.list.gz。
 
-## key文件的生成 ##
+## key的生成 ##
 
-可以使用以下语句生成。文件生成后，在服务器端和客户端使用keyfile指定即可。
+可以使用以下语句生成，写入两边的config即可。
 
-	dd if=/dev/random of=key count=16 bs=1
-	chmod 400 key
-
-其中aes/des/tripledes/rc4需要16字节的随机数。当然，在默认情况下，debian打出的包会在安装时自动生成一个/etc/goproxy/key（如果没有的话）。
+    head -c 16 /dev/random | base64
 
 ## 配置样例 ##
 

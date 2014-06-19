@@ -7,7 +7,7 @@
     "loglevel": "INFO",
 
     "cipher": "aes",
-    "keyfile": "key",
+    "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 
     "username": "shell",
     "password": "123"

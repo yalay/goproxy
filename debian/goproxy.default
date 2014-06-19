@@ -1,8 +1,0 @@
-# Defaults for goproxy initscript
-# sourced by /etc/init.d/goproxy
-# installed at /etc/default/goproxy by the maintainer scripts
-
-RUNDAEMON=0
-
-# Additional options that are passed to the Daemon.
-DAEMON_OPTS=""

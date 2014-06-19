@@ -10,9 +10,9 @@ type Listener struct {
 	block cipher.Block
 }
 
-func NewListener(listener net.Listener, method string, keyfile string) (l *Listener, err error) {
+func NewListener(listener net.Listener, method string, key string) (l *Listener, err error) {
 	log.Info("Crypt Listener with %s preparing.", method)
-	c, err := NewBlock(method, keyfile)
+	c, err := NewBlock(method, key)
 	if err != nil {
 		return
 	}

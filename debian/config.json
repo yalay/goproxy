@@ -1,5 +1,5 @@
 {
-    "mode": "http",
+    "mode": "stop",
     "listen": ":5233",
     "server": "srv:5233",
 
@@ -7,8 +7,9 @@
     "loglevel": "WARNING",
 
     "cipher": "aes",
-    "keyfile": "/etc/goproxy/key",
+    "key": "",
     "blackfile": "/usr/share/goproxy/routes.list.gz",
+    "resolvconf": "/etc/goproxy/resolv.conf",
 
     "username": "shell",
     "password": "123",

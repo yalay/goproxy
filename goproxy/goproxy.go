@@ -160,17 +160,16 @@ func main() {
 		return
 	}
 
-	log.Notice("%s mode start.", cfg.Mode)
 	switch cfg.Mode {
-	case "stop":
-		log.Info("server stopped in stop mode")
-		return
 	case "server":
+		log.Notice("server mode start.")
 		err = run_server(&cfg)
 	case "http":
+		log.Notice("http mode start.")
 		err = run_httproxy(&cfg)
 	default:
-		log.Warning("not supported mode.")
+		log.Info("server stopped in unknown mode")
+		return
 	}
 	if err != nil {
 		log.Error("%s", err)

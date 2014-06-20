@@ -5,7 +5,6 @@
     "logfile": "server.log",
     "loglevel": "INFO",
 
-    "cipher": "aes",
     "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 
     "auth": {

@@ -3,17 +3,14 @@
     "listen": ":5233",
     "server": "srv:5233",
 
-    "logfile": "/var/log/goproxy.log",
     "loglevel": "WARNING",
 
-    "cipher": "aes",
     "key": "",
     "blackfile": "/usr/share/goproxy/routes.list.gz",
-    "resolvconf": "/etc/goproxy/resolv.conf",
 
-    "username": "shell",
-    "password": "123",
+    "username": "username",
+    "password": "password",
     "auth": {
-	"shell": "123"
+	"username": "password"
     }
 }

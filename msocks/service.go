@@ -293,10 +293,12 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	log.Notice("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
+	ti := time.AfterFunc(
+		AUTH_TIMEOUT*time.Microsecond, func() { conn.Close() })
 	if !ms.on_auth(conn) {
-		conn.Close()
 		return
 	}
+	ti.Stop()
 
 	sess := NewSession(conn)
 	sess.dialer = ms.dialer

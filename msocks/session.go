@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	AUTH_TIMEOUT   = 5000
 	PINGTIME       = 5000
 	PINGRANDOM     = 1000
 	TIMEOUT_COUNT  = 6

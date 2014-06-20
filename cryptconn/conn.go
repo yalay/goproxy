@@ -27,6 +27,8 @@ func NewBlock(method string, key string) (c cipher.Block, err error) {
 	}
 
 	switch method {
+	default:
+		c, err = aes.NewCipher(byteKey)
 	case "aes":
 		c, err = aes.NewCipher(byteKey)
 	case "des":
@@ -46,17 +48,8 @@ type CryptConn struct {
 
 func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 	iv := make([]byte, block.BlockSize())
-	_, err = rand.Read(iv)
+	_, err = io.ReadFull(conn, iv)
 	if err != nil {
-		return
-	}
-
-	n, err := conn.Write(iv)
-	if err != nil {
-		return
-	}
-	if n != len(iv) {
-		err = io.ErrShortWrite
 		return
 	}
 
@@ -71,8 +64,17 @@ func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 
 func NewServer(conn net.Conn, block cipher.Block) (sc *CryptConn, err error) {
 	iv := make([]byte, block.BlockSize())
-	_, err = io.ReadFull(conn, iv)
+	_, err = rand.Read(iv)
 	if err != nil {
+		return
+	}
+
+	n, err := conn.Write(iv)
+	if err != nil {
+		return
+	}
+	if n != len(iv) {
+		err = io.ErrShortWrite
 		return
 	}
 

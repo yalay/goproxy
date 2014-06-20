@@ -6,7 +6,6 @@
     "logfile": "client.log",
     "loglevel": "INFO",
 
-    "cipher": "aes",
     "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 
     "username": "shell",

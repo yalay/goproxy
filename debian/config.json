@@ -1,5 +1,5 @@
 {
-    "mode": "stop",
+    "mode": "",
     "listen": ":5233",
     "server": "srv:5233",
 

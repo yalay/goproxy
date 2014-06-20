@@ -293,8 +293,10 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	log.Notice("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
-	ti := time.AfterFunc(
-		AUTH_TIMEOUT*time.Microsecond, func() { conn.Close() })
+	ti := time.AfterFunc(AUTH_TIMEOUT*time.Millisecond, func() {
+		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
+		conn.Close()
+	})
 	if !ms.on_auth(conn) {
 		return
 	}

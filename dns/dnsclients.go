@@ -335,23 +335,3 @@ func goLookupIP(name string) (addrs []net.IP, err error) {
 	addrs = append(addrs, convertRR_AAAA(records)...)
 	return addrs, nil
 }
-
-// goLookupCNAME is the native Go implementation of LookupCNAME.
-// Used only if cgoLookupCNAME refuses to handle the request
-// (that is, only if cgoLookupCNAME is the stub in cgo_stub.go).
-// Normally we let cgo use the C library resolver instead of
-// depending on our lookup code, so that Go and C get the same
-// answers.
-func goLookupCNAME(name string) (cname string, err error) {
-	onceLoadConfig.Do(loadConfig)
-	if dnserr != nil || cfg == nil {
-		err = dnserr
-		return
-	}
-	_, rr, err := lookup(name, dnsTypeCNAME)
-	if err != nil {
-		return
-	}
-	cname = rr[0].(*dnsRR_CNAME).Cname
-	return
-}

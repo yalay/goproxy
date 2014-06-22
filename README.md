@@ -38,7 +38,6 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * cipher: 加密算法，可以为aes/des/tripledes，默认aes。
 * key: 密钥。16个随机数据base64后的结果。
 * blackfile: 黑名单文件，http模式下可选。
-* resolvconf: resolv文件的位置，默认/etc/goproxy/resolv.conf。
 * username: 连接用户名，http模式下需要。
 * password: 连接密码，http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。
@@ -55,7 +54,7 @@ http模式运行在本地，需要一个境外的server服务器做支撑，对�
 
 连接到http模式的服务上，可以按照http代理协议访问某个目标。服务首先会对目标做DNS查询，然后根据IP地址区分，如果在国内，直接连接。如果国外，使用server去连接。区分的基础是IP段分配列表。
 
-DNS的配置在配置文件的resolvconf下定义。地址黑名单（直接访问的项）在配置文件blackfile下定义。
+地址黑名单（直接访问的项）在配置文件blackfile下定义。
 
 ## 黑名单文件
 
@@ -67,7 +66,7 @@ DNS的配置在配置文件的resolvconf下定义。地址黑名单（直接访�
 
 dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域名的指令，因此为了进行ip匹配，需要先进行dns查询。为了某些特殊原因，goproxy将go自带的dns做了修改。
 
-系统会首先尝试读取本目录的resolv.conf，然后读取/etc/goproxy/resolv.conf。该文件支持一般resolv.conf的所有配置，但是额外多出一项，blackip。
+系统会读取/etc/goproxy/resolv.conf。该文件支持一般resolv.conf的所有配置，但是额外多出一项，blackip。
 
 如果blackip有指定，那么当dns查询结果为blackip所指定的ip时，结果丢弃，等待下一个响应包的返回。这个行为可以很大程度上抵御dns污染。
 

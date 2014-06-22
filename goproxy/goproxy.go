@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
-	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
@@ -26,10 +25,9 @@ type Config struct {
 	Logfile  string
 	Loglevel string
 
-	Cipher     string
-	Key        string
-	Blackfile  string
-	ResolvConf string
+	Cipher    string
+	Key       string
+	Blackfile string
 
 	Username string
 	Password string
@@ -56,25 +54,7 @@ func run_server(cfg *Config) (err error) {
 	return s.Serve(listener)
 }
 
-func load_resolv_conf(cfg *Config) (err error) {
-	if cfg.ResolvConf != "" {
-		err = dns.LoadConfig(cfg.ResolvConf)
-		return
-	}
-	err = dns.LoadConfig("resolv.conf")
-	if err == nil {
-		return
-	}
-	err = dns.LoadConfig("/etc/goproxy/resolv.conf")
-	return
-}
-
 func run_httproxy(cfg *Config) (err error) {
-	err = load_resolv_conf(cfg)
-	if err != nil {
-		return
-	}
-
 	var dialer sutils.Dialer
 	dialer, err = cryptconn.NewDialer(
 		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)

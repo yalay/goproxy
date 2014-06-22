@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin freebsd linux netbsd openbsd
+// +build darwin dragonfly freebsd linux netbsd openbsd
 
 // Read system DNS config from /etc/resolv.conf
 
@@ -11,17 +11,6 @@ package dns
 import (
 	"net"
 )
-
-type DNSConfigError struct {
-	Err error
-}
-
-func (e *DNSConfigError) Error() string {
-	return "error reading DNS config: " + e.Err.Error()
-}
-
-func (e *DNSConfigError) Timeout() bool   { return false }
-func (e *DNSConfigError) Temporary() bool { return false }
 
 type dnsConfig struct {
 	servers  []string // servers to use
@@ -40,7 +29,7 @@ type dnsConfig struct {
 func dnsReadConfig(configfile string) (*dnsConfig, error) {
 	file, err := open(configfile)
 	if err != nil {
-		return nil, &DNSConfigError{err}
+		return nil, &net.DNSConfigError{err}
 	}
 	conf := new(dnsConfig)
 	conf.servers = make([]string, 3)[0:0] // small, but the standard limit

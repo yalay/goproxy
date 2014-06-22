@@ -620,7 +620,7 @@ func printStruct(any dnsStruct) string {
 		s += name + "="
 		switch tag {
 		case "ipv4":
-			i := val.(uint32)
+			i := *val.(*uint32)
 			s += net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 		case "ipv6":
 			i := val.([]byte)

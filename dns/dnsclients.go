@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin freebsd linux netbsd openbsd
+// +build darwin dragonfly freebsd linux netbsd openbsd
 
 // DNS client: see RFC 1035.
 // Has to be linked into package net for Dial.
@@ -18,11 +18,14 @@ package dns
 
 import (
 	"github.com/op/go-logging"
+	"io"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
+var noDeadline = time.Time{}
 var log = logging.MustGetLogger("")
 
 func check_black(name, server string, msg *dnsMsg, qtype uint16) bool {
@@ -53,6 +56,7 @@ func check_black(name, server string, msg *dnsMsg, qtype uint16) bool {
 // Send a request on the connection and hope for a reply.
 // Up to cfg.attempts attempts.
 func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, error) {
+	_, useTCP := c.(*net.TCPConn)
 	if len(name) >= 256 {
 		return nil, &DNSError{Err: "name too long", Name: name}
 	}
@@ -66,11 +70,14 @@ func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, e
 	if !ok {
 		return nil, &DNSError{Err: "internal error - cannot pack message", Name: name}
 	}
+	if useTCP {
+		mlen := uint16(len(msg))
+		msg = append([]byte{byte(mlen >> 8), byte(mlen)}, msg...)
+	}
 	var server string
 	if a := c.RemoteAddr(); a != nil {
 		server = a.String()
 	}
-
 	for attempt := 0; attempt < cfg.attempts; attempt++ {
 		n, err := c.Write(msg)
 		if err != nil {
@@ -78,21 +85,35 @@ func exchange(cfg *dnsConfig, c net.Conn, name string, qtype uint16) (*dnsMsg, e
 		}
 
 		if cfg.timeout == 0 {
-			c.SetReadDeadline(time.Time{})
+			c.SetReadDeadline(noDeadline)
 		} else {
 			c.SetReadDeadline(time.Now().Add(time.Duration(cfg.timeout) * time.Second))
 		}
 
 	Reread:
-		buf := make([]byte, 2000) // More than enough.
-		n, err = c.Read(buf)
+		buf := make([]byte, 2000)
+		if useTCP {
+			n, err = io.ReadFull(c, buf[:2])
+			if err != nil {
+				if e, ok := err.(net.Error); ok && e.Timeout() {
+					continue
+				}
+			}
+			mlen := int(buf[0])<<8 | int(buf[1])
+			if mlen > len(buf) {
+				buf = make([]byte, mlen)
+			}
+			n, err = io.ReadFull(c, buf[:mlen])
+		} else {
+			n, err = c.Read(buf)
+		}
 		if err != nil {
 			if e, ok := err.(net.Error); ok && e.Timeout() {
 				continue
 			}
 			return nil, err
 		}
-		buf = buf[0:n]
+		buf = buf[:n]
 		in := new(dnsMsg)
 		if !in.Unpack(buf) || in.id != out.id {
 			continue
@@ -131,12 +152,21 @@ func tryOneName(cfg *dnsConfig, name string, qtype uint16) (cname string, addrs 
 			err = merr
 			continue
 		}
-		cname, addrs, err = answer(name, server, msg, qtype)
-		if err == nil {
-			break
+		if msg.truncated { // see RFC 5966
+			c, cerr = net.Dial("tcp", server)
+			if cerr != nil {
+				err = cerr
+				continue
+			}
+			msg, merr = exchange(cfg, c, name, qtype)
+			c.Close()
+			if merr != nil {
+				err = merr
+				continue
+			}
 		}
-		if len(addrs) == 0 {
-			err = &DNSError{Err: noSuchHost, Name: name, Server: server}
+		cname, addrs, err = answer(name, server, msg, qtype)
+		if err == nil || err.(*DNSError).Err == noSuchHost {
 			break
 		}
 	}
@@ -163,15 +193,20 @@ func convertRR_AAAA(records []dnsRR) []net.IP {
 }
 
 var cfg *dnsConfig
+var dnserr error
 
-func LoadConfig(configfile string) (err error) {
-	cfg, err = dnsReadConfig(configfile)
-	return
-}
+func loadConfig() { cfg, dnserr = dnsReadConfig("/etc/goproxy/config") }
+
+var onceLoadConfig sync.Once
 
 func lookup(name string, qtype uint16) (cname string, addrs []dnsRR, err error) {
 	if !isDomainName(name) {
 		return name, nil, &DNSError{Err: "invalid domain name", Name: name}
+	}
+	onceLoadConfig.Do(loadConfig)
+	if dnserr != nil || cfg == nil {
+		err = dnserr
+		return
 	}
 	// If name is rooted (trailing dot) or has enough dots,
 	// try it by itself first.
@@ -212,10 +247,50 @@ func lookup(name string, qtype uint16) (cname string, addrs []dnsRR, err error) 
 	if err == nil {
 		return
 	}
+	if e, ok := err.(*DNSError); ok {
+		// Show original name passed to lookup, not suffixed one.
+		// In general we might have tried many suffixes; showing
+		// just one is misleading. See also golang.org/issue/6324.
+		e.Name = name
+	}
 	return
 }
 
-func LookupIP(name string) (addrs []net.IP, err error) {
+// goLookupHost is the native Go implementation of LookupHost.
+// Used only if cgoLookupHost refuses to handle the request
+// (that is, only if cgoLookupHost is the stub in cgo_stub.go).
+// Normally we let cgo use the C library resolver instead of
+// depending on our lookup code, so that Go and C get the same
+// answers.
+func goLookupHost(name string) (addrs []string, err error) {
+	// Use entries from /etc/hosts if they match.
+	addrs = lookupStaticHost(name)
+	if len(addrs) > 0 {
+		return
+	}
+	onceLoadConfig.Do(loadConfig)
+	if dnserr != nil || cfg == nil {
+		err = dnserr
+		return
+	}
+	ips, err := goLookupIP(name)
+	if err != nil {
+		return
+	}
+	addrs = make([]string, 0, len(ips))
+	for _, ip := range ips {
+		addrs = append(addrs, ip.String())
+	}
+	return
+}
+
+// goLookupIP is the native Go implementation of LookupIP.
+// Used only if cgoLookupIP refuses to handle the request
+// (that is, only if cgoLookupIP is the stub in cgo_stub.go).
+// Normally we let cgo use the C library resolver instead of
+// depending on our lookup code, so that Go and C get the same
+// answers.
+func goLookupIP(name string) (addrs []net.IP, err error) {
 	// Use entries from /etc/hosts if possible.
 	haddrs := lookupStaticHost(name)
 	if len(haddrs) > 0 {
@@ -228,25 +303,55 @@ func LookupIP(name string) (addrs []net.IP, err error) {
 			return
 		}
 	}
-
-	var records []dnsRR
-	var cname string
-	cname, records, err = lookup(name, dnsTypeA)
-	if err != nil {
+	onceLoadConfig.Do(loadConfig)
+	if dnserr != nil || cfg == nil {
+		err = dnserr
 		return
 	}
+	var records []dnsRR
+	var cname string
+	var err4, err6 error
+	cname, records, err4 = lookup(name, dnsTypeA)
 	addrs = convertRR_A(records)
 	if cname != "" {
 		name = cname
 	}
-	_, records, err = lookup(name, dnsTypeAAAA)
-	if err != nil && len(addrs) > 0 {
-		// Ignore error because A lookup succeeded.
-		err = nil
+	_, records, err6 = lookup(name, dnsTypeAAAA)
+	if err4 != nil && err6 == nil {
+		// Ignore A error because AAAA lookup succeeded.
+		err4 = nil
 	}
+	if err6 != nil && len(addrs) > 0 {
+		// Ignore AAAA error because A lookup succeeded.
+		err6 = nil
+	}
+	if err4 != nil {
+		return nil, err4
+	}
+	if err6 != nil {
+		return nil, err6
+	}
+
+	addrs = append(addrs, convertRR_AAAA(records)...)
+	return addrs, nil
+}
+
+// goLookupCNAME is the native Go implementation of LookupCNAME.
+// Used only if cgoLookupCNAME refuses to handle the request
+// (that is, only if cgoLookupCNAME is the stub in cgo_stub.go).
+// Normally we let cgo use the C library resolver instead of
+// depending on our lookup code, so that Go and C get the same
+// answers.
+func goLookupCNAME(name string) (cname string, err error) {
+	onceLoadConfig.Do(loadConfig)
+	if dnserr != nil || cfg == nil {
+		err = dnserr
+		return
+	}
+	_, rr, err := lookup(name, dnsTypeCNAME)
 	if err != nil {
 		return
 	}
-	addrs = append(addrs, convertRR_AAAA(records)...)
+	cname = rr[0].(*dnsRR_CNAME).Cname
 	return
 }

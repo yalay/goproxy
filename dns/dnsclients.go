@@ -195,7 +195,7 @@ func convertRR_AAAA(records []dnsRR) []net.IP {
 var cfg *dnsConfig
 var dnserr error
 
-func loadConfig() { cfg, dnserr = dnsReadConfig("/etc/goproxy/config") }
+func loadConfig() { cfg, dnserr = dnsReadConfig("/etc/goproxy/resolv.conf") }
 
 var onceLoadConfig sync.Once
 

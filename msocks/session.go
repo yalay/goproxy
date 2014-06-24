@@ -142,7 +142,7 @@ func NewSession(conn net.Conn) (s *Session) {
 		ports: make(map[uint16]FrameSender, 0),
 	}
 	s.PingPong = *NewPingPong(s)
-	log.Notice("session %p created.", s)
+	log.Notice("session %s created.", s.GetId())
 	return
 }
 
@@ -205,7 +205,8 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 }
 
 func (s *Session) Close() (err error) {
-	log.Warning("close all connects (%d) for session: %p.", len(s.ports), s)
+	log.Warning("close all connects (%d) for session: %s.",
+		len(s.ports), s.GetId())
 	defer s.conn.Close()
 	s.plock.Lock()
 	defer s.plock.Unlock()
@@ -222,6 +223,14 @@ func (s *Session) LocalAddr() net.Addr {
 
 func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
+}
+
+func (s *Session) LocalPort() int {
+	addr, ok := s.LocalAddr().(*net.TCPAddr)
+	if !ok {
+		return -1
+	}
+	return addr.Port
 }
 
 func (s *Session) SendFrame(f Frame) (err error) {
@@ -246,7 +255,7 @@ func (s *Session) SendFrame(f Frame) (err error) {
 	if n != len(b) {
 		return io.ErrShortWrite
 	}
-	log.Debug("sess %p write len(%d).", s, len(b))
+	log.Debug("sess %s write len(%d).", s.GetId(), len(b))
 	return
 }
 
@@ -254,15 +263,18 @@ func (s *Session) CloseFrame() error {
 	return s.Close()
 }
 
+func (s *Session) GetId() string {
+	return fmt.Sprintf("%d", s.LocalPort())
+}
+
 func (s *Session) GetSize() int {
 	return len(s.ports)
 }
 
-func (s *Session) GetPorts(p []*Conn) (ports []*Conn) {
+func (s *Session) GetPorts() (ports []*Conn) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
-	ports = p
 	for _, fs := range s.ports {
 		if c, ok := fs.(*Conn); ok {
 			ports = append(ports, c)
@@ -286,14 +298,14 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	}
 	id = s.next_id
 	s.next_id += 1
-	log.Debug("put into next id %p(%d): %p.", s, id, fs)
+	log.Debug("%s put into next id %d: %p.", s.GetId(), id, fs)
 
 	s.ports[id] = fs
 	return
 }
 
 func (s *Session) PutIntoId(id uint16, fs FrameSender) (err error) {
-	log.Debug("put into id %p(%d): %p.", s, id, fs)
+	log.Debug("%s put into id %d: %p.", s.GetId(), id, fs)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -315,7 +327,7 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	delete(s.ports, streamid)
-	log.Notice("remove ports %p(%d).", s, streamid)
+	log.Notice("%s remove ports %d.", s.GetId(), streamid)
 	return
 }
 
@@ -361,7 +373,8 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 
 	err = c.SendFrame(f)
 	if err != nil {
-		log.Error("%p(%d) send failed, err: %s.", s, streamid, err)
+		log.Error("%s(%d) send failed, err: %s.",
+			s.GetId(), streamid, err)
 		return false
 	}
 	return true
@@ -386,8 +399,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	// it may toke long time to connect with target address
 	// so we use goroutine to return back loop
 	go func() {
-		log.Debug("%p(%d) try to connect: %s.",
-			s, ft.Streamid, ft.Address)
+		log.Debug("%s(%d) try to connect: %s.",
+			s.GetId(), ft.Streamid, ft.Address)
 
 		// TODO: timeout
 		conn, err := s.dialer.Dial("tcp", ft.Address)
@@ -411,8 +424,8 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		c.status = ST_EST
 
 		go sutils.CopyLink(conn, c)
-		log.Notice("server side %p(%d) connected %s.",
-			s, ft.Streamid, ft.Address)
+		log.Notice("server side %s(%d) connected %s.",
+			s.GetId(), ft.Streamid, ft.Address)
 		return
 	}()
 	return true

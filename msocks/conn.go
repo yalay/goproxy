@@ -121,7 +121,11 @@ func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
 }
 
 func (c *Conn) GetId() (s string) {
-	return fmt.Sprintf("%p:%d", c.sess, c.streamid)
+	return fmt.Sprintf("%d(%d)", c.sess.LocalPort(), c.streamid)
+}
+
+func (c *Conn) GetStreamId() (s string) {
+	return fmt.Sprintf("%d", c.streamid)
 }
 
 func (c *Conn) WaitForConn(address string) (err error) {
@@ -141,8 +145,8 @@ func (c *Conn) WaitForConn(address string) (err error) {
 			c.streamid, errno)
 		c.Final()
 	} else {
-		log.Notice("connect successed: %p(%d) => %s.",
-			c.sess, c.streamid, address)
+		log.Notice("connect successed: %s => %s.",
+			c.GetId(), address)
 	}
 
 	c.ch = nil
@@ -157,13 +161,13 @@ func (c *Conn) Final() {
 		log.Error("%s", err)
 	}
 
-	log.Info("connection %p(%d) closed.", c.sess, c.streamid)
+	log.Info("connection %s closed.", c.GetId())
 	c.status = ST_UNKNOWN
 	return
 }
 
 func (c *Conn) Close() (err error) {
-	log.Info("call close to %p.", c)
+	log.Info("call close to %s.", c.GetId())
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -210,7 +214,8 @@ func (c *Conn) SendFrame(f Frame) (err error) {
 	case *FrameFin:
 		return c.InFin(ft)
 	case *FrameRst:
-		log.Debug("reset %p(%d), sender %p.", c.sess, ft.Streamid, c)
+		log.Debug("reset %s, sender %s.",
+			c.GetId(), c.GetId())
 		c.Final()
 	}
 	return
@@ -238,8 +243,8 @@ func (c *Conn) InConnect(errno uint32) (err error) {
 }
 
 func (c *Conn) InData(ft *FrameData) (err error) {
-	log.Info("%p(%d) recved %d bytes from remote.",
-		c.sess, ft.Streamid, len(ft.Data))
+	log.Info("%s recved %d bytes from remote.",
+		c.GetId(), len(ft.Data))
 	err = c.rqueue.Push(ft.Data)
 	if err != nil {
 		return
@@ -259,7 +264,8 @@ func (c *Conn) InWnd(ft *FrameWnd) (err error) {
 }
 
 func (c *Conn) InFin(ft *FrameFin) (err error) {
-	log.Info("connection %p(%d) closed from remote.", c.sess, c.streamid)
+	log.Info("connection %s closed from remote.",
+		c.GetId())
 	// always need to close read pipe
 	// coz fin means remote will never send data anymore
 	c.rqueue.Close()
@@ -357,13 +363,13 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 			log.Error("%s", err)
 			return
 		}
-		log.Debug("%p(%d) send chunk size %d at %d.",
-			c.sess, c.streamid, size, n)
+		log.Debug("%s send chunk size %d at %d.",
+			c.GetId(), size, n)
 
 		data = data[size:]
 		n += int(size)
 	}
-	log.Info("%p(%d) send size %d.", c.sess, c.streamid, n)
+	log.Info("%s send size %d.", c.GetId(), n)
 	return
 }
 

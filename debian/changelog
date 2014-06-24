@@ -1,8 +1,14 @@
-goproxy (2.2.0) UNRELEASED; urgency=medium
+goproxy (2.2.1) UNRELEASED; urgency=medium
 
-  * update dns system
+  * session pool system
 
- -- Shell Xu <shell909090@gmail.com>  Sun, 22 Jun 2014 18:04:49 +0800
+ -- Shell Xu <shell909090@gmail.com>  Wed, 25 Jun 2014 00:23:38 +0800
+
+goproxy (2.2.0) unstable; urgency=medium
+
+  * update dns system.
+
+ -- Shell Xu <shell909090@gmail.com>  Wed, 25 Jun 2014 00:23:22 +0800
 
 goproxy (2.1.4) unstable; urgency=medium
 

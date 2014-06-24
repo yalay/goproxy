@@ -44,19 +44,11 @@ func (sp *SessionPool) GetSize() int {
 	return len(sp.sess)
 }
 
-func (sp *SessionPool) GetPorts() (ports []*Conn) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	ports = make([]*Conn, 0)
-	for _, s := range sp.sess {
-		ports = s.GetPorts(ports)
-	}
-	return
+func (sp *SessionPool) GetSess() (sess []*Session) {
+	return sp.sess
 }
 
 func (sp *SessionPool) Remove(s *Session) (n int, err error) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
 	for i, sess := range sp.sess {
 		if s == sess {
 			n := len(sp.sess)
@@ -68,9 +60,7 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
-func (sp *SessionPool) GetLessSess() (sess *Session) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+func (sp *SessionPool) getLessSess() (sess *Session) {
 	size := 100000
 	for _, s := range sp.sess {
 		if s.GetSize() < size {
@@ -82,20 +72,24 @@ func (sp *SessionPool) GetLessSess() (sess *Session) {
 }
 
 func (sp *SessionPool) GetOrCreateSess() (sess *Session) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
 	if len(sp.sess) == 0 {
 		sp.createSession()
 	}
-	sess = sp.GetLessSess()
+	sess = sp.getLessSess()
 	if sess.GetSize() > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
-		go sp.createSession()
+		go func() {
+			sp.mu.Lock()
+			defer sp.mu.Unlock()
+			sp.createSession()
+		}()
 	}
 	return
 }
 
 func (sp *SessionPool) createSession() (err error) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
 	sess, err := sp.sm.MakeSess()
 	if err != nil {
 		log.Error("%s", err)
@@ -108,6 +102,9 @@ func (sp *SessionPool) createSession() (err error) {
 
 		// that's mean session is dead
 		log.Warning("session runtime quit, reboot from connect.")
+
+		sp.mu.Lock()
+		defer sp.mu.Unlock()
 		n, err := sp.Remove(sess)
 		if err != nil {
 			log.Error("%s", err)
@@ -117,7 +114,7 @@ func (sp *SessionPool) createSession() (err error) {
 		if n < MIN_SESS_NUM {
 			sp.createSession()
 		} else {
-			if sp.GetLessSess().GetSize() > MAX_CONN_PRE_SESS {
+			if sp.getLessSess().GetSize() > MAX_CONN_PRE_SESS {
 				sp.createSession()
 			}
 		}
@@ -305,8 +302,8 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 	sess := NewSession(conn)
 	sess.dialer = ms.dialer
 	sess.Run()
-	log.Notice("server session %p quit: %s => %s.",
-		sess, conn.RemoteAddr(), conn.LocalAddr())
+	log.Notice("server session %d quit: %s => %s.",
+		sess.LocalPort(), conn.RemoteAddr(), conn.LocalAddr())
 }
 
 func (ms *MsocksService) Serve(listener net.Listener) (err error) {

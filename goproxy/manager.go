@@ -52,25 +52,37 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
         <td><a href="stack">stack</a></td>
         <td><a href="cutoff">cutoff</a></td>
         <td><a href="lookup">lookup</a></td>
-        <td>LastPing: {{.GetLastPing}}</td>
       </tr>
     </table>
     <table>
       <tr>
-	<th>Id</th><th>State</th><th>Recv-Q</th><th>Send-Q</th><th width="50%">address</th>
+	<th>Sess</th><th>Id</th><th>State/Size</th><th>Recv-Q</th><th>Send-Q</th>
+        <th width="50%">address/LastPing</th>
       </tr>
-      {{range $conn := .GetPorts}}
-      <tr>
-        {{with $conn}}
-          <td>{{$conn.GetId}}</td>
-          <td>{{$conn.GetStatus}}</td>
-          <td>{{$conn.GetReadBufSize}}</td>
-          <td>{{$conn.GetWriteBufSize}}</td>
-          <td>{{$conn.Address}}</td>
-        {{else}}
-          <td>half closed</td>
+      {{range $sess := .GetSess}}
+	<tr>
+	  <td>{{$sess.GetId}}</td>
+	  <td></td>
+	  <td>{{$sess.GetSize}}</td>
+	  <td></td>
+	  <td></td>
+	  <td>{{$sess.GetLastPing}}</td>
+	</tr>
+	{{range $conn := $sess.GetPorts}}
+	  <tr>
+	    {{with $conn}}
+	      <td></td>
+	      <td>{{$conn.GetStreamId}}</td>
+	      <td>{{$conn.GetStatus}}</td>
+	      <td>{{$conn.GetReadBufSize}}</td>
+	      <td>{{$conn.GetWriteBufSize}}</td>
+	      <td>{{$conn.Address}}</td>
+	    {{else}}
+	      <td></td>
+	      <td>half closed</td>
+	    {{end}}
+          </tr>
         {{end}}
-      </tr>
       {{end}}
     </table>
   </body>
@@ -100,7 +112,7 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
         <td><a href="cutoff">cutoff</a></td>
         <td><a href="lookup">lookup</a></td>
       </tr>
-      <tr>no session</tr>
+      <tr><td>no session</td></tr>
     </table>
   </body>
 </html>`))

@@ -23,6 +23,9 @@ const (
 	DIAL_TIMEOUT = 30000
 	WINDOWSIZE   = 2 * 1024 * 1024
 	WND_DELAY    = 100
+
+	MIN_SESS_NUM      = 2
+	MAX_CONN_PRE_SESS = 16
 )
 
 const (
@@ -34,13 +37,14 @@ const (
 )
 
 var (
-	ErrStreamNotExist = errors.New("stream not exist.")
-	ErrQueueClosed    = errors.New("queue closed")
-	ErrUnexpectedPkg  = errors.New("unexpected package")
-	ErrNotSyn         = errors.New("frame result in conn which status is not syn")
-	ErrFinState       = errors.New("status not est or fin wait when get fin")
-	ErrIdExist        = errors.New("frame sync stream id exist.")
-	ErrState          = errors.New("status error")
+	ErrStreamNotExist  = errors.New("stream not exist.")
+	ErrQueueClosed     = errors.New("queue closed")
+	ErrUnexpectedPkg   = errors.New("unexpected package")
+	ErrNotSyn          = errors.New("frame result in conn which status is not syn")
+	ErrFinState        = errors.New("status not est or fin wait when get fin")
+	ErrIdExist         = errors.New("frame sync stream id exist.")
+	ErrState           = errors.New("status error")
+	ErrSessionNotFound = errors.New("session not found")
 )
 
 var (
@@ -142,6 +146,64 @@ func NewSession(conn net.Conn) (s *Session) {
 	return
 }
 
+func DialSession(conn net.Conn, username, password string) (s *Session, err error) {
+	log.Notice("auth with username: %s, password: %s.", username, password)
+	fb := NewFrameAuth(0, username, password)
+	buf, err := fb.Packed()
+	if err != nil {
+		return
+	}
+
+	_, err = conn.Write(buf.Bytes())
+	if err != nil {
+		return
+	}
+
+	f, err := ReadFrame(conn)
+	if err != nil {
+		return
+	}
+
+	ft, ok := f.(*FrameResult)
+	if !ok {
+		err = errors.New("unexpected package")
+		log.Error("%s", err)
+		return
+	}
+
+	if ft.Errno != ERR_NONE {
+		conn.Close()
+		err = fmt.Errorf("create connection failed with code: %d.",
+			ft.Errno)
+		log.Error("%s", err)
+		return
+	}
+
+	log.Notice("auth ok.")
+	s = NewSession(conn)
+	s.Ping()
+
+	return
+}
+
+func (s *Session) Dial(network, address string) (c *Conn, err error) {
+	c = NewConn(ST_SYN_SENT, 0, s, address)
+	streamid, err := s.PutIntoNextId(c)
+	if err != nil {
+		return
+	}
+	c.streamid = streamid
+
+	log.Info("try dial: %s => %s.",
+		s.conn.RemoteAddr().String(), address)
+	err = c.WaitForConn(address)
+	if err != nil {
+		return
+	}
+
+	return c, nil
+}
+
 func (s *Session) Close() (err error) {
 	log.Warning("close all connects (%d) for session: %p.", len(s.ports), s)
 	defer s.conn.Close()
@@ -192,14 +254,18 @@ func (s *Session) CloseFrame() error {
 	return s.Close()
 }
 
-func (s *Session) GetPorts() (ports map[uint16]*Conn) {
+func (s *Session) GetSize() int {
+	return len(s.ports)
+}
+
+func (s *Session) GetPorts(p []*Conn) (ports []*Conn) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
-	ports = make(map[uint16]*Conn, 0)
-	for i, fs := range s.ports {
+	ports = p
+	for _, fs := range s.ports {
 		if c, ok := fs.(*Conn); ok {
-			ports[i] = c
+			ports = append(ports, c)
 		}
 	}
 	return

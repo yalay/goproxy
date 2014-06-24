@@ -57,12 +57,12 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
     </table>
     <table>
       <tr>
-	<th>index</th><th>State</th><th>Recv-Q</th><th>Send-Q</th><th width="50%">address</th>
+	<th>Id</th><th>State</th><th>Recv-Q</th><th>Send-Q</th><th width="50%">address</th>
       </tr>
-      {{range $index, $conn := .GetPorts}}
+      {{range $conn := .GetPorts}}
       <tr>
         {{with $conn}}
-          <td>{{$index}}</td>
+          <td>{{$conn.GetId}}</td>
           <td>{{$conn.GetStatus}}</td>
           <td>{{$conn.GetReadBufSize}}</td>
           <td>{{$conn.GetWriteBufSize}}</td>
@@ -81,8 +81,7 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	sess := mm.ndialer.GetSess(false)
-	if sess == nil {
+	if mm.ndialer.GetSize() == 0 {
 		w.WriteHeader(200)
 		w.Write([]byte(`
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -101,12 +100,13 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
         <td><a href="cutoff">cutoff</a></td>
         <td><a href="lookup">lookup</a></td>
       </tr>
+      <tr>no session</tr>
     </table>
   </body>
 </html>`))
 		return
 	}
-	err := mm.tmpl_sess.Execute(w, sess)
+	err := mm.tmpl_sess.Execute(w, mm.ndialer)
 	if err != nil {
 		log.Error("%s", err)
 	}
@@ -178,6 +178,6 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 }
 
 func (mm *MsocksManager) HandlerCutoff(w http.ResponseWriter, req *http.Request) {
-	mm.ndialer.Cutoff()
+	mm.ndialer.CutAll()
 	return
 }

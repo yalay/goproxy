@@ -58,15 +58,15 @@ func (dc DNSCache) LookupIP(hostname string) (addrs []net.IP, err error) {
 		return
 	}
 
-	if len(dc.cache) > 32 {
-		go dc.free()
-	}
-
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	dc.cache[hostname] = &IPEntry{
 		expire: time.Now().Add(cacheMaxAge),
 		addrs:  addrs,
+	}
+
+	if len(dc.cache) > 32 {
+		go dc.free()
 	}
 
 	return

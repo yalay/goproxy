@@ -110,6 +110,45 @@ func NewConn(status uint8, streamid uint16, sess *Session, address string) (c *C
 	return
 }
 
+func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
+	ch_timeout := time.After(t)
+	select {
+	case errno = <-ch:
+	case <-ch_timeout:
+		return ERR_TIMEOUT
+	}
+	return
+}
+
+func (c *Conn) GetId() (s string) {
+	return fmt.Sprintf("%p:%d", c.sess, c.streamid)
+}
+
+func (c *Conn) WaitForConn(address string) (err error) {
+	c.ch = make(chan uint32, 0)
+
+	fb := NewFrameSyn(c.streamid, address)
+	err = c.sess.SendFrame(fb)
+	if err != nil {
+		log.Error("%s", err)
+		c.Final()
+		return
+	}
+
+	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Millisecond)
+	if errno != ERR_NONE {
+		log.Error("connection failed for remote failed(%d): %d.",
+			c.streamid, errno)
+		c.Final()
+	} else {
+		log.Notice("connect successed: %p(%d) => %s.",
+			c.sess, c.streamid, address)
+	}
+
+	c.ch = nil
+	return
+}
+
 func (c *Conn) Final() {
 	c.rqueue.Close()
 

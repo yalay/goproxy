@@ -13,179 +13,175 @@ import (
 	"time"
 )
 
-func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
-	ch_timeout := time.After(t)
-	select {
-	case errno = <-ch:
-	case <-ch_timeout:
-		return ERR_TIMEOUT
+type SessionMaker interface {
+	MakeSess() (*Session, error)
+}
+
+type SessionPool struct {
+	mu   sync.Mutex
+	sess []*Session
+	sm   SessionMaker
+}
+
+func CreateSessionPool(sm SessionMaker) (sp SessionPool) {
+	sp = SessionPool{
+		sess: make([]*Session, 0),
+		sm:   sm,
 	}
 	return
 }
 
+func (sp *SessionPool) CutAll() {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	for _, s := range sp.sess {
+		s.Close()
+	}
+	sp.sess = make([]*Session, 0)
+}
+
+func (sp *SessionPool) GetSize() int {
+	return len(sp.sess)
+}
+
+func (sp *SessionPool) GetPorts() (ports []*Conn) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	ports = make([]*Conn, 0)
+	for _, s := range sp.sess {
+		ports = s.GetPorts(ports)
+	}
+	return
+}
+
+func (sp *SessionPool) Remove(s *Session) (n int, err error) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	for i, sess := range sp.sess {
+		if s == sess {
+			n := len(sp.sess)
+			sp.sess[i], sp.sess[n] = sp.sess[n], sp.sess[i]
+			sp.sess = sp.sess[:n-1]
+			return len(sp.sess), nil
+		}
+	}
+	return 0, ErrSessionNotFound
+}
+
+func (sp *SessionPool) GetLessSess() (sess *Session) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	size := 100000
+	for _, s := range sp.sess {
+		if s.GetSize() < size {
+			sess = s
+			size = s.GetSize()
+		}
+	}
+	return
+}
+
+func (sp *SessionPool) GetOrCreateSess() (sess *Session) {
+	if len(sp.sess) == 0 {
+		sp.createSession()
+	}
+	sess = sp.GetLessSess()
+	if sess.GetSize() > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
+		go sp.createSession()
+	}
+	return
+}
+
+func (sp *SessionPool) createSession() (err error) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	sess, err := sp.sm.MakeSess()
+	if err != nil {
+		log.Error("%s", err)
+		return
+	}
+	sp.sess = append(sp.sess, sess)
+
+	go func() {
+		sess.Run()
+
+		// that's mean session is dead
+		log.Warning("session runtime quit, reboot from connect.")
+		n, err := sp.Remove(sess)
+		if err != nil {
+			log.Error("%s", err)
+			return
+		}
+
+		if n < MIN_SESS_NUM {
+			sp.createSession()
+		} else {
+			if sp.GetLessSess().GetSize() > MAX_CONN_PRE_SESS {
+				sp.createSession()
+			}
+		}
+	}()
+	return
+}
+
 type Dialer struct {
+	SessionPool
 	sutils.Dialer
 	serveraddr string
 	username   string
 	password   string
-	lock       sync.Mutex
-	sess       *Session
 }
 
-func NewDialer(dialer sutils.Dialer, serveraddr string,
-	username, password string) (d *Dialer, err error) {
+func NewDialer(dialer sutils.Dialer, serveraddr, username, password string) (d *Dialer, err error) {
 	d = &Dialer{
 		Dialer:     dialer,
 		serveraddr: serveraddr,
 		username:   username,
 		password:   password,
 	}
+	d.SessionPool = CreateSessionPool(d)
 	return
 }
 
-func (d *Dialer) Cutoff() {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	if d.sess != nil {
-		d.sess.Close()
-	}
-}
-
-func (d *Dialer) createConn() (conn net.Conn, err error) {
-	log.Notice("create connect, serveraddr: %s.",
-		d.serveraddr)
-
-	conn, err = d.Dialer.Dial("tcp", d.serveraddr)
-	if err != nil {
-		return
-	}
-
-	log.Notice("auth with username: %s, password: %s.",
-		d.username, d.password)
-	fb := NewFrameAuth(0, d.username, d.password)
-	buf, err := fb.Packed()
-	if err != nil {
-		return
-	}
-
-	_, err = conn.Write(buf.Bytes())
-	if err != nil {
-		return
-	}
-
-	f, err := ReadFrame(conn)
-	if err != nil {
-		return
-	}
-
-	ft, ok := f.(*FrameResult)
-	if !ok {
-		err = errors.New("unexpected package")
-		log.Error("%s", err)
-		return
-	}
-
-	if ft.Errno != ERR_NONE {
-		conn.Close()
-		err = fmt.Errorf("create connection failed with code: %d.",
-			ft.Errno)
-		log.Error("%s", err)
-		return
-	}
-
-	log.Notice("auth ok.")
-	return
-}
-
-func (d *Dialer) createSession() (err error) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	if d.sess != nil {
-		return
-	}
-
-	// retry
+// Do I really need sleep? When tcp connect, syn retris will took 2 min(127s).
+// I retry this retry 6 times, it will be 762s = 12mins 42s, right?
+// I think that's really enough for most of time.
+// REMEMBER: don't modify net.ipv4.tcp_syn_retries, unless you know what you do.
+func (d *Dialer) MakeSess() (sess *Session, err error) {
 	var conn net.Conn
 	for i := uint(0); i < DIAL_RETRY; i++ {
-		conn, err = d.createConn()
+		log.Notice("create connect, serveraddr: %s.", d.serveraddr)
+
+		conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 		if err != nil {
 			log.Error("%s", err)
-			time.Sleep((1 << i) * time.Second)
-		} else {
-			break
+			// time.Sleep((1 << i) * time.Second)
+			continue
 		}
+
+		sess, err = DialSession(conn, d.username, d.password)
+		if err != nil {
+			log.Error("%s", err)
+			// time.Sleep((1 << i) * time.Second)
+			continue
+		}
+		break
 	}
 	if err != nil {
 		log.Critical("can't connect to host, quit.")
 		return
 	}
-
 	log.Notice("create session.")
-	d.sess = NewSession(conn)
-	d.sess.Ping()
-
-	go func() {
-		d.sess.Run()
-		// that's mean session is dead
-		log.Warning("session runtime quit, reboot from connect.")
-
-		// remove from sess
-		d.lock.Lock()
-		d.sess = nil
-		d.lock.Unlock()
-
-		d.createSession()
-	}()
 	return
 }
 
-func (d *Dialer) GetSess(create bool) (sess *Session) {
-	if d.sess == nil && create {
-		err := d.createSession()
-		if err != nil {
-			log.Error("%s", err)
-		}
-	}
-	return d.sess
-}
-
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
-	sess := d.GetSess(true)
+	sess := d.SessionPool.GetOrCreateSess()
 	if sess == nil {
 		panic("can't connect to host")
 	}
-	log.Info("try dial: %s => %s.",
-		sess.conn.RemoteAddr().String(), address)
-
-	c := NewConn(ST_SYN_SENT, 0, sess, address)
-	c.ch = make(chan uint32, 0)
-	streamid, err := sess.PutIntoNextId(c)
-	if err != nil {
-		return
-	}
-	c.streamid = streamid
-
-	fb := NewFrameSyn(streamid, address)
-	err = sess.SendFrame(fb)
-	if err != nil {
-		log.Error("%s", err)
-		c.Final()
-		return
-	}
-
-	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Millisecond)
-	if errno != ERR_NONE {
-		log.Error("connection failed for remote failed(%d): %d.",
-			streamid, errno)
-		c.Final()
-	} else {
-		log.Notice("connect successed: %p(%d) => %s.",
-			sess, streamid, address)
-	}
-	c.ch = nil
-
-	return c, nil
+	return sess.Dial(network, address)
 }
 
 func (d *Dialer) LookupIP(host string) (addrs []net.IP, err error) {

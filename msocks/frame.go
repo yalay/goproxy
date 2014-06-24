@@ -18,6 +18,8 @@ const (
 	MSG_FIN
 	MSG_RST
 	MSG_PING
+	MSG_DNS
+	MSG_ADDRS
 )
 
 func ReadString(r io.Reader) (s string, err error) {

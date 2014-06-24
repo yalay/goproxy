@@ -130,6 +130,11 @@ tar包内包含主程序，resolvconf和routes.list.gz示例。没有config.json
 
 整个包不需要安装，手工启动和关闭。如果需要自动启动机制，请自行处理。
 
+# 鸣谢
+
+* dns污染后IP地址来源来自[ChinaDNS](https://github.com/clowwindy/ChinaDNS)，MIT license.
+* dns库来自golang1.2，BSD license.
+
 # 授权
 
     Copyright (C) 2012-2014 Shell Xu

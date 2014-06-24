@@ -16,3 +16,7 @@ func (td *TcpDialer) Dial(network, address string) (conn net.Conn, err error) {
 }
 
 var DefaultTcpDialer = &TcpDialer{}
+
+type Lookuper interface {
+	LookupIP(host string) (addrs []net.IP, err error)
+}

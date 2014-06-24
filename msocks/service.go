@@ -188,6 +188,10 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	return c, nil
 }
 
+func (d *Dialer) LookupIP(host string) (addrs []net.IP, err error) {
+	return
+}
+
 type MsocksService struct {
 	userpass map[string]string
 	dialer   sutils.Dialer

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
+	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
@@ -71,7 +72,8 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
+			dialer, sutils.DefaultTcpDialer,
+			dns.DefaultLookuper, cfg.Blackfile)
 		if err != nil {
 			return
 		}

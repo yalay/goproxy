@@ -5,15 +5,17 @@ import (
 	"compress/gzip"
 	"errors"
 	"github.com/op/go-logging"
-	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
 )
 
 var log = logging.MustGetLogger("")
+
+var ErrDNSNotFound = errors.New("dns not found")
 
 type IPList []net.IPNet
 
@@ -67,6 +69,7 @@ func ReadIPListFile(filename string) (iplist IPList, err error) {
 	return ReadIPList(f)
 }
 
+// FIXME: can be better?
 func (iplist IPList) Contain(ip net.IP) bool {
 	for _, ipnet := range iplist {
 		if ipnet.Contains(ip) {
@@ -80,27 +83,38 @@ func (iplist IPList) Contain(ip net.IP) bool {
 
 type FilteredDialer struct {
 	sutils.Dialer
-	dialer sutils.Dialer
-	iplist IPList
-	dns    *DNSCache
+	dialer   sutils.Dialer
+	lookuper sutils.Lookuper
+	iplist   IPList
 }
 
 func NewFilteredDialer(dialer sutils.Dialer, dialer2 sutils.Dialer,
-	filename string) (fd *FilteredDialer, err error) {
+	lookuper sutils.Lookuper, filename string) (fd *FilteredDialer, err error) {
 
 	fd = &FilteredDialer{
-		Dialer: dialer,
-		dialer: dialer2,
-		dns: &DNSCache{
-			cache:       make(map[string]*IPEntry, 0),
-			lookup_func: dns.LookupIP,
-		},
+		Dialer:   dialer,
+		dialer:   dialer2,
+		lookuper: CreateDNSCache(lookuper),
 	}
 
 	if filename != "" {
 		fd.iplist, err = ReadIPListFile(filename)
+		return
 	}
 	return
+}
+
+func Getaddr(lookuper sutils.Lookuper, hostname string) (ip net.IP) {
+	ip = net.ParseIP(hostname)
+	if ip != nil {
+		return
+	}
+	addrs, err := lookuper.LookupIP(hostname)
+	n := len(addrs)
+	if err != nil || n == 0 {
+		return nil
+	}
+	return addrs[rand.Intn(n)]
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
@@ -117,9 +131,9 @@ func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err erro
 	}
 	hostname := address[:idx]
 
-	addr, err := fd.dns.ParseIP(hostname)
-	if err != nil {
-		return
+	addr := Getaddr(fd.lookuper, hostname)
+	if addr == nil {
+		return nil, ErrDNSNotFound
 	}
 
 	if fd.iplist.Contain(addr) {

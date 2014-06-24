@@ -6,18 +6,9 @@ package dns
 
 import "net"
 
-type timeoutError struct{}
-
-func (e *timeoutError) Error() string   { return "i/o timeout" }
-func (e *timeoutError) Timeout() bool   { return true }
-func (e *timeoutError) Temporary() bool { return true }
-
-var errTimeout error = &timeoutError{}
-
 var (
-	LookupHost = goLookupHost
-	LookupIP   = lookupIPMerge
-	lookupIP   = goLookupIP
+	LookupIP = lookupIPMerge
+	lookupIP = goLookupIP
 )
 
 var lookupGroup singleflight
@@ -40,3 +31,12 @@ func lookupIPMerge(host string) (addrs []net.IP, err error) {
 	}
 	return addrs, nil
 }
+
+type Lookuper struct {
+}
+
+func (l *Lookuper) LookupIP(host string) (addrs []net.IP, err error) {
+	return LookupIP(host)
+}
+
+var DefaultLookuper = &Lookuper{}

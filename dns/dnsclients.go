@@ -46,7 +46,9 @@ func check_black(name, server string, msg *dnsMsg, qtype uint16) bool {
 		log.Debug("no such host recved")
 		return true
 	}
-	if cfg.CheckBlack(addrs) {
+	// all dns type A?
+	ips := convertRR_A(addrs)
+	if cfg.CheckBlack(ips) {
 		log.Debug("fake dns resolv hited.")
 		return true
 	}
@@ -256,34 +258,6 @@ func lookup(name string, qtype uint16) (cname string, addrs []dnsRR, err error) 
 	return
 }
 
-// goLookupHost is the native Go implementation of LookupHost.
-// Used only if cgoLookupHost refuses to handle the request
-// (that is, only if cgoLookupHost is the stub in cgo_stub.go).
-// Normally we let cgo use the C library resolver instead of
-// depending on our lookup code, so that Go and C get the same
-// answers.
-func goLookupHost(name string) (addrs []string, err error) {
-	// Use entries from /etc/hosts if they match.
-	addrs = lookupStaticHost(name)
-	if len(addrs) > 0 {
-		return
-	}
-	onceLoadConfig.Do(loadConfig)
-	if dnserr != nil || cfg == nil {
-		err = dnserr
-		return
-	}
-	ips, err := goLookupIP(name)
-	if err != nil {
-		return
-	}
-	addrs = make([]string, 0, len(ips))
-	for _, ip := range ips {
-		addrs = append(addrs, ip.String())
-	}
-	return
-}
-
 // goLookupIP is the native Go implementation of LookupIP.
 // Used only if cgoLookupIP refuses to handle the request
 // (that is, only if cgoLookupIP is the stub in cgo_stub.go).
@@ -291,18 +265,6 @@ func goLookupHost(name string) (addrs []string, err error) {
 // depending on our lookup code, so that Go and C get the same
 // answers.
 func goLookupIP(name string) (addrs []net.IP, err error) {
-	// Use entries from /etc/hosts if possible.
-	haddrs := lookupStaticHost(name)
-	if len(haddrs) > 0 {
-		for _, haddr := range haddrs {
-			if ip := net.ParseIP(haddr); ip != nil {
-				addrs = append(addrs, ip)
-			}
-		}
-		if len(addrs) > 0 {
-			return
-		}
-	}
 	onceLoadConfig.Do(loadConfig)
 	if dnserr != nil || cfg == nil {
 		err = dnserr

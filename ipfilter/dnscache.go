@@ -1,25 +1,41 @@
 package ipfilter
 
 import (
+	"github.com/shell909090/goproxy/sutils"
 	"net"
+	"sync"
 	"time"
 )
 
+var cacheMaxAge = 300 * time.Second
+
 type IPEntry struct {
-	t  time.Time
-	ip net.IP
+	expire time.Time
+	addrs  []net.IP
 }
 
 type DNSCache struct {
-	cache       map[string]*IPEntry
-	lookup_func func(string) ([]net.IP, error)
+	mu       sync.Mutex
+	cache    map[string]*IPEntry
+	lookuper sutils.Lookuper
+}
+
+func CreateDNSCache(lookuper sutils.Lookuper) (dc *DNSCache) {
+	dc = &DNSCache{
+		cache:    make(map[string]*IPEntry, 0),
+		lookuper: lookuper,
+	}
+	return
 }
 
 func (dc DNSCache) free() {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+
 	var dellist []string
 	n := time.Now()
 	for k, v := range dc.cache {
-		if n.Sub(v.t).Seconds() > 300 {
+		if n.After(v.expire) {
 			dellist = append(dellist, k)
 		}
 	}
@@ -30,36 +46,28 @@ func (dc DNSCache) free() {
 	return
 }
 
-func (dc DNSCache) Lookup(hostname string) (ip net.IP, err error) {
+func (dc DNSCache) LookupIP(hostname string) (addrs []net.IP, err error) {
 	ipe, ok := dc.cache[hostname]
 	if ok {
 		log.Debug("hostname %s cached.", hostname)
-		return ipe.ip, nil
+		return ipe.addrs, nil
 	}
 
-	addrs, err := dc.lookup_func(hostname)
+	addrs, err = dc.lookuper.LookupIP(hostname)
 	if err != nil {
 		return
 	}
 
-	ip = addrs[0]
-
-	if len(dc.cache) > 256 {
-		dc.free()
+	if len(dc.cache) > 32 {
+		go dc.free()
 	}
+
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
 	dc.cache[hostname] = &IPEntry{
-		t:  time.Now(),
-		ip: ip,
+		expire: time.Now().Add(cacheMaxAge),
+		addrs:  addrs,
 	}
 
-	return
-}
-
-func (dc DNSCache) ParseIP(hostname string) (addr net.IP, err error) {
-	addr = net.ParseIP(hostname)
-	if addr != nil {
-		return
-	}
-	addr, err = dc.Lookup(hostname)
 	return
 }

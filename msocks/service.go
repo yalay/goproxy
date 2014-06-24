@@ -52,7 +52,7 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	for i, sess := range sp.sess {
 		if s == sess {
 			n := len(sp.sess)
-			sp.sess[i], sp.sess[n] = sp.sess[n], sp.sess[i]
+			sp.sess[i], sp.sess[n-1] = sp.sess[n-1], sp.sess[i]
 			sp.sess = sp.sess[:n-1]
 			return len(sp.sess), nil
 		}

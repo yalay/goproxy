@@ -68,7 +68,7 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
           <td>{{$conn.GetWriteBufSize}}</td>
           <td>{{$conn.Address}}</td>
         {{else}}
-          <td>{{$index}}</td><td>half closed</td>
+          <td>half closed</td>
         {{end}}
       </tr>
       {{end}}

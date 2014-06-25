@@ -287,7 +287,7 @@ func (s *Session) GetWriteSpeed() int64 {
 
 func (s *Session) SendFrame(f Frame) (err error) {
 	f.Debug("send ")
-	atomic.AddInt64(&s.readcnt, int64(f.GetSize()))
+	atomic.AddInt64(&s.writecnt, int64(f.GetSize()))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -395,7 +395,7 @@ func (s *Session) Run() {
 		}
 
 		f.Debug("recv ")
-		atomic.AddInt64(&s.writecnt, int64(f.GetSize()))
+		atomic.AddInt64(&s.readcnt, int64(f.GetSize()))
 
 		switch ft := f.(type) {
 		default:

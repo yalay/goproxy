@@ -46,7 +46,7 @@ func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
 	  <td>{{$sess.GetId}}</td>
 	  <td></td>
 	  <td>{{$sess.GetSize}}</td>
-	  <td>{{$sess.GetLastPing}}</td>
+	  <td>{{printf "%0.2fs" $sess.GetLastPing.Seconds}}</td>
 	  <td></td>
 	  <td>{{$sess.RemoteAddr}}</td>
 	</tr>

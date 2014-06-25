@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	AUTH_TIMEOUT   = 5000
 	PINGTIME       = 5000
 	PINGRANDOM     = 1000
 	TIMEOUT_COUNT  = 6
@@ -22,11 +21,15 @@ const (
 
 	DIAL_RETRY   = 6
 	DIAL_TIMEOUT = 30000
-	WINDOWSIZE   = 2 * 1024 * 1024
-	WND_DELAY    = 100
 
+	WINDOWSIZE = 2 * 1024 * 1024
+
+	AUTH_TIMEOUT      = 5000
 	MIN_SESS_NUM      = 2
 	MAX_CONN_PRE_SESS = 16
+
+	SHRINK_TIME = 1000
+	SHRINK_RATE = 0.9
 )
 
 const (
@@ -139,6 +142,11 @@ type Session struct {
 	wlock sync.Mutex
 	conn  net.Conn
 
+	readcnt  int64
+	readbps  int64
+	writecnt int64
+	writebps int64
+
 	plock   sync.Mutex
 	next_id uint16
 	ports   map[uint16]FrameSender
@@ -154,6 +162,7 @@ func NewSession(conn net.Conn) (s *Session) {
 	}
 	s.PingPong = *NewPingPong(s)
 	log.Notice("session %s created.", s.GetId())
+	go s.loop_count()
 	return
 }
 
@@ -244,8 +253,41 @@ func (s *Session) LocalPort() int {
 	return addr.Port
 }
 
+func shrink_count(cnt *int64, bps *int64) bool {
+	num := float64(atomic.SwapInt64(cnt, 0)) * (1 - SHRINK_RATE)
+	for i := 0; i < 10; i++ {
+		old := atomic.LoadInt64(bps)
+		new := int64(float64(old)*SHRINK_RATE + num)
+		if atomic.CompareAndSwapInt64(bps, old, new) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Session) loop_count() {
+	for {
+		if !shrink_count(&s.readcnt, &s.readbps) {
+			log.Error("shrink counter read failed")
+		}
+		if !shrink_count(&s.writecnt, &s.writebps) {
+			log.Error("shrink counter write failed")
+		}
+		time.Sleep(SHRINK_TIME * time.Millisecond)
+	}
+}
+
+func (s *Session) GetReadSpeed() int64 {
+	return atomic.LoadInt64(&s.readbps)
+}
+
+func (s *Session) GetWriteSpeed() int64 {
+	return atomic.LoadInt64(&s.writebps)
+}
+
 func (s *Session) SendFrame(f Frame) (err error) {
 	f.Debug("send ")
+	atomic.AddInt64(&s.readcnt, int64(f.GetSize()))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -353,6 +395,8 @@ func (s *Session) Run() {
 		}
 
 		f.Debug("recv ")
+		atomic.AddInt64(&s.writecnt, int64(f.GetSize()))
+
 		switch ft := f.(type) {
 		default:
 			log.Error("unexpected package")

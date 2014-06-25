@@ -47,6 +47,7 @@ func WriteString(w io.Writer, s string) (err error) {
 
 type Frame interface {
 	GetStreamid() uint16
+	GetSize() uint16
 	Packed() (buf *bytes.Buffer, err error)
 	Unpack(r io.Reader) error
 	Debug(prefix string)
@@ -93,6 +94,10 @@ type FrameBase struct {
 
 func (f *FrameBase) GetStreamid() uint16 {
 	return f.Streamid
+}
+
+func (f *FrameBase) GetSize() uint16 {
+	return f.Length
 }
 
 func (f *FrameBase) Packed() (buf *bytes.Buffer, err error) {

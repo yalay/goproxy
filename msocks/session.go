@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,6 +35,7 @@ const (
 	ERR_IDEXIST
 	ERR_CONNFAILED
 	ERR_TIMEOUT
+	ERR_CLOSED
 )
 
 var (
@@ -57,70 +59,79 @@ func init() {
 }
 
 type PingPong struct {
-	ch       chan int
-	cnt      int
+	ch_ping  chan int
+	cnt      int32
 	lastping time.Time
 	sender   FrameSender
+	gameover bool
 }
 
 func NewPingPong(sender FrameSender) (p *PingPong) {
 	p = &PingPong{
-		ch:       make(chan int, 0),
+		ch_ping:  make(chan int, 1),
+		cnt:      0,
 		lastping: time.Now(),
 		sender:   sender,
+		gameover: false,
 	}
+	go p.loop()
 	return
 }
 
-func (p *PingPong) Reset() {
-	p.cnt = 0
+func (p *PingPong) IsGameOver() bool {
+	return p.gameover
 }
 
-func (p *PingPong) Ping() bool {
-	log.Debug("ping: %p.", p.sender)
-	p.lastping = time.Now()
-	select {
-	case p.ch <- 1:
-	default:
-	}
-
-	p.cnt += 1
-	if p.cnt >= GAMEOVER_COUNT {
-		log.Warning("pingpong gameover.")
-		p.sender.CloseFrame()
-		return false
-	}
-
-	pingtime := PINGTIME + rand.Intn(2*PINGRANDOM) - PINGRANDOM
-	log.Debug("pingtime: %d", pingtime)
-
-	go func() {
-		time.Sleep(time.Duration(pingtime) * time.Millisecond)
-		p.Pong()
-
-		timeout := time.After(
-			TIMEOUT_COUNT * PINGTIME * time.Millisecond)
-		select {
-		case <-timeout:
-			log.Warning("pingpong timeout: %p.", p.sender)
-			p.sender.CloseFrame()
-			return
-		case <-p.ch:
-			return
-		}
-	}()
-	return true
+func (p *PingPong) Reset() {
+	atomic.StoreInt32(&p.cnt, 0)
 }
 
 func (p *PingPong) GetLastPing() (d time.Duration) {
 	return time.Now().Sub(p.lastping)
 }
 
-func (p *PingPong) Pong() {
+func (p *PingPong) ping() {
+	log.Debug("ping: %p.", p.sender)
+	p.lastping = time.Now()
+	select {
+	case p.ch_ping <- 1:
+	default:
+	}
+}
+
+func (p *PingPong) pong() {
 	log.Debug("pong: %p.", p.sender)
 	err := p.sender.SendFrame(frame_ping)
 	if err != nil {
 		log.Error("%s", err)
+	}
+}
+
+func (p *PingPong) addCount() int32 {
+	return atomic.AddInt32(&p.cnt, 1)
+}
+
+func (p *PingPong) loop() {
+	for {
+		select {
+		case <-time.After(TIMEOUT_COUNT * PINGTIME * time.Millisecond):
+			log.Warning("pingpong timeout: %p.", p.sender)
+			p.sender.CloseFrame()
+			return
+		case <-p.ch_ping:
+		}
+
+		if p.addCount() >= GAMEOVER_COUNT {
+			log.Warning("pingpong gameover.")
+			p.gameover = true
+			p.sender.CloseFrame()
+			return
+		}
+
+		pingtime := PINGTIME + rand.Intn(2*PINGRANDOM) - PINGRANDOM
+		log.Debug("pingtime: %d", pingtime)
+		time.Sleep(time.Duration(pingtime) * time.Millisecond)
+		p.pong()
 	}
 }
 
@@ -181,7 +192,7 @@ func DialSession(conn net.Conn, username, password string) (s *Session, err erro
 
 	log.Notice("auth ok.")
 	s = NewSession(conn)
-	s.Ping()
+	s.pong()
 
 	return
 }
@@ -357,7 +368,7 @@ func (s *Session) Run() {
 			}
 			s.PingPong.Reset()
 		case *FramePing:
-			s.PingPong.Ping()
+			s.PingPong.ping()
 		}
 	}
 }

@@ -111,9 +111,13 @@ func NewConn(status uint8, streamid uint16, sess *Session, address string) (c *C
 }
 
 func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
+	var ok bool
 	ch_timeout := time.After(t)
 	select {
-	case errno = <-ch:
+	case errno, ok = <-ch:
+		if !ok {
+			return ERR_CLOSED
+		}
 	case <-ch_timeout:
 		return ERR_TIMEOUT
 	}

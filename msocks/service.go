@@ -48,27 +48,16 @@ func (sp *SessionPool) GetSess() (sess []*Session) {
 	return sp.sess
 }
 
-func (sp *SessionPool) Remove(s *Session) (n int, err error) {
-	for i, sess := range sp.sess {
-		if s == sess {
-			n := len(sp.sess)
-			sp.sess[i], sp.sess[n-1] = sp.sess[n-1], sp.sess[i]
-			sp.sess = sp.sess[:n-1]
-			return len(sp.sess), nil
-		}
-	}
-	return 0, ErrSessionNotFound
+func (sp *SessionPool) Add(s *Session) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.sess = append(sp.sess, s)
 }
 
-func (sp *SessionPool) getLessSess() (sess *Session) {
-	size := 100000
-	for _, s := range sp.sess {
-		if s.GetSize() < size {
-			sess = s
-			size = s.GetSize()
-		}
-	}
-	return
+func (sp *SessionPool) Remove(s *Session) (n int, err error) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	return sp.remove(s)
 }
 
 func (sp *SessionPool) GetOrCreateSess() (sess *Session) {
@@ -96,29 +85,57 @@ func (sp *SessionPool) createSession() (err error) {
 		return
 	}
 	sp.sess = append(sp.sess, sess)
+	go sp.sessRun(sess)
+	return
+}
 
-	go func() {
-		sess.Run()
+func (sp *SessionPool) getLessSess() (sess *Session) {
+	size := 100000
+	for _, s := range sp.sess {
+		if s.GetSize() < size {
+			sess = s
+			size = s.GetSize()
+		}
+	}
+	return
+}
 
-		// that's mean session is dead
-		log.Warning("session runtime quit, reboot from connect.")
+func (sp *SessionPool) remove(s *Session) (n int, err error) {
+	for i, sess := range sp.sess {
+		if s == sess {
+			n := len(sp.sess)
+			sp.sess[i], sp.sess[n-1] = sp.sess[n-1], sp.sess[i]
+			sp.sess = sp.sess[:n-1]
+			return len(sp.sess), nil
+		}
+	}
+	return 0, ErrSessionNotFound
+}
 
+func (sp *SessionPool) sessRun(sess *Session) {
+	defer func() {
 		sp.mu.Lock()
 		defer sp.mu.Unlock()
-		n, err := sp.Remove(sess)
+		n, err := sp.remove(sess)
 		if err != nil {
 			log.Error("%s", err)
 			return
 		}
 
 		if n < MIN_SESS_NUM {
-			sp.createSession()
+			if !sess.IsGameOver() {
+				sp.createSession()
+			}
 		} else {
 			if sp.getLessSess().GetSize() > MAX_CONN_PRE_SESS {
 				sp.createSession()
 			}
 		}
 	}()
+
+	sess.Run()
+	// that's mean session is dead
+	log.Warning("session runtime quit, reboot from connect.")
 	return
 }
 
@@ -186,6 +203,7 @@ func (d *Dialer) LookupIP(host string) (addrs []net.IP, err error) {
 }
 
 type MsocksService struct {
+	SessionPool
 	userpass map[string]string
 	dialer   sutils.Dialer
 }
@@ -233,7 +251,10 @@ func NewService(auth map[string]string, dialer sutils.Dialer) (ms *MsocksService
 		log.Error("%s", err)
 		return
 	}
-	ms = &MsocksService{dialer: dialer}
+	ms = &MsocksService{
+		dialer:      dialer,
+		SessionPool: CreateSessionPool(nil),
+	}
 
 	if auth != nil {
 		ms.userpass = auth
@@ -301,7 +322,10 @@ func (ms *MsocksService) Handler(conn net.Conn) {
 
 	sess := NewSession(conn)
 	sess.dialer = ms.dialer
+	ms.Add(sess)
+	defer ms.Remove(sess)
 	sess.Run()
+
 	log.Notice("server session %d quit: %s => %s.",
 		sess.LocalPort(), conn.RemoteAddr(), conn.LocalAddr())
 }

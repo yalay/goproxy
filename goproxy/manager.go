@@ -13,30 +13,12 @@ import (
 )
 
 type MsocksManager struct {
-	ndialer   *msocks.Dialer
+	sp        *msocks.SessionPool
 	tmpl_sess *template.Template
 }
 
-func NewMsocksManager(ndialer *msocks.Dialer) (mm *MsocksManager) {
-	mm = &MsocksManager{
-		ndialer: ndialer,
-	}
-	return
-}
-
-func (mm *MsocksManager) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/", mm.HandlerMain)
-	mux.HandleFunc("/cpu", mm.HandlerCPU)
-	mux.HandleFunc("/mem", mm.HandlerMemory)
-	mux.HandleFunc("/stack", mm.HandlerGoroutine)
-	mux.HandleFunc("/lookup", mm.HandlerLookup)
-	mux.HandleFunc("/cutoff", mm.HandlerCutoff)
-}
-
-func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
-	if mm.tmpl_sess == nil {
-		var err error
-		mm.tmpl_sess, err = template.New("session").Parse(`
+func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
+	tmpl_sess, err := template.New("session").Parse(`
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
   <head>
@@ -64,9 +46,9 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
 	  <td>{{$sess.GetId}}</td>
 	  <td></td>
 	  <td>{{$sess.GetSize}}</td>
-	  <td></td>
-	  <td></td>
 	  <td>{{$sess.GetLastPing}}</td>
+	  <td></td>
+	  <td>{{$sess.RemoteAddr}}</td>
 	</tr>
 	{{range $conn := $sess.GetPorts}}
 	  <tr>
@@ -88,12 +70,27 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
   </body>
 </html>
 `)
-		if err != nil {
-			panic(err)
-		}
+	if err != nil {
+		panic(err)
 	}
+	mm = &MsocksManager{
+		sp:        sp,
+		tmpl_sess: tmpl_sess,
+	}
+	return
+}
 
-	if mm.ndialer.GetSize() == 0 {
+func (mm *MsocksManager) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/", mm.HandlerMain)
+	mux.HandleFunc("/cpu", mm.HandlerCPU)
+	mux.HandleFunc("/mem", mm.HandlerMemory)
+	mux.HandleFunc("/stack", mm.HandlerGoroutine)
+	mux.HandleFunc("/lookup", mm.HandlerLookup)
+	mux.HandleFunc("/cutoff", mm.HandlerCutoff)
+}
+
+func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
+	if mm.sp.GetSize() == 0 {
 		w.WriteHeader(200)
 		w.Write([]byte(`
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,7 +115,7 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
 </html>`))
 		return
 	}
-	err := mm.tmpl_sess.Execute(w, mm.ndialer)
+	err := mm.tmpl_sess.Execute(w, mm.sp)
 	if err != nil {
 		log.Error("%s", err)
 	}
@@ -190,6 +187,6 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 }
 
 func (mm *MsocksManager) HandlerCutoff(w http.ResponseWriter, req *http.Request) {
-	mm.ndialer.CutAll()
+	mm.sp.CutAll()
 	return
 }

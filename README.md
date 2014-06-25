@@ -35,6 +35,7 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * server: 服务地址，在http模式下需要，表示需要连接的目标地址。
 * logfile: log文件路径，留空表示输出到stdout。在deb包中建议留空，用init脚本的机制来生成日志文件。
 * loglevel: 日志级别，必须设定。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG。
+* adminiface: 服务器端的控制端口，可以看到服务器端有多少个连接，分别是谁。
 * cipher: 加密算法，可以为aes/des/tripledes，默认aes。
 * key: 密钥。16个随机数据base64后的结果。
 * blackfile: 黑名单文件，http模式下可选。

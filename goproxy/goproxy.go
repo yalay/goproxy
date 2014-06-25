@@ -23,8 +23,9 @@ type Config struct {
 	Listen string
 	Server string
 
-	Logfile  string
-	Loglevel string
+	Logfile    string
+	Loglevel   string
+	AdminIface string
 
 	Cipher    string
 	Key       string
@@ -33,6 +34,16 @@ type Config struct {
 	Username string
 	Password string
 	Auth     map[string]string
+}
+
+func httpserver(addr string, handler http.Handler) {
+	for {
+		err := http.ListenAndServe(addr, handler)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+	}
 }
 
 func run_server(cfg *Config) (err error) {
@@ -47,12 +58,18 @@ func run_server(cfg *Config) (err error) {
 		return
 	}
 
-	s, err := msocks.NewService(cfg.Auth, sutils.DefaultTcpDialer)
+	srv, err := msocks.NewService(cfg.Auth, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
 	}
 
-	return s.Serve(listener)
+	if cfg.AdminIface != "" {
+		mux := http.NewServeMux()
+		NewMsocksManager(&srv.SessionPool).Register(mux)
+		go httpserver(cfg.AdminIface, mux)
+	}
+
+	return srv.Serve(listener)
 }
 
 func run_httproxy(cfg *Config) (err error) {
@@ -80,7 +97,7 @@ func run_httproxy(cfg *Config) (err error) {
 	}
 
 	mux := http.NewServeMux()
-	NewMsocksManager(ndialer).Register(mux)
+	NewMsocksManager(&ndialer.SessionPool).Register(mux)
 	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, mux))
 }
 

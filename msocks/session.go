@@ -139,8 +139,9 @@ func (p *PingPong) loop() {
 }
 
 type Session struct {
-	wlock sync.Mutex
-	conn  net.Conn
+	wlock  sync.Mutex
+	conn   net.Conn
+	closed bool
 
 	readcnt  int64
 	readbps  int64
@@ -157,8 +158,9 @@ type Session struct {
 
 func NewSession(conn net.Conn) (s *Session) {
 	s = &Session{
-		conn:  conn,
-		ports: make(map[uint16]FrameSender, 0),
+		conn:   conn,
+		closed: false,
+		ports:  make(map[uint16]FrameSender, 0),
 	}
 	s.PingPong = *NewPingPong(s)
 	log.Notice("session %s created.", s.GetId())
@@ -234,6 +236,7 @@ func (s *Session) Close() (err error) {
 	for _, v := range s.ports {
 		v.CloseFrame()
 	}
+	s.closed = true
 	return
 }
 
@@ -266,7 +269,7 @@ func shrink_count(cnt *int64, bps *int64) bool {
 }
 
 func (s *Session) loop_count() {
-	for {
+	for !s.closed {
 		if !shrink_count(&s.readcnt, &s.readbps) {
 			log.Error("shrink counter read failed")
 		}

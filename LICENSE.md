@@ -331,3 +331,9 @@ You can get it source from [github](https://github.com/op/go-logging).
 	THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# lru
+
+This product includes software developed by the Google under [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+
+You can get it source from [github](https://github.com/golang/groupcache/blob/master/lru/lru.go).

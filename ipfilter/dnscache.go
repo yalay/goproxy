@@ -5,7 +5,6 @@ import (
 	"github.com/shell909090/goproxy/sutils"
 	"net"
 	"sync"
-	"time"
 )
 
 const maxCache = 512

@@ -139,15 +139,15 @@ func (p *PingPong) loop() {
 }
 
 type Session struct {
-	wlock  sync.Mutex
-	conn   net.Conn
-	closed bool
+	wlock sync.Mutex
+	conn  net.Conn
 
 	readcnt  int64
 	readbps  int64
 	writecnt int64
 	writebps int64
 
+	closed  bool
 	plock   sync.Mutex
 	next_id uint16
 	ports   map[uint16]FrameSender

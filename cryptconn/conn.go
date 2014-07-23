@@ -10,13 +10,15 @@ import (
 	"github.com/op/go-logging"
 	"io"
 	"net"
+	"time"
 )
 
 var log = logging.MustGetLogger("")
 
 const (
-	KEYSIZE     = 16
-	DEBUGOUTPUT = false
+	KEYSIZE           = 16
+	DEBUGOUTPUT       = false
+	HANDSHAKE_TIMEOUT = 30 * time.Second
 )
 
 func NewBlock(method string, key string) (c cipher.Block, err error) {
@@ -47,11 +49,16 @@ type CryptConn struct {
 }
 
 func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
+	t := time.Now().Add(HANDSHAKE_TIMEOUT)
+	conn.SetReadDeadline(t)
+
 	iv := make([]byte, block.BlockSize())
 	_, err = io.ReadFull(conn, iv)
 	if err != nil {
 		return
 	}
+
+	conn.SetReadDeadline(0)
 
 	sc = CryptConn{
 		Conn:  conn,

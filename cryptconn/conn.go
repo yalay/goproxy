@@ -58,7 +58,7 @@ func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 		return
 	}
 
-	conn.SetReadDeadline(0)
+	conn.SetReadDeadline(time.Time{})
 
 	sc = CryptConn{
 		Conn:  conn,

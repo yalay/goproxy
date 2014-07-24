@@ -27,9 +27,10 @@ type Config struct {
 	Loglevel   string
 	AdminIface string
 
-	Cipher    string
-	Key       string
-	Blackfile string
+	Cipher     string
+	Key        string
+	Blackfile  string
+	ResolvPath string
 
 	Username string
 	Password string
@@ -73,6 +74,10 @@ func run_server(cfg *Config) (err error) {
 }
 
 func run_httproxy(cfg *Config) (err error) {
+	if cfg.ResolvPath != "" {
+		dns.ResolvPath = cfg.ResolvPath
+	}
+
 	var dialer sutils.Dialer
 	dialer, err = cryptconn.NewDialer(
 		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)

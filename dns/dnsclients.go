@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd
-
 // DNS client: see RFC 1035.
 // Has to be linked into package net for Dial.
 
@@ -27,6 +25,7 @@ import (
 
 var noDeadline = time.Time{}
 var log = logging.MustGetLogger("")
+var ResolvPath = "/etc/goproxy/resolv.conf"
 
 func check_black(name, server string, msg *dnsMsg, qtype uint16) bool {
 	if qtype != dnsTypeA {
@@ -197,7 +196,7 @@ func convertRR_AAAA(records []dnsRR) []net.IP {
 var cfg *dnsConfig
 var dnserr error
 
-func loadConfig() { cfg, dnserr = dnsReadConfig("/etc/goproxy/resolv.conf") }
+func loadConfig() { cfg, dnserr = dnsReadConfig(ResolvPath) }
 
 var onceLoadConfig sync.Once
 

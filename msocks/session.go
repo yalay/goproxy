@@ -19,7 +19,7 @@ const (
 	TIMEOUT_COUNT  = 6
 	GAMEOVER_COUNT = 60
 
-	DIAL_RETRY   = 6
+	DIAL_RETRY   = 3
 	DIAL_TIMEOUT = 30000
 
 	WINDOWSIZE = 2 * 1024 * 1024
@@ -169,6 +169,14 @@ func NewSession(conn net.Conn) (s *Session) {
 }
 
 func DialSession(conn net.Conn, username, password string) (s *Session, err error) {
+	ti := time.AfterFunc(AUTH_TIMEOUT*time.Millisecond, func() {
+		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
+		conn.Close()
+	})
+	defer func() {
+		ti.Stop()
+	}()
+
 	log.Notice("auth with username: %s, password: %s.", username, password)
 	fb := NewFrameAuth(0, username, password)
 	buf, err := fb.Packed()

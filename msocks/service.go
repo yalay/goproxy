@@ -159,7 +159,7 @@ func NewDialer(dialer sutils.Dialer, serveraddr, username, password string) (d *
 }
 
 // Do I really need sleep? When tcp connect, syn retris will took 2 min(127s).
-// I retry this retry 6 times, it will be 762s = 12mins 42s, right?
+// I retry this retry 3 times, it will be 381s = 6mins 21s, right?
 // I think that's really enough for most of time.
 // REMEMBER: don't modify net.ipv4.tcp_syn_retries, unless you know what you do.
 func (d *Dialer) MakeSess() (sess *Session, err error) {
@@ -170,14 +170,12 @@ func (d *Dialer) MakeSess() (sess *Session, err error) {
 		conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 		if err != nil {
 			log.Error("%s", err)
-			// time.Sleep((1 << i) * time.Second)
 			continue
 		}
 
 		sess, err = DialSession(conn, d.username, d.password)
 		if err != nil {
 			log.Error("%s", err)
-			// time.Sleep((1 << i) * time.Second)
 			continue
 		}
 		break

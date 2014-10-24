@@ -2,9 +2,8 @@ goproxy (2.2.2) UNRELEASED; urgency=low
 
   + lru cache
   * fix issue
-  * fix this: https://github.com/shell909090/goproxy/issues/7
-	panic at no network
-	redesigned session pool
+  * fix this: panic at no network (https://github.com/shell909090/goproxy/issues/7)
+  * redesigned session pool
 
  -- Shell.Xu <shell909090@gmail.com>  Fri, 24 Oct 2014 16:06:01 +0800
 

@@ -60,14 +60,23 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	return sp.remove(s)
 }
 
-func (sp *SessionPool) GetOrCreateSess() (sess *Session) {
+func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
-	if len(sp.sess) == 0 {
-		sp.createSession()
+	// 如果超时，应当直接出错
+	for len(sp.sess) == 0 {
+		err = sp.createSession()
+		// 如果出错，也应当退出
+		if err != nil {
+			return err
+		}
 	}
+
 	sess = sp.getLessSess()
+	if sess == nil {
+		panic("can't connect to host")
+	}
 	if sess.GetSize() > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
 		go func() {
 			sp.mu.Lock()
@@ -189,9 +198,9 @@ func (d *Dialer) MakeSess() (sess *Session, err error) {
 }
 
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
-	sess := d.SessionPool.GetOrCreateSess()
-	if sess == nil {
-		panic("can't connect to host")
+	sess, err := d.SessionPool.GetOrCreateSess()
+	if err != nil {
+		return
 	}
 	return sess.Dial(network, address)
 }

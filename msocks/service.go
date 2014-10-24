@@ -71,7 +71,9 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 
 func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
 	if len(sp.sess) == 0 {
-		err = sp.createSession(true)
+		err = sp.createSession(func() bool {
+			return len(sp.sess) == 0
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -83,16 +85,23 @@ func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
 	}
 
 	if size > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
-		go sp.createSession(false)
+		go sp.createSession(func() bool {
+			if len(sp.sess) < MIN_SESS_NUM {
+				return true
+			}
+			// normally, size == -1 should never happen
+			_, size := sp.getLessSess()
+			return size > MAX_CONN_PRE_SESS
+		})
 	}
 	return
 }
 
-func (sp *SessionPool) createSession(chksize bool) (err error) {
+func (sp *SessionPool) createSession(checker func() bool) (err error) {
 	sp.mud.Lock()
 	defer sp.mud.Unlock()
 
-	if chksize && len(sp.sess) != 0 {
+	if checker != nil && !checker() {
 		return
 	}
 
@@ -127,7 +136,9 @@ func (sp *SessionPool) sessRun(sess *Session) {
 		}
 
 		if n < MIN_SESS_NUM && !sess.IsGameOver() {
-			sp.createSession(false)
+			sp.createSession(func() bool {
+				return len(sp.sess) < MIN_SESS_NUM
+			})
 		}
 		// Don't need to check less session here.
 		// Mostly, less sess counter in here will not more then the counter in GetOrCreateSess.

@@ -2,8 +2,11 @@ goproxy (2.2.2) UNRELEASED; urgency=low
 
   + lru cache
   * fix issue
+  * fix this: https://github.com/shell909090/goproxy/issues/7
+	panic at no network
+	redesigned session pool
 
- -- Shell.Xu <shell909090@gmail.com>  Wed, 23 Jul 2014 09:03:38 +0800
+ -- Shell.Xu <shell909090@gmail.com>  Fri, 24 Oct 2014 16:06:01 +0800
 
 goproxy (2.2.1) unstable; urgency=medium
 

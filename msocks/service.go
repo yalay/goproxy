@@ -18,7 +18,8 @@ type SessionMaker interface {
 }
 
 type SessionPool struct {
-	mu   sync.Mutex
+	mu   sync.Mutex // sess pool locker
+	mud  sync.Mutex // dailer's locker
 	sess []*Session
 	sm   SessionMaker
 }
@@ -57,59 +58,6 @@ func (sp *SessionPool) Add(s *Session) {
 func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	return sp.remove(s)
-}
-
-func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	// 如果超时，应当直接出错
-	for len(sp.sess) == 0 {
-		err = sp.createSession()
-		// 如果出错，也应当退出
-		if err != nil {
-			return err
-		}
-	}
-
-	sess = sp.getLessSess()
-	if sess == nil {
-		panic("can't connect to host")
-	}
-	if sess.GetSize() > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
-		go func() {
-			sp.mu.Lock()
-			defer sp.mu.Unlock()
-			sp.createSession()
-		}()
-	}
-	return
-}
-
-func (sp *SessionPool) createSession() (err error) {
-	sess, err := sp.sm.MakeSess()
-	if err != nil {
-		log.Error("%s", err)
-		return
-	}
-	sp.sess = append(sp.sess, sess)
-	go sp.sessRun(sess)
-	return
-}
-
-func (sp *SessionPool) getLessSess() (sess *Session) {
-	size := 100000
-	for _, s := range sp.sess {
-		if s.GetSize() < size {
-			sess = s
-			size = s.GetSize()
-		}
-	}
-	return
-}
-
-func (sp *SessionPool) remove(s *Session) (n int, err error) {
 	for i, sess := range sp.sess {
 		if s == sess {
 			n := len(sp.sess)
@@ -121,25 +69,71 @@ func (sp *SessionPool) remove(s *Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
+func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
+	if len(sp.sess) == 0 {
+		err = sp.createSession(true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	sess, size := sp.getLessSess()
+	if sess == nil {
+		return nil, ErrNoSession
+	}
+
+	if size > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
+		go sp.createSession(false)
+	}
+	return
+}
+
+func (sp *SessionPool) createSession(chksize bool) (err error) {
+	sp.mud.Lock()
+	defer sp.mud.Unlock()
+
+	if chksize && len(sp.sess) != 0 {
+		return
+	}
+
+	sess, err := sp.sm.MakeSess()
+	if err != nil {
+		log.Error("%s", err)
+		return
+	}
+
+	sp.Add(sess)
+	go sp.sessRun(sess)
+	return
+}
+
+func (sp *SessionPool) getLessSess() (sess *Session, size int) {
+	size = -1
+	for _, s := range sp.sess {
+		if size == -1 || s.GetSize() < size {
+			sess = s
+			size = s.GetSize()
+		}
+	}
+	return
+}
+
 func (sp *SessionPool) sessRun(sess *Session) {
 	defer func() {
-		sp.mu.Lock()
-		defer sp.mu.Unlock()
-		n, err := sp.remove(sess)
+		n, err := sp.Remove(sess)
 		if err != nil {
 			log.Error("%s", err)
 			return
 		}
 
-		if n < MIN_SESS_NUM {
-			if !sess.IsGameOver() {
-				sp.createSession()
-			}
-		} else {
-			if sp.getLessSess().GetSize() > MAX_CONN_PRE_SESS {
-				sp.createSession()
-			}
+		if n < MIN_SESS_NUM && !sess.IsGameOver() {
+			sp.createSession(false)
 		}
+		// Don't need to check less session here.
+		// Mostly, less sess counter in here will not more then the counter in GetOrCreateSess.
+		// The only exception is that the closing session is the one and only one
+		// lower then MAX_CONN_PRE_SESS.
+		// but we can think that as over MAX_CONN_PRE_SESS line just happened.
 	}()
 
 	sess.Run()
@@ -197,6 +191,7 @@ func (d *Dialer) MakeSess() (sess *Session, err error) {
 	return
 }
 
+// Maybe we should take care of timeout.
 func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 	sess, err := d.SessionPool.GetOrCreateSess()
 	if err != nil {

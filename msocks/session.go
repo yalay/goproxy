@@ -42,6 +42,7 @@ const (
 )
 
 var (
+	ErrNoSession       = errors.New("session in pool but can't pick one.")
 	ErrStreamNotExist  = errors.New("stream not exist.")
 	ErrQueueClosed     = errors.New("queue closed")
 	ErrUnexpectedPkg   = errors.New("unexpected package")

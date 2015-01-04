@@ -17,8 +17,8 @@ clean:
 	debian/rules clean
 
 test:
-	go test -i github.com/shell909090/goproxy/ipfilter
-	go test -i github.com/shell909090/goproxy/msocks
+	go test github.com/shell909090/goproxy/ipfilter
+	go test github.com/shell909090/goproxy/msocks
 
 build:
 	mkdir -p bin

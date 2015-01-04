@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 	MSG_FIN
 	MSG_RST
 	MSG_PING
-	MSG_DNS
+	MSG_LOOKUP
 	MSG_ADDRS
 )
 
@@ -81,6 +82,10 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FrameRst{FrameBase: *fb}
 	case MSG_PING:
 		f = &FramePing{FrameBase: *fb}
+	case MSG_LOOKUP:
+		f = &FrameLookup{FrameBase: *fb}
+	case MSG_ADDRS:
+		f = &FrameAddrs{FrameBase: *fb}
 	}
 	err = f.Unpack(r)
 	return
@@ -171,6 +176,7 @@ func NewFrameAuth(streamid uint16, username, password string) (f *FrameAuth) {
 		Password: password,
 	}
 }
+
 func (f *FrameAuth) Packed() (buf *bytes.Buffer, err error) {
 	buf, err = f.FrameBase.Packed()
 	if err != nil {
@@ -374,6 +380,106 @@ func NewFramePing() (f *FramePing) {
 func (f *FramePing) Unpack(r io.Reader) (err error) {
 	if f.Length != 0 {
 		return errors.New("frame ping with length not 0.")
+	}
+	return
+}
+
+type FrameLookup struct {
+	FrameBase
+	Domain string
+}
+
+func NewFrameLookup(streamid uint16, domain string) (f *FrameLookup) {
+	return &FrameLookup{
+		FrameBase: FrameBase{
+			Type:     MSG_LOOKUP,
+			Streamid: streamid,
+			Length:   uint16(len(domain) + 2),
+		},
+		Domain: domain,
+	}
+}
+
+func (f *FrameLookup) Packed() (buf *bytes.Buffer, err error) {
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	err = WriteString(buf, f.Domain)
+	return
+}
+
+func (f *FrameLookup) Unpack(r io.Reader) (err error) {
+	f.Domain, err = ReadString(r)
+	if err != nil {
+		return
+	}
+
+	if f.Length != uint16(len(f.Domain)+2) {
+		err = errors.New("frame lookup length not match.")
+	}
+	return
+}
+
+type FrameAddrs struct {
+	FrameBase
+	Ips []net.IP
+}
+
+func NewFrameAddrs(streamid uint16, ips []net.IP) (f *FrameAddrs) {
+	l := 0
+	for _, ip := range ips {
+		l += len(ip) + 1
+	}
+	return &FrameAddrs{
+		FrameBase: FrameBase{
+			Type:     MSG_ADDRS,
+			Streamid: streamid,
+			Length:   uint16(l),
+		},
+		Ips: ips,
+	}
+}
+
+func (f *FrameAddrs) Packed() (buf *bytes.Buffer, err error) {
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	for _, ip := range f.Ips {
+		err = binary.Write(buf, binary.BigEndian, uint8(len(ip)))
+		if err != nil {
+			return
+		}
+		_, err = buf.Write([]byte(ip))
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+func (f *FrameAddrs) Unpack(r io.Reader) (err error) {
+	var l uint8
+	t := uint16(0)
+	f.Ips = make([]net.IP, 0)
+	for t < f.Length {
+		err = binary.Read(r, binary.BigEndian, &l)
+		if err != nil {
+			return
+		}
+
+		buf := make([]byte, l)
+		_, err = io.ReadFull(r, buf)
+		if err != nil {
+			return
+		}
+
+		f.Ips = append(f.Ips, net.IP(buf))
+		t += uint16(l) + 1
+	}
+	if t != f.Length {
+		err = errors.New("frame addr length not match")
 	}
 	return
 }

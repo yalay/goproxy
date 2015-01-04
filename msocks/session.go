@@ -235,6 +235,10 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 	return c, nil
 }
 
+func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
+	return
+}
+
 func (s *Session) Close() (err error) {
 	log.Warning("close all connects (%d) for session: %s.",
 		len(s.ports), s.GetId())

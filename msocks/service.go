@@ -69,6 +69,10 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
+func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
+	return
+}
+
 func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
 	if len(sp.sess) == 0 {
 		err = sp.createSession(func() bool {
@@ -209,10 +213,6 @@ func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
 		return
 	}
 	return sess.Dial(network, address)
-}
-
-func (d *Dialer) LookupIP(host string) (addrs []net.IP, err error) {
-	return
 }
 
 type MsocksService struct {

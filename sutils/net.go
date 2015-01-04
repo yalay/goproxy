@@ -20,3 +20,12 @@ var DefaultTcpDialer = &TcpDialer{}
 type Lookuper interface {
 	LookupIP(host string) (addrs []net.IP, err error)
 }
+
+type NetLookupIP struct {
+}
+
+func (n *NetLookupIP) LookupIP(host string) (addrs []net.IP, err error) {
+	return net.LookupIP(host)
+}
+
+var DefaultLookuper = &NetLookupIP{}

@@ -6,7 +6,9 @@ goproxy是基于go写的隧道代理服务器，主要用于翻墙。
 
 主要分为两个部分，客户端和服务器端。客户端使用http协议向其他程序提供一个标准代理。当客户端接受请求后，会加密连接服务器端，请求服务器端连接目标。
 
-内置了dns清洗，查询国外DNS并剔除假返回。然后把结果和IP段表对比。如果落在国内，直接代理。如果国外，多个请求复用一个加密tcp把请求转到国外vps上处理。加密是预共享密钥。
+具体工作细节是。首先查询国外DNS并获得正确结果(未污染结果)，然后把结果和IP段表对比。如果落在国内，直接代理。如果国外，多个请求复用一个加密tcp把请求转到国外vps上处理。加密是预共享密钥。
+
+注意，新版本不再内置dns清洗，建议采用其他dns清理方案。但是预订会增加dns over msocks功能，做为以防万一的手段。
 
 ## msocks协议
 
@@ -77,13 +79,32 @@ http模式运行在本地，需要一个境外的server服务器做支撑，对�
 
 ## dns配置
 
-dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域名的指令，因此为了进行ip匹配，需要先进行dns查询。为了某些特殊原因，goproxy将go自带的dns做了修改。
+dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域名的指令，因此为了进行ip匹配，需要先进行dns查询。
 
-系统会读取/etc/goproxy/resolv.conf。该文件支持一般resolv.conf的所有配置，但是额外多出一项，blackip。
+在老版本goproxy中，使用的是修改过的golang内置的dns系统。由于过滤系统依赖于污染返回地址仅限于特定地址的假定，所以当污染系统升级后，这个方案就不再可行。在新版goproxy中，建议使用独立方案解决dns清洗问题。
 
-如果blackip有指定，那么当dns查询结果为blackip所指定的ip时，结果丢弃，等待下一个响应包的返回。这个行为可以很大程度上抵御dns污染。
+具体来说，我们推荐非标准端口转发的方案。这个方案分为两个步骤。
 
-源码中附带了一个resolv.conf，一般可以直接使用。
+## 远程dns转发
+
+首先远程服务器的非53端口打开一个dnsmasq，并指向正确的upstream。具体来说，请找到/etc/dnsmasq.conf文件，并修改其中的这行。将端口改为合适的值(非53)，并打开防火墙，保证可以从客户端正常连接。
+
+    #port=5353
+
+## 本地dns转发
+
+基于两个因素，我们建议本地配置第二个dnsmasq。首先，很多系统并不支持在resolv.conf中增加端口。其次，反复查询远程服务器性能并不好。这两个问题可以通过配置本地dnsmasq来加以解决。
+
+注意，和远程不同，本地的dns需要被配置为监听在53端口。其余主要配置如下内容:
+
+    server=remoteip#remoteport
+	server=secondarydns
+
+第一行指明了远程服务器的地址和端口(上一节的非标准端口)，第二行指定了无法连接时的第二dns服务器。一般第二dns服务器为当前环境中的dns服务器或本地可以快速访问的服务器。
+
+## dns的应用
+
+一般是修改/etc/resolv.conf为nameserver 127.0.0.1。windows下也可类似设定。
 
 ## key的生成
 
@@ -121,7 +142,6 @@ dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域�
 		"cipher": "aes",
 		"key": "[your key]",
 		"blackfile": "/usr/share/goproxy/routes.list.gz",
-		"resolvconf": "/etc/goproxy/resolv.conf",
 	 
 		"username": "username",
 		"password": "password"
@@ -162,7 +182,7 @@ deb包中，主程序在/usr/bin下，启动项在/etc/init.d/goproxy下，配�
 
 # tar包解说
 
-tar包内包含主程序，resolvconf和routes.list.gz示例。没有config.json示例。因此你需要自行编写一个正确的config.json，然后使用goproxy -config config.json来启动程序。
+tar包内包含主程序，routes.list.gz示例。没有config.json示例。因此你需要自行编写一个正确的config.json，然后使用goproxy -config config.json来启动程序。
 
 整个包不需要安装，手工启动和关闭。如果需要自动启动机制，请自行处理。
 

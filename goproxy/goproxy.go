@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
-	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
@@ -27,10 +26,9 @@ type Config struct {
 	Loglevel   string
 	AdminIface string
 
-	Cipher     string
-	Key        string
-	Blackfile  string
-	ResolvPath string
+	Cipher    string
+	Key       string
+	Blackfile string
 
 	Username string
 	Password string
@@ -74,10 +72,6 @@ func run_server(cfg *Config) (err error) {
 }
 
 func run_httproxy(cfg *Config) (err error) {
-	if cfg.ResolvPath != "" {
-		dns.ResolvPath = cfg.ResolvPath
-	}
-
 	var dialer sutils.Dialer
 	dialer, err = cryptconn.NewDialer(
 		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
@@ -95,7 +89,7 @@ func run_httproxy(cfg *Config) (err error) {
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
 			dialer, sutils.DefaultTcpDialer,
-			dns.DefaultLookuper, cfg.Blackfile)
+			sutils.DefaultLookuper, cfg.Blackfile)
 		if err != nil {
 			return
 		}

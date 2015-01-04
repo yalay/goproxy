@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/shell909090/goproxy/dns"
 	"github.com/shell909090/goproxy/msocks"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -171,7 +171,7 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 	}
 
 	for _, host := range hosts {
-		addrs, err := dns.LookupIP(host)
+		addrs, err := net.LookupIP(host)
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "error %s", err)

@@ -57,18 +57,18 @@ func run_server(cfg *Config) (err error) {
 		return
 	}
 
-	srv, err := msocks.NewService(cfg.Auth, sutils.DefaultTcpDialer)
+	svr, err := msocks.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
 	}
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&srv.SessionPool).Register(mux)
+		NewMsocksManager(&svr.SessionPool).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 
-	return srv.Serve(listener)
+	return svr.Serve(listener)
 }
 
 func run_httproxy(cfg *Config) (err error) {

@@ -2,7 +2,6 @@ package msocks
 
 import (
 	"bytes"
-	"net"
 	"testing"
 )
 
@@ -242,73 +241,5 @@ func TestFramePingWrite(t *testing.T) {
 
 	if bytes.Compare(buf.Bytes(), []byte{MSG_PING, 0x00, 0x00, 0x00, 0x00}) != 0 {
 		t.Fatalf("FramePing write wrong")
-	}
-}
-
-func TestFrameLookupRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_LOOKUP, 0x00, 0x08, 0x00, 0x0a,
-		0x00, 0x06, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e})
-
-	f, err := ReadFrame(buf)
-	if err != nil {
-		t.Fatalf("Read FrameLookup failed")
-	}
-
-	ft, ok := f.(*FrameLookup)
-	if !ok || ft.Streamid != 0x000a {
-		t.Fatalf("FrameLookup format wrong")
-	}
-
-	if ft.Domain != "domain" {
-		t.Fatalf("FrameLookup body wrong")
-	}
-}
-
-func TestFrameLookupWrite(t *testing.T) {
-	f := NewFrameLookup(0x000a, "domain")
-	buf, err := f.Packed()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if bytes.Compare(buf.Bytes(), []byte{MSG_LOOKUP, 0x00, 0x08, 0x00, 0x0a,
-		0x00, 0x06, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e}) != 0 {
-		t.Fatalf("FrameLookup write wrong")
-	}
-}
-
-func TestFrameAddrsRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_ADDRS, 0x00, 0x0c, 0x0a, 0x0a,
-		0x04, 0x0a, 0x0a, 0x0a, 0x0a, 0x06, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b})
-
-	f, err := ReadFrame(buf)
-	if err != nil {
-		t.Fatalf("Read FrameAddrs failed")
-	}
-
-	ft, ok := f.(*FrameAddrs)
-	if !ok || ft.Streamid != 0x0a0a {
-		t.Fatalf("FrameAddrs format wrong")
-	}
-
-	if bytes.Compare(ft.Ips[0], []byte{0x0a, 0x0a, 0x0a, 0x0a}) != 0 ||
-		bytes.Compare(ft.Ips[1], []byte{0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b}) != 0 {
-		t.Fatalf("FrameAddrs body wrong")
-	}
-}
-
-func TestFrameAddrsWrite(t *testing.T) {
-	f := NewFrameAddrs(0x0a0a, []net.IP{
-		[]byte{0x0a, 0x0a, 0x0a, 0x0a},
-		[]byte{0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b},
-	})
-	buf, err := f.Packed()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if bytes.Compare(buf.Bytes(), []byte{MSG_ADDRS, 0x00, 0x0c, 0x0a, 0x0a,
-		0x04, 0x0a, 0x0a, 0x0a, 0x0a, 0x06, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b}) != 0 {
-		t.Fatalf("FrameAddrs write wrong")
 	}
 }

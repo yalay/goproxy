@@ -13,7 +13,7 @@ buildtar: build
 	tar cJf ../goproxy-`uname -m`.tar.xz bin/goproxy debian/config.json debian/resolv.conf debian/routes.list.gz
 
 clean:
-	rm -rf bin
+	rm -rf bin pkg
 	debian/rules clean
 
 test:

@@ -95,9 +95,13 @@ func run_httproxy(cfg *Config) (err error) {
 		}
 	}
 
-	mux := http.NewServeMux()
-	NewMsocksManager(&ndialer.SessionPool).Register(mux)
-	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, mux))
+	if cfg.AdminIface != "" {
+		mux := http.NewServeMux()
+		NewMsocksManager(&ndialer.SessionPool).Register(mux)
+		go httpserver(cfg.AdminIface, mux)
+	}
+
+	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, nil))
 }
 
 func LoadConfig() (cfg Config, err error) {

@@ -49,6 +49,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.URL.Host == "" {
+		if p.mux == nil {
+			w.WriteHeader(500)
+			return
+		}
 		p.mux.ServeHTTP(w, req)
 		return
 	}

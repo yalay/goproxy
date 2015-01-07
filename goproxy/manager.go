@@ -5,11 +5,9 @@ import (
 	"github.com/shell909090/goproxy/msocks"
 	"net"
 	"net/http"
-	"os"
+	"net/http/pprof"
 	"runtime"
-	"runtime/pprof"
 	"text/template"
-	"time"
 )
 
 type MsocksManager struct {
@@ -29,9 +27,6 @@ func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
   <body>
     <table>
       <tr>
-        <td><a href="cpu">cpu</a></td>
-        <td><a href="mem">mem</a></td>
-        <td><a href="stack">stack</a></td>
         <td><a href="cutoff">cutoff</a></td>
         <td><a href="lookup">lookup</a></td>
       </tr>
@@ -82,11 +77,13 @@ func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
 
 func (mm *MsocksManager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", mm.HandlerMain)
-	mux.HandleFunc("/cpu", mm.HandlerCPU)
-	mux.HandleFunc("/mem", mm.HandlerMemory)
-	mux.HandleFunc("/stack", mm.HandlerGoroutine)
 	mux.HandleFunc("/lookup", mm.HandlerLookup)
 	mux.HandleFunc("/cutoff", mm.HandlerCutoff)
+
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 }
 
 func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
@@ -103,9 +100,6 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
   <body>
     <table>
       <tr>
-        <td><a href="cpu">cpu</a></td>
-        <td><a href="mem">mem</a></td>
-        <td><a href="stack">stack</a></td>
         <td><a href="cutoff">cutoff</a></td>
         <td><a href="lookup">lookup</a></td>
       </tr>
@@ -119,46 +113,6 @@ func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Error("%s", err)
 	}
-}
-
-func (mm *MsocksManager) HandlerCPU(w http.ResponseWriter, req *http.Request) {
-	f, err := os.Create("cpu.prof")
-	if err != nil {
-		log.Error("%s", err)
-		w.WriteHeader(500)
-		return
-	}
-	defer f.Close()
-
-	pprof.StartCPUProfile(f)
-	time.Sleep(10 * time.Second)
-	pprof.StopCPUProfile()
-
-	w.WriteHeader(200)
-	return
-}
-
-func (mm *MsocksManager) HandlerMemory(w http.ResponseWriter, req *http.Request) {
-	f, err := os.Create("mem.prof")
-	if err != nil {
-		log.Error("%s", err)
-		w.WriteHeader(500)
-		return
-	}
-	defer f.Close()
-
-	pprof.WriteHeapProfile(f)
-
-	w.WriteHeader(200)
-	return
-}
-
-func (mm *MsocksManager) HandlerGoroutine(w http.ResponseWriter, req *http.Request) {
-	buf := make([]byte, 20*1024*1024)
-	n := runtime.Stack(buf, true)
-	w.WriteHeader(200)
-	w.Write(buf[:n])
-	return
 }
 
 func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request) {
@@ -182,7 +136,6 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 			fmt.Fprintf(w, "%s\n", addr)
 		}
 	}
-	// w.WriteHeader(200)
 	return
 }
 

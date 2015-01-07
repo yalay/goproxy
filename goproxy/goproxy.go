@@ -25,6 +25,8 @@ type Config struct {
 	Logfile    string
 	Loglevel   string
 	AdminIface string
+	DnsAddr    string
+	DnsNet     string
 
 	Cipher    string
 	Key       string
@@ -73,6 +75,18 @@ func run_server(cfg *Config) (err error) {
 
 func run_httproxy(cfg *Config) (err error) {
 	var dialer sutils.Dialer
+	var lookuper sutils.Lookuper
+
+	lookuper = sutils.DefaultLookuper
+
+	if cfg.DnsAddr != "" {
+		dnsnet := ""
+		if cfg.DnsNet != "" {
+			dnsnet = cfg.DnsAddr
+		}
+		lookuper = sutils.NewDnsLookup(cfg.DnsAddr, dnsnet)
+	}
+
 	dialer, err = cryptconn.NewDialer(
 		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
 	if err != nil {
@@ -88,8 +102,7 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer,
-			sutils.DefaultLookuper, cfg.Blackfile)
+			dialer, sutils.DefaultTcpDialer, lookuper, cfg.Blackfile)
 		if err != nil {
 			return
 		}
@@ -97,7 +110,7 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&ndialer.SessionPool, sutils.DefaultLookuper).Register(mux)
+		NewMsocksManager(&ndialer.SessionPool, lookuper).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 

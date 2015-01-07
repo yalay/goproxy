@@ -10,7 +10,7 @@ all: build
 
 buildtar: build
 	strip bin/goproxy
-	tar cJf ../goproxy-`uname -m`.tar.xz bin/goproxy debian/config.json debian/resolv.conf debian/routes.list.gz
+	tar cJf ../goproxy-`uname -m`.tar.xz bin/goproxy debian/config.json debian/routes.list.gz
 
 clean:
 	rm -rf bin pkg
@@ -31,7 +31,6 @@ install: build
 	install -m 644 debian/routes.list.gz $(DESTDIR)/usr/share/goproxy/
 	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/
 	install -d $(DESTDIR)/etc/goproxy/
-	install -m 644 debian/resolv.conf $(DESTDIR)/etc/goproxy/
 	install -m 644 debian/config.json $(DESTDIR)/etc/goproxy/
 
 press-clean:

@@ -64,7 +64,7 @@ func run_server(cfg *Config) (err error) {
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&svr.SessionPool).Register(mux)
+		NewMsocksManager(&svr.SessionPool, sutils.DefaultLookuper).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 
@@ -97,7 +97,7 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&ndialer.SessionPool).Register(mux)
+		NewMsocksManager(&ndialer.SessionPool, sutils.DefaultLookuper).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 

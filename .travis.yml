@@ -4,8 +4,9 @@ go:
   - 1.3
   - tip
 script: make build
-install: go get github.com/op/go-logging
-install: go get github.com/miekg/dns
+install:
+  - go get github.com/op/go-logging
+  - go get github.com/miekg/dns
 
 notifications:
   email:

@@ -18,6 +18,7 @@ const (
 	MSG_FIN
 	MSG_RST
 	MSG_PING
+	MSG_DNS
 )
 
 func ReadString(r io.Reader) (s string, err error) {
@@ -79,6 +80,8 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FrameRst{FrameBase: *fb}
 	case MSG_PING:
 		f = &FramePing{FrameBase: *fb}
+	case MSG_DNS:
+		f = &FrameDns{FrameBase: *fb}
 	}
 	err = f.Unpack(r)
 	return
@@ -374,6 +377,37 @@ func (f *FramePing) Unpack(r io.Reader) (err error) {
 	if f.Length != 0 {
 		return errors.New("frame ping with length not 0.")
 	}
+	return
+}
+
+type FrameDns struct {
+	FrameBase
+	Data []byte
+}
+
+func NewFrameDns(streamid uint16, data []byte) (f *FrameDns) {
+	return &FrameDns{
+		FrameBase: FrameBase{
+			Type:     MSG_DNS,
+			Streamid: streamid,
+			Length:   uint16(len(data)),
+		},
+		Data: data,
+	}
+}
+
+func (f *FrameDns) Packed() (buf *bytes.Buffer, err error) {
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	_, err = buf.Write(f.Data)
+	return
+}
+
+func (f *FrameDns) Unpack(r io.Reader) (err error) {
+	f.Data = make([]byte, f.Length)
+	_, err = io.ReadFull(r, f.Data)
 	return
 }
 

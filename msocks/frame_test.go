@@ -243,3 +243,35 @@ func TestFramePingWrite(t *testing.T) {
 		t.Fatalf("FramePing write wrong")
 	}
 }
+
+func TestFrameDnsRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{MSG_DNS, 0x00, 0x03, 0x0A, 0x0A,
+		0x01, 0x05, 0x07})
+
+	f, err := ReadFrame(buf)
+	if err != nil {
+		t.Fatalf("Read FrameDns failed")
+	}
+
+	ft, ok := f.(*FrameDns)
+	if !ok || ft.Streamid != 0x0a0a {
+		t.Fatalf("FrameDns format wrong")
+	}
+
+	if bytes.Compare(ft.Data, []byte{0x01, 0x05, 0x07}) != 0 {
+		t.Fatalf("FrameDns body wrong")
+	}
+}
+
+func TestFrameDnsWrite(t *testing.T) {
+	f := NewFrameDns(10, []byte{0x01, 0x02, 0x03})
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if bytes.Compare(buf.Bytes(), []byte{MSG_DNS, 0x00, 0x03, 0x00, 0x0A,
+		0x01, 0x02, 0x03}) != 0 {
+		t.Fatalf("FrameDns write wrong")
+	}
+}

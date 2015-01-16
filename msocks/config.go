@@ -2,23 +2,24 @@ package msocks
 
 import (
 	"errors"
-	"github.com/op/go-logging"
 	"math/rand"
 	"time"
+
+	"github.com/op/go-logging"
 )
 
 const (
-	PINGTIME       = 5000
-	PINGRANDOM     = 1000
+	PINGTIME       = 10000
+	PINGRANDOM     = 2000
 	TIMEOUT_COUNT  = 6
 	GAMEOVER_COUNT = 60
 
 	DIAL_RETRY   = 3
 	DIAL_TIMEOUT = 30000
 
-	WINDOWSIZE = 2 * 1024 * 1024
+	WINDOWSIZE = 4 * 1024 * 1024
 
-	AUTH_TIMEOUT      = 5000
+	AUTH_TIMEOUT      = 10000
 	MIN_SESS_NUM      = 2
 	MAX_CONN_PRE_SESS = 8
 

@@ -62,7 +62,11 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 }
 
 func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
-	return
+	sess, err = sp.GetOrCreateSess()
+	if err != nil {
+		return
+	}
+	return sess.LookupIP(host)
 }
 
 func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {

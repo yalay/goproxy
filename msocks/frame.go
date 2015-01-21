@@ -415,3 +415,33 @@ type FrameSender interface {
 	SendFrame(Frame) error
 	CloseFrame() error
 }
+
+type ChanFrameSender chan Frame
+
+func CreateChanFrameSender(n int) ChanFrameSender {
+	return make(chan Frame, n)
+}
+
+func (cfs *ChanFrameSender) SendFrame(f Frame) (err error) {
+	*cfs <- f
+	return
+}
+
+func (cfs *ChanFrameSender) CloseFrame() (err error) {
+	// close(*cfs)
+	return
+}
+
+func (cfs *ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame, err error) {
+	var ok bool
+	ch_timeout := time.After(t)
+	select {
+	case f, ok = <-*cfs:
+		if !ok {
+			return ERR_CLOSED
+		}
+	case <-ch_timeout:
+		return ERR_TIMEOUT
+	}
+	return
+}

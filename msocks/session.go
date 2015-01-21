@@ -3,6 +3,7 @@ package msocks
 import (
 	"errors"
 	"fmt"
+	"github.com/miekg/dns"
 	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"net"
@@ -108,6 +109,53 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 }
 
 func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
+	cfs := CreateChanFrameSender(0)
+	streamid, err := s.PutIntoNextId(cfs)
+	if err != nil {
+		return
+	}
+
+	req := new(dns.Msg)
+	req.Id = dns.Id()
+	req.SetQuestion(dns.Fqdn(host), t)
+	req.RecursionDesired = true
+
+	b, err = req.Pack()
+	if err != nil {
+		return
+	}
+
+	fd := NewFrameDns(streamid, b)
+	err = s.SendFrame(fd)
+	if err != nil {
+		return
+	}
+
+	f, err = cfs.RecvWithTimeout(DNS_TIMEOUT * time.Millisecond)
+	if err != nil {
+		return
+	}
+
+	ft, ok := f.(*FrameDns)
+	if !ok {
+		return
+	}
+
+	res := new(dns.Msg)
+	res.Unpack(ft.Data)
+	if !res.Response || res.Id != req.Id {
+		return
+	}
+
+	for _, a := range res.Answer {
+		switch ta := a.(type) {
+		case *dns.A:
+			addrs = append(addrs, ta.A)
+		case *dns.AAAA:
+			addrs = append(addrs, ta.AAAA)
+		}
+	}
+
 	return
 }
 
@@ -299,6 +347,11 @@ func (s *Session) Run() {
 				return
 			}
 			s.PingPong.Reset()
+		case *FrameDns:
+			if !s.on_dns(ft) {
+				return
+			}
+			s.PingPong.Reset()
 		case *FramePing:
 			s.PingPong.ping()
 		}
@@ -372,4 +425,21 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 		return
 	}()
 	return true
+}
+
+func (s *Session) on_dns(ft *FrameDns) bool {
+	m := dns.Msg()
+	err = m.Unpack(ft.Data)
+	if err != nil {
+		log.Error("can't parse dns package.")
+		return false
+	}
+
+	if m.Response {
+		return s.sendFrameInChan(f)
+	}
+
+	// that's mean this is a question
+	// what client and what addr used for?
+	return
 }

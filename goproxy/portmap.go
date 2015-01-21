@@ -28,6 +28,6 @@ func CreatePortmap(saddr, daddr string, dialer sutils.Dialer) (err error) {
 			continue
 		}
 
-		go CopyLink(dconn, sconn)
+		go sutils.CopyLink(dconn, sconn)
 	}
 }

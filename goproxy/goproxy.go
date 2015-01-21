@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
@@ -115,6 +116,10 @@ func run_httproxy(cfg *Config) (err error) {
 		mux := http.NewServeMux()
 		NewMsocksManager(&ndialer.SessionPool, lookuper).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
+	}
+
+	for k, v := range cfg.Portmaps {
+		CreatePortmap(k, v, dialer)
 	}
 
 	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, nil))

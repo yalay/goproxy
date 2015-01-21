@@ -58,6 +58,7 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * username: 连接用户名，http模式下需要。
 * password: 连接密码，http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。
+* portmaps: 端口映射配置，将本地端口映射到远程任意一个端口。
 
 ## server模式
 

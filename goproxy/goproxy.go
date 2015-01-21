@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/op/go-logging"
-	"github.com/shell909090/goproxy/cryptconn"
-	"github.com/shell909090/goproxy/ipfilter"
-	"github.com/shell909090/goproxy/msocks"
-	"github.com/shell909090/goproxy/sutils"
 	stdlog "log"
 	"net"
 	"net/http"
 	"os"
+
+	"github.com/shell909090/goproxy/cryptconn"
+	"github.com/shell909090/goproxy/ipfilter"
+	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/sutils"
 )
 
 var log = logging.MustGetLogger("")
@@ -25,8 +25,9 @@ type Config struct {
 	Logfile    string
 	Loglevel   string
 	AdminIface string
-	DnsAddr    string
-	DnsNet     string
+
+	DnsAddr string
+	DnsNet  string
 
 	Cipher    string
 	Key       string
@@ -35,6 +36,8 @@ type Config struct {
 	Username string
 	Password string
 	Auth     map[string]string
+
+	Portmaps map[string]string
 }
 
 func httpserver(addr string, handler http.Handler) {

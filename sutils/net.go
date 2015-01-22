@@ -1,8 +1,9 @@
 package sutils
 
 import (
-	"github.com/miekg/dns"
 	"net"
+
+	"github.com/miekg/dns"
 )
 
 type Dialer interface {
@@ -43,6 +44,11 @@ func NewDnsLookup(sockaddr string, dnsnet string) (d *DnsLookup) {
 	return d
 }
 
+func (d *DnsLookup) Exchange(m *dns.Msg) (r *dns.Msg, err error) {
+	r, _, err = d.c.Exchange(m, d.sockaddr)
+	return
+}
+
 func (d *DnsLookup) query(host string, t uint16, as []net.IP) (addrs []net.IP, err error) {
 	addrs = as
 
@@ -50,7 +56,7 @@ func (d *DnsLookup) query(host string, t uint16, as []net.IP) (addrs []net.IP, e
 	m.SetQuestion(dns.Fqdn(host), t)
 	m.RecursionDesired = true
 
-	r, _, err := d.c.Exchange(m, d.sockaddr)
+	r, err := d.Exchange(m)
 	if err != nil {
 		return
 	}
@@ -75,4 +81,4 @@ func (d *DnsLookup) LookupIP(host string) (addrs []net.IP, err error) {
 	return
 }
 
-var DefaultLookuper = &NetLookupIP{}
+var DefaultLookuper Lookuper = &NetLookupIP{}

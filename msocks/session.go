@@ -452,11 +452,34 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 	}
 
 	if m.Response {
+		// ignore send fail, maybe just timeout.
+		// should I log this ?
 		s.sendFrameInChan(ft)
 		return true
 	}
 
-	// that's mean this is a question
-	// what client and what addr used for?
-	return false
+	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
+	if !ok {
+		log.Error("client sent a dns query when server config with no dns addr")
+		return false
+	}
+	r, err := d.Exchange(m)
+	if err != nil {
+		log.Error("dns query error: %s", err.Error())
+		return true
+	}
+
+	// send response back from streamid
+	b, err := r.Pack()
+	if err != nil {
+		log.Error("dns pack failed, how that possible.")
+		return false
+	}
+
+	fr := NewFrameDns(ft.GetStreamid(), b)
+	err = s.SendFrame(fr)
+	if err != nil {
+		return false
+	}
+	return true
 }

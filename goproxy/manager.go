@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/shell909090/goproxy/msocks"
-	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"net/http/pprof"
 	"text/template"
+
+	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/sutils"
 )
 
 const (
@@ -105,14 +106,12 @@ func init() {
 }
 
 type MsocksManager struct {
-	sp       *msocks.SessionPool
-	lookuper sutils.Lookuper
+	sp *msocks.SessionPool
 }
 
-func NewMsocksManager(sp *msocks.SessionPool, lookuper sutils.Lookuper) (mm *MsocksManager) {
+func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
 	mm = &MsocksManager{
-		sp:       sp,
-		lookuper: lookuper,
+		sp: sp,
 	}
 	return
 }
@@ -144,7 +143,7 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	addrs, err := mm.lookuper.LookupIP(hosts[0])
+	addrs, err := sutils.DefaultLookuper.LookupIP(hosts[0])
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, "error %s", err)

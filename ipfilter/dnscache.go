@@ -2,9 +2,10 @@ package ipfilter
 
 import (
 	"errors"
-	"github.com/shell909090/goproxy/sutils"
 	"net"
 	"sync"
+
+	"github.com/shell909090/goproxy/sutils"
 )
 
 const maxCache = 512
@@ -12,15 +13,13 @@ const maxCache = 512
 var errType = errors.New("type error")
 
 type DNSCache struct {
-	mu       sync.Mutex
-	cache    *Cache
-	lookuper sutils.Lookuper
+	mu    sync.Mutex
+	cache *Cache
 }
 
-func CreateDNSCache(lookuper sutils.Lookuper) (dc *DNSCache) {
+func CreateDNSCache() (dc *DNSCache) {
 	dc = &DNSCache{
-		cache:    New(maxCache),
-		lookuper: lookuper,
+		cache: New(maxCache),
 	}
 	return
 }
@@ -39,7 +38,7 @@ func (dc DNSCache) LookupIP(hostname string) (addrs []net.IP, err error) {
 		return
 	}
 
-	addrs, err = dc.lookuper.LookupIP(hostname)
+	addrs, err = sutils.DefaultLookuper.LookupIP(hostname)
 	if err != nil {
 		return
 	}

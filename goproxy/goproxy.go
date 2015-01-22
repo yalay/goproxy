@@ -70,7 +70,7 @@ func run_server(cfg *Config) (err error) {
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&svr.SessionPool, sutils.DefaultLookuper).Register(mux)
+		NewMsocksManager(&svr.SessionPool).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 
@@ -79,16 +79,13 @@ func run_server(cfg *Config) (err error) {
 
 func run_httproxy(cfg *Config) (err error) {
 	var dialer sutils.Dialer
-	var lookuper sutils.Lookuper
-
-	lookuper = sutils.DefaultLookuper
 
 	if cfg.DnsAddr != "" {
 		dnsnet := ""
 		if cfg.DnsNet != "" {
 			dnsnet = cfg.DnsAddr
 		}
-		lookuper = sutils.NewDnsLookup(cfg.DnsAddr, dnsnet)
+		sutils.DefaultLookuper = sutils.NewDnsLookup(cfg.DnsAddr, dnsnet)
 	}
 
 	dialer, err = cryptconn.NewDialer(
@@ -106,7 +103,7 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer, lookuper, cfg.Blackfile)
+			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
 		if err != nil {
 			return
 		}
@@ -114,7 +111,7 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(&ndialer.SessionPool, lookuper).Register(mux)
+		NewMsocksManager(&ndialer.SessionPool).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 

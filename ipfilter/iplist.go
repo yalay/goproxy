@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"compress/gzip"
 	"errors"
-	"github.com/op/go-logging"
-	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"math/rand"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/op/go-logging"
+	"github.com/shell909090/goproxy/sutils"
 )
 
 var log = logging.MustGetLogger("")
@@ -89,12 +90,12 @@ type FilteredDialer struct {
 }
 
 func NewFilteredDialer(dialer sutils.Dialer, dialer2 sutils.Dialer,
-	lookuper sutils.Lookuper, filename string) (fd *FilteredDialer, err error) {
+	filename string) (fd *FilteredDialer, err error) {
 
 	fd = &FilteredDialer{
 		Dialer:   dialer,
 		dialer:   dialer2,
-		lookuper: CreateDNSCache(lookuper),
+		lookuper: CreateDNSCache(),
 	}
 
 	if filename != "" {
@@ -110,11 +111,19 @@ func Getaddr(lookuper sutils.Lookuper, hostname string) (ip net.IP) {
 		return
 	}
 	addrs, err := lookuper.LookupIP(hostname)
+
 	n := len(addrs)
-	if err != nil || n == 0 {
+	if err != nil {
 		return nil
 	}
-	return addrs[rand.Intn(n)]
+	switch n {
+	case 0:
+		return nil
+	case 1:
+		return addrs[0]
+	default:
+		return addrs[rand.Intn(n)]
+	}
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {

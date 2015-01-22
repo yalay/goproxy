@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 )
 
 const (
@@ -428,7 +429,7 @@ func (cfs *ChanFrameSender) SendFrame(f Frame) (err error) {
 }
 
 func (cfs *ChanFrameSender) CloseFrame() (err error) {
-	// close(*cfs)
+	close(*cfs)
 	return
 }
 
@@ -438,10 +439,10 @@ func (cfs *ChanFrameSender) RecvWithTimeout(t time.Duration) (f Frame, err error
 	select {
 	case f, ok = <-*cfs:
 		if !ok {
-			return ERR_CLOSED
+			return nil, ErrChanClosed
 		}
 	case <-ch_timeout:
-		return ERR_TIMEOUT
+		return nil, ErrDnsTimeOut
 	}
 	return
 }

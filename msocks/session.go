@@ -3,13 +3,14 @@ package msocks
 import (
 	"errors"
 	"fmt"
-	"github.com/miekg/dns"
-	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
+	"github.com/shell909090/goproxy/sutils"
 )
 
 type Session struct {
@@ -108,43 +109,31 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 	return c, nil
 }
 
-func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
-	cfs := CreateChanFrameSender(0)
-	streamid, err := s.PutIntoNextId(cfs)
-	if err != nil {
-		return
-	}
-
-	req := new(dns.Msg)
+func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame, err error) {
+	req = new(dns.Msg)
 	req.Id = dns.Id()
 	req.SetQuestion(dns.Fqdn(host), t)
 	req.RecursionDesired = true
 
-	b, err = req.Pack()
+	b, err := req.Pack()
 	if err != nil {
 		return
 	}
 
-	fd := NewFrameDns(streamid, b)
-	err = s.SendFrame(fd)
-	if err != nil {
-		return
-	}
+	f = NewFrameDns(streamid, b)
+	return
+}
 
-	f, err = cfs.RecvWithTimeout(DNS_TIMEOUT * time.Millisecond)
-	if err != nil {
-		return
-	}
-
+func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 	ft, ok := f.(*FrameDns)
 	if !ok {
-		return
+		return nil, ErrDnsMsgIllegal
 	}
 
 	res := new(dns.Msg)
-	res.Unpack(ft.Data)
-	if !res.Response || res.Id != req.Id {
-		return
+	err = res.Unpack(ft.Data)
+	if err != nil || !res.Response || res.Id != req.Id {
+		return nil, ErrDnsMsgIllegal
 	}
 
 	for _, a := range res.Answer {
@@ -155,7 +144,38 @@ func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
 			addrs = append(addrs, ta.AAAA)
 		}
 	}
+	return
+}
 
+func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
+	cfs := CreateChanFrameSender(0)
+	streamid, err := s.PutIntoNextId(&cfs)
+	if err != nil {
+		return
+	}
+	defer func() {
+		err := s.RemovePorts(streamid)
+		if err != nil {
+			log.Error("%s", err.Error())
+		}
+	}()
+
+	req, freq, err := MakeDnsFrame(host, dns.TypeA, streamid)
+	if err != nil {
+		return
+	}
+
+	err = s.SendFrame(freq)
+	if err != nil {
+		return
+	}
+
+	fres, err := cfs.RecvWithTimeout(DNS_TIMEOUT * time.Millisecond)
+	if err != nil {
+		return
+	}
+
+	addrs, err = ParseDnsFrame(fres, req)
 	return
 }
 
@@ -235,10 +255,6 @@ func (s *Session) SendFrame(f Frame) (err error) {
 
 	n, err := s.conn.Write(b)
 	if err != nil {
-		// switch err.Error() {
-		// case errClosing, errReset:
-		// 	err = io.EOF
-		// }
 		return
 	}
 	if n != len(b) {
@@ -428,18 +444,19 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 }
 
 func (s *Session) on_dns(ft *FrameDns) bool {
-	m := dns.Msg()
-	err = m.Unpack(ft.Data)
+	m := new(dns.Msg)
+	err := m.Unpack(ft.Data)
 	if err != nil {
-		log.Error("can't parse dns package.")
+		log.Error("%s", ErrDnsMsgIllegal.Error())
 		return false
 	}
 
 	if m.Response {
-		return s.sendFrameInChan(f)
+		s.sendFrameInChan(ft)
+		return true
 	}
 
 	// that's mean this is a question
 	// what client and what addr used for?
-	return
+	return false
 }

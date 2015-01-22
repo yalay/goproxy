@@ -48,6 +48,9 @@ var (
 	ErrIdExist         = errors.New("frame sync stream id exist.")
 	ErrState           = errors.New("status error")
 	ErrSessionNotFound = errors.New("session not found")
+	ErrChanClosed      = errors.New("chan closed")
+	ErrDnsTimeOut      = errors.New("dns timeout")
+	ErrDnsMsgIllegal   = errors.New("dns message illegal ")
 )
 
 var (

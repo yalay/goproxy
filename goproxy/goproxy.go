@@ -119,7 +119,7 @@ func run_httproxy(cfg *Config) (err error) {
 	}
 
 	for k, v := range cfg.Portmaps {
-		CreatePortmap(k, v, dialer)
+		go CreatePortmap(k, v, dialer)
 	}
 
 	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, nil))

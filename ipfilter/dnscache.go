@@ -43,8 +43,10 @@ func (dc DNSCache) LookupIP(hostname string) (addrs []net.IP, err error) {
 		return
 	}
 
-	dc.mu.Lock()
-	dc.cache.Add(hostname, addrs)
-	dc.mu.Unlock()
+	if len(addrs) > 0 {
+		dc.mu.Lock()
+		dc.cache.Add(hostname, addrs)
+		dc.mu.Unlock()
+	}
 	return
 }

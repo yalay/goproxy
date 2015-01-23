@@ -110,6 +110,8 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 }
 
 func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame, err error) {
+	log.Info("make a dns query for %s.", host)
+
 	req = new(dns.Msg)
 	req.Id = dns.Id()
 	req.SetQuestion(dns.Fqdn(host), t)
@@ -136,14 +138,18 @@ func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 		return nil, ErrDnsMsgIllegal
 	}
 
+	straddr := ""
 	for _, a := range res.Answer {
 		switch ta := a.(type) {
 		case *dns.A:
 			addrs = append(addrs, ta.A)
+			straddr += ta.A.String() + ","
 		case *dns.AAAA:
 			addrs = append(addrs, ta.AAAA)
+			straddr += ta.AAAA.String() + ","
 		}
 	}
+	log.Info("dns result for %s is %s.", host, addr)
 	return
 }
 

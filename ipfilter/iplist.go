@@ -132,13 +132,11 @@ func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err erro
 		return fd.Dialer.Dial(network, address)
 	}
 
-	idx := strings.LastIndex(address, ":")
-	if idx == -1 {
-		err = errors.New("invaild address")
-		log.Error("%s", err)
+	hostname, _, err := net.SplitHostPort(address)
+	if err != nil {
+		log.Error("%s", err.Error())
 		return
 	}
-	hostname := address[:idx]
 
 	addr := Getaddr(fd.lookuper, hostname)
 	if addr == nil {

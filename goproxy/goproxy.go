@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
@@ -17,6 +17,8 @@ import (
 )
 
 var log = logging.MustGetLogger("")
+
+const TypeInternal = "internal"
 
 type Config struct {
 	Mode   string
@@ -27,8 +29,8 @@ type Config struct {
 	Loglevel   string
 	AdminIface string
 
-	DnsAddr string
-	DnsNet  string
+	DnsAddrs []string
+	DnsNet   string
 
 	Cipher    string
 	Key       string
@@ -80,14 +82,6 @@ func run_server(cfg *Config) (err error) {
 func run_httproxy(cfg *Config) (err error) {
 	var dialer sutils.Dialer
 
-	if cfg.DnsAddr != "" {
-		dnsnet := ""
-		if cfg.DnsNet != "" {
-			dnsnet = cfg.DnsAddr
-		}
-		sutils.DefaultLookuper = sutils.NewDnsLookup(cfg.DnsAddr, dnsnet)
-	}
-
 	dialer, err = cryptconn.NewDialer(
 		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
 	if err != nil {
@@ -100,6 +94,10 @@ func run_httproxy(cfg *Config) (err error) {
 		return
 	}
 	ndialer := dialer.(*msocks.Dialer)
+
+	if cfg.DnsNet == TypeInternal {
+		sutils.DefaultLookuper = ndialer
+	}
 
 	if cfg.Blackfile != "" {
 		dialer, err = ipfilter.NewFilteredDialer(
@@ -178,6 +176,10 @@ func main() {
 	if err != nil {
 		fmt.Println(err.Error())
 		return
+	}
+
+	if len(cfg.DnsAddrs) > 0 && cfg.DnsNet != TypeInternal {
+		sutils.DefaultLookuper = sutils.NewDnsLookup(cfg.DnsAddrs, cfg.DnsNet)
 	}
 
 	switch cfg.Mode {

@@ -5,6 +5,9 @@
 
     "logfile": "client.log",
     "loglevel": "INFO",
+    "adminiface": "127.0.0.1:8888",
+
+    "dnsnet": "internal",
 
     "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 

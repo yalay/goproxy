@@ -50,8 +50,8 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * logfile: log文件路径，留空表示输出到stdout。在deb包中建议留空，用init脚本的机制来生成日志文件。
 * loglevel: 日志级别，必须设定。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG。
 * adminiface: 服务器端的控制端口，可以看到服务器端有多少个连接，分别是谁。
-* dnsaddr: dns查询的目标地址。如不定义则采用系统自带的dns系统，会读取默认配置并使用。
-* dnsnet: dns的网络模式，设定为tcp可以采用tcp模式。
+* dnsaddrs: dns查询的目标地址列表。如不定义则采用系统自带的dns系统，会读取默认配置并使用。
+* dnsnet: dns的网络模式，默认为udp模式，设定为tcp可以采用tcp模式。
 * cipher: 加密算法，可以为aes/des/tripledes，默认aes。
 * key: 密钥。16个随机数据base64后的结果。
 * blackfile: 黑名单文件，http模式下可选。
@@ -59,6 +59,8 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * password: 连接密码，http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。
 * portmaps: 端口映射配置，将本地端口映射到远程任意一个端口。
+
+其中dnsnet项，客户端可以设定为internal模式，使用内置的通过msocks的dns系统。
 
 ## server模式
 
@@ -123,6 +125,7 @@ dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域�
 	 
 		"logfile": "",
 		"loglevel": "WARNING",
+		"adminiface": "127.0.0.1:5234"
 	 
 		"cipher": "aes",
 		"key": "[your key]",
@@ -141,7 +144,10 @@ dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域�
 	 
 		"logfile": "",
 		"loglevel": "WARNING",
-	 
+		"adminiface": "127.0.0.1:5234"
+
+		"dnsnet": "internal",
+
 		"cipher": "aes",
 		"key": "[your key]",
 		"blackfile": "/usr/share/goproxy/routes.list.gz",

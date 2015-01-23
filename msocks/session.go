@@ -460,7 +460,7 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 
 	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
 	if !ok {
-		log.Error("client sent a dns query when server config with no dns addr")
+		log.Error("got a dns query without a proper dns server")
 		return false
 	}
 	r, err := d.Exchange(m)

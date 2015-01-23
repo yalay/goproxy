@@ -149,7 +149,7 @@ func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 			straddr += ta.AAAA.String() + ","
 		}
 	}
-	log.Info("dns result for %s is %s.", host, addr)
+	log.Info("dns result for %s is %s.", req.Question[0].Name, straddr)
 	return
 }
 
@@ -477,16 +477,16 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 		return true
 	}
 
-	addr := ""
+	straddr := ""
 	for _, a := range r.Answer {
 		switch ta := a.(type) {
 		case *dns.A:
-			addr += ta.A.String() + ","
+			straddr += ta.A.String() + ","
 		case *dns.AAAA:
-			addr += ta.AAAA.String() + ","
+			straddr += ta.AAAA.String() + ","
 		}
 	}
-	log.Info("dns result for %s is %s.", m.Question[0].Name, addr)
+	log.Info("dns result for %s is %s.", m.Question[0].Name, straddr)
 
 	// send response back from streamid
 	b, err := r.Pack()

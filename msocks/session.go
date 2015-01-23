@@ -458,6 +458,8 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 		return true
 	}
 
+	log.Info("got a dns query for %s.", m.Question[0].Name)
+
 	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
 	if !ok {
 		log.Error("got a dns query without a proper dns server")
@@ -468,6 +470,17 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 		log.Error("dns query error: %s", err.Error())
 		return true
 	}
+
+	addr := ""
+	for _, a := range r.Answer {
+		switch ta := a.(type) {
+		case *dns.A:
+			addr += ta.A.String() + ","
+		case *dns.AAAA:
+			addr += ta.AAAA.String() + ","
+		}
+	}
+	log.Info("dns result for %s is %s.", m.Question[0].Name, addr)
 
 	// send response back from streamid
 	b, err := r.Pack()

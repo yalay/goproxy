@@ -75,7 +75,7 @@ func (c *Conn) GetStreamId() (s string) {
 }
 
 func (c *Conn) String() (s string) {
-	return fmt.Sprint("%s:%s", c.Network, c.Address)
+	return fmt.Sprintf("%s:%s", c.Network, c.Address)
 }
 
 func (c *Conn) WaitForConn() (err error) {

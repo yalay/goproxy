@@ -237,16 +237,18 @@ func (f *FrameData) Unpack(r io.Reader) (err error) {
 
 type FrameSyn struct {
 	FrameBase
+	Network string
 	Address string
 }
 
-func NewFrameSyn(streamid uint16, addr string) (f *FrameSyn) {
+func NewFrameSyn(streamid uint16, net, addr string) (f *FrameSyn) {
 	return &FrameSyn{
 		FrameBase: FrameBase{
 			Type:     MSG_SYN,
 			Streamid: streamid,
-			Length:   uint16(len(addr) + 2),
+			Length:   uint16(len(net) + len(addr) + 4),
 		},
+		Network: net,
 		Address: addr,
 	}
 }
@@ -255,25 +257,34 @@ func (f *FrameSyn) Packed() (buf *bytes.Buffer, err error) {
 	if err != nil {
 		return
 	}
+	err = WriteString(buf, f.Network)
+	if err != nil {
+		return
+	}
 	err = WriteString(buf, f.Address)
 	return
 }
 
 func (f *FrameSyn) Unpack(r io.Reader) (err error) {
+	f.Network, err = ReadString(r)
+	if err != nil {
+		return
+	}
+
 	f.Address, err = ReadString(r)
 	if err != nil {
 		return
 	}
 
-	if f.Length != uint16(len(f.Address)+2) {
+	if f.Length != uint16(len(f.Network)+len(f.Address)+4) {
 		err = errors.New("frame sync length not match.")
 	}
 	return
 }
 
 func (f *FrameSyn) Debug(prefix string) {
-	log.Debug("%sframe syn: stream(%d), len(%d), addr(%s).",
-		prefix, f.Streamid, f.Length, f.Address)
+	log.Debug("%sframe syn: stream(%d), len(%d), net(%s), addr(%s).",
+		prefix, f.Streamid, f.Length, f.Network, f.Address)
 }
 
 type FrameWnd struct {

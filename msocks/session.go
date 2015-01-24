@@ -92,7 +92,7 @@ func DialSession(conn net.Conn, username, password string) (s *Session, err erro
 }
 
 func (s *Session) Dial(network, address string) (c *Conn, err error) {
-	c = NewConn(ST_SYN_SENT, 0, s, address)
+	c = NewConn(ST_SYN_SENT, 0, s, network, address)
 	streamid, err := s.PutIntoNextId(c)
 	if err != nil {
 		return
@@ -101,7 +101,7 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 
 	log.Info("try dial: %s => %s.",
 		s.conn.RemoteAddr().String(), address)
-	err = c.WaitForConn(address)
+	err = c.WaitForConn()
 	if err != nil {
 		return
 	}
@@ -308,7 +308,7 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 		}
 	}
 	id = s.next_id
-	s.next_id += 1
+	s.next_id += 2
 	log.Debug("%s put into next id %d: %p.", s.GetId(), id, fs)
 
 	s.ports[id] = fs
@@ -400,7 +400,7 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 
 func (s *Session) on_syn(ft *FrameSyn) bool {
 	// lock streamid temporary, with status sync recved
-	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Address)
+	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Network, ft.Address)
 	err := s.PutIntoId(ft.Streamid, c)
 	if err != nil {
 		log.Error("%s", err)
@@ -417,11 +417,11 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 	// it may toke long time to connect with target address
 	// so we use goroutine to return back loop
 	go func() {
-		log.Debug("%s(%d) try to connect: %s.",
-			s.GetId(), ft.Streamid, ft.Address)
+		log.Debug("%s(%d) try to connect: %s:%s.",
+			s.GetId(), ft.Streamid, ft.Network, ft.Address)
 
 		// TODO: timeout
-		conn, err := s.dialer.Dial("tcp", ft.Address)
+		conn, err := s.dialer.Dial(ft.Network, ft.Address)
 		if err != nil {
 			log.Error("%s", err)
 			fb := NewFrameResult(ft.Streamid, ERR_CONNFAILED)

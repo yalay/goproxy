@@ -20,6 +20,12 @@ var log = logging.MustGetLogger("")
 
 const TypeInternal = "internal"
 
+type PortMap struct {
+	Net string
+	Src string
+	Dst string
+}
+
 type Config struct {
 	Mode   string
 	Listen string
@@ -40,7 +46,7 @@ type Config struct {
 	Password string
 	Auth     map[string]string
 
-	Portmaps map[string]string
+	Portmaps []PortMap
 }
 
 func httpserver(addr string, handler http.Handler) {
@@ -113,8 +119,8 @@ func run_httproxy(cfg *Config) (err error) {
 		go httpserver(cfg.AdminIface, mux)
 	}
 
-	for k, v := range cfg.Portmaps {
-		go CreatePortmap(k, v, dialer)
+	for _, pm := range cfg.Portmaps {
+		go CreatePortmap(pm, dialer)
 	}
 
 	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, nil))
@@ -136,6 +142,10 @@ func LoadConfig() (cfg Config, err error) {
 	err = dec.Decode(&cfg)
 	if err != nil {
 		return
+	}
+
+	if cfg.Cipher == "" {
+		cfg.Cipher = "aes"
 	}
 	return
 }

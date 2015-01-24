@@ -25,6 +25,7 @@ type Conn struct {
 	streamid uint16
 	sender   FrameSender
 	ch       chan uint32
+	Network  string
 	Address  string
 
 	rlock    sync.Mutex // this should used to block reader and reader, not writer
@@ -37,12 +38,13 @@ type Conn struct {
 	wev      *sync.Cond
 }
 
-func NewConn(status uint8, streamid uint16, sess *Session, address string) (c *Conn) {
+func NewConn(status uint8, streamid uint16, sess *Session, network, address string) (c *Conn) {
 	c = &Conn{
 		status:   status,
 		sess:     sess,
 		streamid: streamid,
 		sender:   sess,
+		Network:  network,
 		Address:  address,
 		rqueue:   NewQueue(),
 	}
@@ -72,10 +74,14 @@ func (c *Conn) GetStreamId() (s string) {
 	return fmt.Sprintf("%d", c.streamid)
 }
 
-func (c *Conn) WaitForConn(address string) (err error) {
+func (c *Conn) String() (s string) {
+	return fmt.Sprint("%s:%s", c.Network, c.Address)
+}
+
+func (c *Conn) WaitForConn() (err error) {
 	c.ch = make(chan uint32, 0)
 
-	fb := NewFrameSyn(c.streamid, address)
+	fb := NewFrameSyn(c.streamid, c.Network, c.Address)
 	err = c.sess.SendFrame(fb)
 	if err != nil {
 		log.Error("%s", err)
@@ -89,8 +95,8 @@ func (c *Conn) WaitForConn(address string) (err error) {
 			c.streamid, errno)
 		c.Final()
 	} else {
-		log.Notice("connect successed: %s => %s.",
-			c.GetId(), address)
+		log.Notice("%s connect successed: %s => %s.",
+			c.Network, c.GetId(), c.Address)
 	}
 
 	c.ch = nil
@@ -111,7 +117,7 @@ func (c *Conn) Final() {
 }
 
 func (c *Conn) Close() (err error) {
-	log.Info("call close to %s.", c.GetId())
+	log.Info("close connection %s.", c.GetId())
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -120,6 +126,8 @@ func (c *Conn) Close() (err error) {
 		// maybe call close twice
 		return
 	case ST_EST:
+		log.Info("connection %s closed from local.",
+			c.GetId())
 		fb := NewFrameFin(c.streamid)
 		err = c.sender.SendFrame(fb)
 		if err != nil {
@@ -208,8 +216,6 @@ func (c *Conn) InWnd(ft *FrameWnd) (err error) {
 }
 
 func (c *Conn) InFin(ft *FrameFin) (err error) {
-	log.Info("connection %s closed from remote.",
-		c.GetId())
 	// always need to close read pipe
 	// coz fin means remote will never send data anymore
 	c.rqueue.Close()
@@ -219,6 +225,8 @@ func (c *Conn) InFin(ft *FrameFin) (err error) {
 
 	switch c.status {
 	case ST_EST:
+		log.Info("connection %s closed from remote.",
+			c.GetId())
 		// close read pipe but not sent fin back
 		// wait reader to close
 		c.status = ST_CLOSE_WAIT

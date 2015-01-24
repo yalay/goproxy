@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/shell909090/goproxy/sutils"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/shell909090/goproxy/sutils"
 )
 
 type MsocksServer struct {
@@ -131,6 +132,7 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 	ti.Stop()
 
 	sess := NewSession(conn)
+	sess.next_id = 1
 	sess.dialer = ms.dialer
 	ms.Add(sess)
 	defer ms.Remove(sess)

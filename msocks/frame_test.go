@@ -103,8 +103,8 @@ func TestFrameDataWrite(t *testing.T) {
 }
 
 func TestFrameSynRead(t *testing.T) {
-	buf := bytes.NewBuffer([]byte{MSG_SYN, 0x00, 0x04, 0x0A, 0x0A,
-		0x00, 0x02, 0x61, 0x62})
+	buf := bytes.NewBuffer([]byte{MSG_SYN, 0x00, 0x08, 0x0A, 0x0A,
+		0x00, 0x02, 0x61, 0x62, 0x00, 0x02, 0x63, 0x64})
 
 	f, err := ReadFrame(buf)
 	if err != nil {
@@ -116,20 +116,20 @@ func TestFrameSynRead(t *testing.T) {
 		t.Fatalf("FrameSyn format wrong")
 	}
 
-	if ft.Address != "ab" {
+	if ft.Network != "ab" || ft.Address != "cd" {
 		t.Fatalf("FrameSyn body wrong")
 	}
 }
 
 func TestFrameSynWrite(t *testing.T) {
-	f := NewFrameSyn(10, "cd")
+	f := NewFrameSyn(10, "cd", "ab")
 	buf, err := f.Packed()
 	if err != nil {
 		t.Error(err)
 	}
 
-	if bytes.Compare(buf.Bytes(), []byte{MSG_SYN, 0x00, 0x04, 0x00, 0x0A,
-		0x00, 0x02, 0x63, 0x64}) != 0 {
+	if bytes.Compare(buf.Bytes(), []byte{MSG_SYN, 0x00, 0x08, 0x00, 0x0A,
+		0x00, 0x02, 0x63, 0x64, 0x00, 0x02, 0x61, 0x62}) != 0 {
 		t.Fatalf("FrameSyn write wrong")
 	}
 }

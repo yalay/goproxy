@@ -12,5 +12,12 @@
     "key": "toqq7QrjCSKSkT2wW6TtWQ==",
 
     "username": "shell",
-    "password": "123"
+    "password": "123",
+    "portmaps": [
+    	{
+	    "net": "udp",
+	    "src": ":53",
+	    "dst": "114.114.114.114:53"
+	}
+    ]
 }

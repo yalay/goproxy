@@ -34,7 +34,7 @@ const (
     <table>
       <tr>
 	<th>Sess</th><th>Id</th><th>State</th>
-        <th>Recv-Q</th><th>Send-Q</th><th width="50%">Address</th>
+        <th>Recv-Q</th><th>Send-Q</th><th width="50%">Target</th>
       </tr>
       {{if .GetSize}}
       {{range $sess := .GetSess}}
@@ -54,7 +54,7 @@ const (
 	<td>{{$conn.GetStatus}}</td>
 	<td>{{$conn.GetReadBufSize}}</td>
 	<td>{{$conn.GetWriteBufSize}}</td>
-	<td>{{$conn.Address}}</td>
+	<td>{{$conn.String}}</td>
 	{{else}}
 	<td></td>
 	<td>half closed</td>

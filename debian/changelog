@@ -1,8 +1,15 @@
-goproxy (2.3.0) UNRELEASED; urgency=medium
+goproxy (2.4.0) UNRELEASED; urgency=low
 
-  - remove dns subsystem
+  * sync with network
+  * port mapping
 
- -- Shell.Xu <shell909090@gmail.com>  Sun, 04 Jan 2015 17:52:22 +0800
+ -- Shell.Xu <shell909090@gmail.com>  Sat, 24 Jan 2015 14:41:24 +0800
+
+goproxy (2.3.0) unstable; urgency=medium
+
+  - remove dns subsystem.
+
+ -- Shell.Xu <shell909090@gmail.com>  Sat, 24 Jan 2015 14:41:14 +0800
 
 goproxy (2.2.2) unstable; urgency=low
 

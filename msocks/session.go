@@ -6,21 +6,13 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
-	"time"
 
-	"github.com/miekg/dns"
 	"github.com/shell909090/goproxy/sutils"
 )
 
 type Session struct {
 	wlock sync.Mutex
 	conn  net.Conn
-
-	readcnt  int64
-	readbps  int64
-	writecnt int64
-	writebps int64
 
 	closed  bool
 	plock   sync.Mutex
@@ -29,6 +21,7 @@ type Session struct {
 
 	dialer sutils.Dialer
 	PingPong
+	SpeedCounter
 }
 
 func NewSession(conn net.Conn) (s *Session) {
@@ -38,240 +31,9 @@ func NewSession(conn net.Conn) (s *Session) {
 		ports:  make(map[uint16]FrameSender, 0),
 	}
 	s.PingPong = *NewPingPong(s)
+	s.SpeedCounter = *NewSpeedCounter(s)
 	log.Notice("session %s created.", s.GetId())
-	go s.loop_count()
 	return
-}
-
-func DialSession(conn net.Conn, username, password string) (s *Session, err error) {
-	ti := time.AfterFunc(AUTH_TIMEOUT*time.Millisecond, func() {
-		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
-		conn.Close()
-	})
-	defer func() {
-		ti.Stop()
-	}()
-
-	log.Notice("auth with username: %s, password: %s.", username, password)
-	fb := NewFrameAuth(0, username, password)
-	buf, err := fb.Packed()
-	if err != nil {
-		return
-	}
-
-	_, err = conn.Write(buf.Bytes())
-	if err != nil {
-		return
-	}
-
-	f, err := ReadFrame(conn)
-	if err != nil {
-		return
-	}
-
-	ft, ok := f.(*FrameResult)
-	if !ok {
-		err = errors.New("unexpected package")
-		log.Error("%s", err)
-		return
-	}
-
-	if ft.Errno != ERR_NONE {
-		conn.Close()
-		err = fmt.Errorf("create connection failed with code: %d.",
-			ft.Errno)
-		log.Error("%s", err)
-		return
-	}
-
-	log.Notice("auth ok.")
-	s = NewSession(conn)
-	s.pong()
-
-	return
-}
-
-func (s *Session) Dial(network, address string) (c *Conn, err error) {
-	c = NewConn(ST_SYN_SENT, 0, s, network, address)
-	streamid, err := s.PutIntoNextId(c)
-	if err != nil {
-		return
-	}
-	c.streamid = streamid
-
-	log.Info("try dial: %s => %s.",
-		s.conn.RemoteAddr().String(), address)
-	err = c.WaitForConn()
-	if err != nil {
-		return
-	}
-
-	return c, nil
-}
-
-func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame, err error) {
-	log.Info("make a dns query for %s.", host)
-
-	req = new(dns.Msg)
-	req.Id = dns.Id()
-	req.SetQuestion(dns.Fqdn(host), t)
-	req.RecursionDesired = true
-
-	b, err := req.Pack()
-	if err != nil {
-		return
-	}
-
-	f = NewFrameDns(streamid, b)
-	return
-}
-
-func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
-	ft, ok := f.(*FrameDns)
-	if !ok {
-		return nil, ErrDnsMsgIllegal
-	}
-
-	res := new(dns.Msg)
-	err = res.Unpack(ft.Data)
-	if err != nil || !res.Response || res.Id != req.Id {
-		return nil, ErrDnsMsgIllegal
-	}
-
-	straddr := ""
-	for _, a := range res.Answer {
-		switch ta := a.(type) {
-		case *dns.A:
-			addrs = append(addrs, ta.A)
-			straddr += ta.A.String() + ","
-		case *dns.AAAA:
-			addrs = append(addrs, ta.AAAA)
-			straddr += ta.AAAA.String() + ","
-		}
-	}
-	log.Info("dns result for %s is %s.", req.Question[0].Name, straddr)
-	return
-}
-
-func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
-	cfs := CreateChanFrameSender(0)
-	streamid, err := s.PutIntoNextId(&cfs)
-	if err != nil {
-		return
-	}
-	defer func() {
-		err := s.RemovePorts(streamid)
-		if err != nil {
-			log.Error("%s", err.Error())
-		}
-	}()
-
-	req, freq, err := MakeDnsFrame(host, dns.TypeA, streamid)
-	if err != nil {
-		return
-	}
-
-	err = s.SendFrame(freq)
-	if err != nil {
-		return
-	}
-
-	fres, err := cfs.RecvWithTimeout(DNS_TIMEOUT * time.Millisecond)
-	if err != nil {
-		return
-	}
-
-	addrs, err = ParseDnsFrame(fres, req)
-	return
-}
-
-func (s *Session) Close() (err error) {
-	log.Warning("close all connects (%d) for session: %s.",
-		len(s.ports), s.GetId())
-	defer s.conn.Close()
-	s.plock.Lock()
-	defer s.plock.Unlock()
-
-	for _, v := range s.ports {
-		v.CloseFrame()
-	}
-	s.closed = true
-	return
-}
-
-func (s *Session) LocalAddr() net.Addr {
-	return s.conn.LocalAddr()
-}
-
-func (s *Session) RemoteAddr() net.Addr {
-	return s.conn.RemoteAddr()
-}
-
-func (s *Session) LocalPort() int {
-	addr, ok := s.LocalAddr().(*net.TCPAddr)
-	if !ok {
-		return -1
-	}
-	return addr.Port
-}
-
-func shrink_count(cnt *int64, bps *int64) bool {
-	num := float64(atomic.SwapInt64(cnt, 0)) * (1 - SHRINK_RATE)
-	for i := 0; i < 10; i++ {
-		old := atomic.LoadInt64(bps)
-		new := int64(float64(old)*SHRINK_RATE + num)
-		if atomic.CompareAndSwapInt64(bps, old, new) {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Session) loop_count() {
-	for !s.closed {
-		if !shrink_count(&s.readcnt, &s.readbps) {
-			log.Error("shrink counter read failed")
-		}
-		if !shrink_count(&s.writecnt, &s.writebps) {
-			log.Error("shrink counter write failed")
-		}
-		time.Sleep(SHRINK_TIME * time.Millisecond)
-	}
-}
-
-func (s *Session) GetReadSpeed() int64 {
-	return atomic.LoadInt64(&s.readbps)
-}
-
-func (s *Session) GetWriteSpeed() int64 {
-	return atomic.LoadInt64(&s.writebps)
-}
-
-func (s *Session) SendFrame(f Frame) (err error) {
-	f.Debug("send ")
-	atomic.AddInt64(&s.writecnt, int64(f.GetSize()))
-
-	buf, err := f.Packed()
-	if err != nil {
-		return
-	}
-	b := buf.Bytes()
-	s.wlock.Lock()
-	defer s.wlock.Unlock()
-
-	n, err := s.conn.Write(b)
-	if err != nil {
-		return
-	}
-	if n != len(b) {
-		return io.ErrShortWrite
-	}
-	log.Debug("sess %s write len(%d).", s.GetId(), len(b))
-	return
-}
-
-func (s *Session) CloseFrame() error {
-	return s.Close()
 }
 
 func (s *Session) GetId() string {
@@ -342,6 +104,63 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 	return
 }
 
+func (s *Session) Close() (err error) {
+	log.Warning("close all connects (%d) for session: %s.",
+		len(s.ports), s.GetId())
+	defer s.conn.Close()
+	s.plock.Lock()
+	defer s.plock.Unlock()
+
+	for _, v := range s.ports {
+		v.CloseFrame()
+	}
+	s.closed = true
+	return
+}
+
+func (s *Session) LocalAddr() net.Addr {
+	return s.conn.LocalAddr()
+}
+
+func (s *Session) RemoteAddr() net.Addr {
+	return s.conn.RemoteAddr()
+}
+
+func (s *Session) LocalPort() int {
+	addr, ok := s.LocalAddr().(*net.TCPAddr)
+	if !ok {
+		return -1
+	}
+	return addr.Port
+}
+
+func (s *Session) SendFrame(f Frame) (err error) {
+	f.Debug("send ")
+	s.WriteBytes(int64(f.GetSize()))
+
+	buf, err := f.Packed()
+	if err != nil {
+		return
+	}
+	b := buf.Bytes()
+	s.wlock.Lock()
+	defer s.wlock.Unlock()
+
+	n, err := s.conn.Write(b)
+	if err != nil {
+		return
+	}
+	if n != len(b) {
+		return io.ErrShortWrite
+	}
+	log.Debug("sess %s write len(%d).", s.GetId(), len(b))
+	return
+}
+
+func (s *Session) CloseFrame() error {
+	return s.Close()
+}
+
 func (s *Session) Run() {
 	defer s.Close()
 
@@ -353,7 +172,7 @@ func (s *Session) Run() {
 		}
 
 		f.Debug("recv ")
-		atomic.AddInt64(&s.readcnt, int64(f.GetSize()))
+		s.ReadBytes(int64(f.GetSize()))
 
 		switch ft := f.(type) {
 		default:
@@ -393,111 +212,6 @@ func (s *Session) sendFrameInChan(f Frame) (b bool) {
 	if err != nil {
 		log.Error("%s(%d) send failed, err: %s.",
 			s.GetId(), streamid, err)
-		return false
-	}
-	return true
-}
-
-func (s *Session) on_syn(ft *FrameSyn) bool {
-	// lock streamid temporary, with status sync recved
-	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Network, ft.Address)
-	err := s.PutIntoId(ft.Streamid, c)
-	if err != nil {
-		log.Error("%s", err)
-
-		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
-		err := s.SendFrame(fb)
-		if err != nil {
-			log.Error("%s", err)
-			return false
-		}
-		return true
-	}
-
-	// it may toke long time to connect with target address
-	// so we use goroutine to return back loop
-	go func() {
-		log.Debug("%s(%d) try to connect: %s:%s.",
-			s.GetId(), ft.Streamid, ft.Network, ft.Address)
-
-		// TODO: timeout
-		conn, err := s.dialer.Dial(ft.Network, ft.Address)
-		if err != nil {
-			log.Error("%s", err)
-			fb := NewFrameResult(ft.Streamid, ERR_CONNFAILED)
-			err = s.SendFrame(fb)
-			if err != nil {
-				log.Error("%s", err)
-			}
-			c.Final()
-			return
-		}
-
-		fb := NewFrameResult(ft.Streamid, ERR_NONE)
-		err = s.SendFrame(fb)
-		if err != nil {
-			log.Error("%s", err)
-			return
-		}
-		c.status = ST_EST
-
-		go sutils.CopyLink(conn, c)
-		log.Notice("server side %s(%d) connected %s.",
-			s.GetId(), ft.Streamid, ft.Address)
-		return
-	}()
-	return true
-}
-
-func (s *Session) on_dns(ft *FrameDns) bool {
-	m := new(dns.Msg)
-	err := m.Unpack(ft.Data)
-	if err != nil {
-		log.Error("%s", ErrDnsMsgIllegal.Error())
-		return false
-	}
-
-	if m.Response {
-		// ignore send fail, maybe just timeout.
-		// should I log this ?
-		s.sendFrameInChan(ft)
-		return true
-	}
-
-	log.Info("got a dns query for %s.", m.Question[0].Name)
-
-	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
-	if !ok {
-		log.Error("got a dns query without a proper dns server")
-		return false
-	}
-	r, err := d.Exchange(m)
-	if err != nil {
-		log.Error("dns query error: %s", err.Error())
-		return true
-	}
-
-	straddr := ""
-	for _, a := range r.Answer {
-		switch ta := a.(type) {
-		case *dns.A:
-			straddr += ta.A.String() + ","
-		case *dns.AAAA:
-			straddr += ta.AAAA.String() + ","
-		}
-	}
-	log.Info("dns result for %s is %s.", m.Question[0].Name, straddr)
-
-	// send response back from streamid
-	b, err := r.Pack()
-	if err != nil {
-		log.Error("dns pack failed, how that possible.")
-		return false
-	}
-
-	fr := NewFrameDns(ft.GetStreamid(), b)
-	err = s.SendFrame(fr)
-	if err != nil {
 		return false
 	}
 	return true

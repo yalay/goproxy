@@ -25,8 +25,7 @@ const (
 	MIN_SESS_NUM      = 1
 	MAX_CONN_PRE_SESS = 32
 
-	SHRINK_TIME = 5
-	SHRINK_RATE = 0.9
+	SHRINK_TIME = 3
 )
 
 const (

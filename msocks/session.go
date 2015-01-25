@@ -31,8 +31,8 @@ func NewSession(conn net.Conn) (s *Session) {
 		closed: false,
 		ports:  make(map[uint16]FrameSender, 0),
 	}
-	s.PingPong = *NewPingPong(s)
-	s.SpeedCounter = *NewSpeedCounter(s)
+	InitPingPong(s)
+	InitSpeedCounter(s)
 	log.Notice("session %s created.", s.GetId())
 	return
 }
@@ -149,7 +149,7 @@ func (s *Session) LocalPort() int {
 
 func (s *Session) SendFrame(f Frame) (err error) {
 	f.Debug("send ")
-	s.WriteBytes(int32(f.GetSize()))
+	s.WriteBytes(uint32(f.GetSize()))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -185,7 +185,7 @@ func (s *Session) Run() {
 		}
 
 		f.Debug("recv ")
-		s.ReadBytes(int32(f.GetSize()))
+		s.ReadBytes(uint32(f.GetSize()))
 
 		switch ft := f.(type) {
 		default:

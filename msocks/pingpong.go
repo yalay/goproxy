@@ -14,16 +14,13 @@ type PingPong struct {
 	gameover bool
 }
 
-func NewPingPong(s *Session) (p *PingPong) {
-	p = &PingPong{
-		s:        s,
-		ch_ping:  make(chan int, 1),
-		cnt:      0,
-		lastping: time.Now(),
-		gameover: false,
-	}
-	go p.loop()
-	return
+func InitPingPong(s *Session) {
+	s.PingPong.s = s
+	s.PingPong.ch_ping = make(chan int, 1)
+	s.PingPong.cnt = 0
+	s.PingPong.lastping = time.Now()
+	s.PingPong.gameover = false
+	go s.PingPong.loop()
 }
 
 func (p *PingPong) IsGameOver() bool {

@@ -6,11 +6,11 @@ import (
 )
 
 type SpeedCounter struct {
+	readcnt  int32
+	readbps  int32
+	writecnt int32
+	writebps int32
 	s        *Session
-	readcnt  int64
-	readbps  int64
-	writecnt int64
-	writebps int64
 }
 
 func NewSpeedCounter(s *Session) (sc *SpeedCounter) {
@@ -19,33 +19,28 @@ func NewSpeedCounter(s *Session) (sc *SpeedCounter) {
 	return
 }
 
-func shrink_count(cnt *int64, bps *int64) {
-	num := atomic.SwapInt64(cnt, 0)
-	old := atomic.LoadInt64(bps)
-	new := SHRINK_RATE*float64(old) + (1-SHRINK_RATE)*float64(num)/float64(SHRINK_TIME)
-	atomic.StoreInt64(bps, int64(new))
-}
-
 func (sc *SpeedCounter) loop_count() {
 	for !sc.s.closed {
-		shrink_count(&sc.readcnt, &sc.readbps)
-		shrink_count(&sc.writecnt, &sc.writebps)
-		time.Sleep(SHRINK_TIME * time.Millisecond)
+		num := atomic.SwapInt32(&sc.readcnt, 0)
+		sc.readbps = int32(SHRINK_RATE*float64(sc.readbps) + (1-SHRINK_RATE)*float64(num)/float64(SHRINK_TIME))
+		num = atomic.SwapInt32(&sc.writebps, 0)
+		sc.writebps = int32(SHRINK_RATE*float64(sc.writebps) + (1-SHRINK_RATE)*float64(num)/float64(SHRINK_TIME))
+		time.Sleep(SHRINK_TIME * time.Second)
 	}
 }
 
-func (sc *SpeedCounter) ReadBytes(s int64) (now int64) {
-	return atomic.AddInt64(&sc.readcnt, s)
+func (sc *SpeedCounter) ReadBytes(s int32) int32 {
+	return atomic.AddInt32(&sc.readcnt, s)
 }
 
-func (sc *SpeedCounter) WriteBytes(s int64) (now int64) {
-	return atomic.AddInt64(&sc.writecnt, s)
+func (sc *SpeedCounter) WriteBytes(s int32) int32 {
+	return atomic.AddInt32(&sc.writecnt, s)
 }
 
-func (sc *SpeedCounter) GetReadSpeed() int64 {
-	return atomic.LoadInt64(&sc.readbps)
+func (sc *SpeedCounter) GetReadSpeed() int32 {
+	return sc.readbps
 }
 
-func (sc *SpeedCounter) GetWriteSpeed() int64 {
-	return atomic.LoadInt64(&sc.writebps)
+func (sc *SpeedCounter) GetWriteSpeed() int32 {
+	return sc.writebps
 }

@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/shell909090/goproxy/sutils"
 	"net/http"
 	"strings"
+
+	"github.com/shell909090/goproxy/sutils"
 )
 
 var hopHeaders = []string{
@@ -101,7 +102,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 	dstconn, err := p.dialer.Dial("tcp", host)
 	if err != nil {
-		log.Error("dial failed:", err)
+		log.Error("dial failed: %s", err.Error())
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}

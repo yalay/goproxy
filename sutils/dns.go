@@ -1,7 +1,6 @@
 package sutils
 
 import (
-	"math/rand"
 	"net"
 
 	"github.com/miekg/dns"
@@ -22,8 +21,15 @@ func NewDnsLookup(Servers []string, dnsnet string) (d *DnsLookup) {
 }
 
 func (d *DnsLookup) Exchange(m *dns.Msg) (r *dns.Msg, err error) {
-	n := rand.Intn(len(d.Servers))
-	r, _, err = d.c.Exchange(m, d.Servers[n])
+	for _, srv := range d.Servers {
+		r, _, err = d.c.Exchange(m, srv)
+		if err != nil {
+			continue
+		}
+		if len(r.Answer) > 0 {
+			return
+		}
+	}
 	return
 }
 

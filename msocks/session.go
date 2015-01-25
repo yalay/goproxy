@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"sync"
 
 	"github.com/shell909090/goproxy/sutils"
@@ -53,6 +54,18 @@ func (s *Session) GetPorts() (ports []*Conn) {
 			ports = append(ports, c)
 		}
 	}
+	return
+}
+
+type ConnSlice []*Conn
+
+func (cs ConnSlice) Len() int           { return len(cs) }
+func (cs ConnSlice) Swap(i, j int)      { cs[i], cs[j] = cs[j], cs[i] }
+func (cs ConnSlice) Less(i, j int) bool { return cs[i].streamid < cs[j].streamid }
+
+func (s *Session) GetSortedPorts() (ports ConnSlice) {
+	ports := s.GetPorts()
+	sort.Sort(ports)
 	return
 }
 

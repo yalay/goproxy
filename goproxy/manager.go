@@ -46,7 +46,7 @@ const (
 	<td>{{$sess.GetWriteSpeed}}</td>
 	<td>{{$sess.RemoteAddr}}</td>
       </tr>
-      {{range $conn := $sess.GetPorts}}
+      {{range $conn := $sess.GetSortedPorts}}
       <tr>
 	{{with $conn}}
 	<td></td>

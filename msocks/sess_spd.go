@@ -19,26 +19,17 @@ func NewSpeedCounter(s *Session) (sc *SpeedCounter) {
 	return
 }
 
-func shrink_count(cnt *int64, bps *int64) bool {
-	num := float64(atomic.SwapInt64(cnt, 0)) * (1 - SHRINK_RATE)
-	for i := 0; i < 10; i++ {
-		old := atomic.LoadInt64(bps)
-		new := int64(float64(old)*SHRINK_RATE + num)
-		if atomic.CompareAndSwapInt64(bps, old, new) {
-			return true
-		}
-	}
-	return false
+func shrink_count(cnt *int64, bps *int64) {
+	num := atomic.SwapInt64(cnt, 0)
+	old := atomic.LoadInt64(bps)
+	new := SHRINK_RATE*float64(old) + (1-SHRINK_RATE)*float64(num)/float64(SHRINK_TIME)
+	atomic.StoreInt64(bps, int64(new))
 }
 
 func (sc *SpeedCounter) loop_count() {
 	for !sc.s.closed {
-		if !shrink_count(&sc.readcnt, &sc.readbps) {
-			log.Error("shrink counter read failed")
-		}
-		if !shrink_count(&sc.writecnt, &sc.writebps) {
-			log.Error("shrink counter write failed")
-		}
+		shrink_count(&sc.readcnt, &sc.readbps)
+		shrink_count(&sc.writecnt, &sc.writebps)
 		time.Sleep(SHRINK_TIME * time.Millisecond)
 	}
 }

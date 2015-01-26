@@ -21,14 +21,12 @@ var hopHeaders = []string{
 type Proxy struct {
 	transport http.Transport
 	dialer    sutils.Dialer
-	mux       *http.ServeMux
 }
 
-func NewProxy(dialer sutils.Dialer, mux *http.ServeMux) (p *Proxy) {
+func NewProxy(dialer sutils.Dialer) (p *Proxy) {
 	p = &Proxy{
 		dialer:    dialer,
 		transport: http.Transport{Dial: dialer.Dial},
-		mux:       mux,
 	}
 	return
 }
@@ -46,15 +44,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == "CONNECT" {
 		p.Connect(w, req)
-		return
-	}
-
-	if req.URL.Host == "" {
-		if p.mux == nil {
-			w.WriteHeader(500)
-			return
-		}
-		p.mux.ServeHTTP(w, req)
 		return
 	}
 

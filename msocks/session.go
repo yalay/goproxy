@@ -21,8 +21,8 @@ type Session struct {
 	ports   map[uint16]FrameSender
 
 	dialer sutils.Dialer
-	PingPong
-	SpeedCounter
+	*PingPong
+	*SpeedCounter
 }
 
 func NewSession(conn net.Conn) (s *Session) {
@@ -31,8 +31,8 @@ func NewSession(conn net.Conn) (s *Session) {
 		closed: false,
 		ports:  make(map[uint16]FrameSender, 0),
 	}
-	InitPingPong(s)
-	InitSpeedCounter(s)
+	s.PingPong = NewPingPong(s)
+	s.SpeedCounter = NewSpeedCounter(s)
 	log.Notice("session %s created.", s.GetId())
 	return
 }

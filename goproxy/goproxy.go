@@ -65,8 +65,7 @@ func run_server(cfg *Config) (err error) {
 		return
 	}
 
-	listener, err = cryptconn.NewListener(
-		listener, cfg.Cipher, cfg.Key)
+	listener, err = cryptconn.NewListener(listener, cfg.Cipher, cfg.Key)
 	if err != nil {
 		return
 	}
@@ -88,14 +87,12 @@ func run_server(cfg *Config) (err error) {
 func run_httproxy(cfg *Config) (err error) {
 	var dialer sutils.Dialer
 
-	dialer, err = cryptconn.NewDialer(
-		sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
+	dialer, err = cryptconn.NewDialer(sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
 	if err != nil {
 		return
 	}
 
-	dialer, err = msocks.NewDialer(
-		dialer, cfg.Server, cfg.Username, cfg.Password)
+	dialer, err = msocks.NewDialer(dialer, cfg.Server, cfg.Username, cfg.Password)
 	if err != nil {
 		return
 	}
@@ -103,6 +100,11 @@ func run_httproxy(cfg *Config) (err error) {
 
 	if cfg.DnsNet == TypeInternal {
 		sutils.DefaultLookuper = ndialer
+	}
+	if cfg.AdminIface != "" {
+		mux := http.NewServeMux()
+		NewMsocksManager(&ndialer.SessionPool).Register(mux)
+		go httpserver(cfg.AdminIface, mux)
 	}
 
 	if cfg.Blackfile != "" {
@@ -113,23 +115,16 @@ func run_httproxy(cfg *Config) (err error) {
 		}
 	}
 
-	if cfg.AdminIface != "" {
-		mux := http.NewServeMux()
-		NewMsocksManager(&ndialer.SessionPool).Register(mux)
-		go httpserver(cfg.AdminIface, mux)
-	}
-
 	for _, pm := range cfg.Portmaps {
 		go CreatePortmap(pm, dialer)
 	}
 
-	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, nil))
+	return http.ListenAndServe(cfg.Listen, NewProxy(dialer))
 }
 
 func LoadConfig() (cfg Config, err error) {
 	var configfile string
-	flag.StringVar(&configfile, "config",
-		"/etc/goproxy/config.json", "config file")
+	flag.StringVar(&configfile, "config", "/etc/goproxy/config.json", "config file")
 	flag.Parse()
 
 	file, err := os.Open(configfile)
@@ -155,8 +150,7 @@ func SetLogging(cfg Config) (err error) {
 	file = os.Stdout
 
 	if cfg.Logfile != "" {
-		file, err = os.OpenFile(cfg.Logfile,
-			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		file, err = os.OpenFile(cfg.Logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			log.Fatal(err)
 		}

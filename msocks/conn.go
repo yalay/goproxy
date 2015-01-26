@@ -70,8 +70,8 @@ func (c *Conn) GetId() (s string) {
 	return fmt.Sprintf("%d(%d)", c.sess.LocalPort(), c.streamid)
 }
 
-func (c *Conn) GetStreamId() (s string) {
-	return fmt.Sprintf("%d", c.streamid)
+func (c *Conn) GetStreamId() uint16 {
+	return c.streamid
 }
 
 func (c *Conn) String() (s string) {
@@ -89,7 +89,7 @@ func (c *Conn) WaitForConn() (err error) {
 		return
 	}
 
-	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Millisecond)
+	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Second)
 	if errno != ERR_NONE {
 		log.Error("connection failed for remote failed(%d): %d.",
 			c.streamid, errno)
@@ -166,8 +166,7 @@ func (c *Conn) SendFrame(f Frame) (err error) {
 	case *FrameFin:
 		return c.InFin(ft)
 	case *FrameRst:
-		log.Debug("reset %s, sender %s.",
-			c.GetId(), c.GetId())
+		log.Debug("reset %s, sender %s.", c.GetId(), c.GetId())
 		c.Final()
 	}
 	return

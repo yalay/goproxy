@@ -13,9 +13,9 @@ type SpeedCounter struct {
 	s        *Session
 }
 
-func InitSpeedCounter(s *Session) {
-	s.SpeedCounter.s = s
-	go s.SpeedCounter.loop_count()
+func NewSpeedCounter(s *Session) (sc *SpeedCounter) {
+	sc = &SpeedCounter{s: s}
+	go sc.loop_count()
 	return
 }
 

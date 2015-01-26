@@ -10,7 +10,7 @@ import (
 )
 
 func DialSession(conn net.Conn, username, password string) (s *Session, err error) {
-	ti := time.AfterFunc(AUTH_TIMEOUT*time.Millisecond, func() {
+	ti := time.AfterFunc(AUTH_TIMEOUT*time.Second, func() {
 		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
 		conn.Close()
 	})

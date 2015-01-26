@@ -75,7 +75,7 @@ func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
 		return
 	}
 
-	fres, err := cfs.RecvWithTimeout(DNS_TIMEOUT * time.Millisecond)
+	fres, err := cfs.RecvWithTimeout(DNS_TIMEOUT * time.Second)
 	if err != nil {
 		return
 	}

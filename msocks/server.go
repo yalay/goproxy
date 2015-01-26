@@ -122,7 +122,7 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 	log.Notice("connection come from: %s => %s.",
 		conn.RemoteAddr(), conn.LocalAddr())
 
-	ti := time.AfterFunc(AUTH_TIMEOUT*time.Millisecond, func() {
+	ti := time.AfterFunc(AUTH_TIMEOUT*time.Second, func() {
 		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
 		conn.Close()
 	})

@@ -14,13 +14,16 @@ type PingPong struct {
 	gameover bool
 }
 
-func InitPingPong(s *Session) {
-	s.PingPong.s = s
-	s.PingPong.ch_ping = make(chan int, 1)
-	s.PingPong.cnt = 0
-	s.PingPong.lastping = time.Now()
-	s.PingPong.gameover = false
-	go s.PingPong.loop()
+func NewPingPong(s *Session) (p *PingPong) {
+	p = &PingPong{
+		s:        s,
+		ch_ping:  make(chan int, 1),
+		cnt:      0,
+		lastping: time.Now(),
+		gameover: false,
+	}
+	go p.loop()
+	return p
 }
 
 func (p *PingPong) IsGameOver() bool {
@@ -59,7 +62,7 @@ func (p *PingPong) addCount() int32 {
 func (p *PingPong) loop() {
 	for !p.s.closed {
 		select {
-		case <-time.After(TIMEOUT_COUNT * PINGTIME * time.Millisecond):
+		case <-time.After(TIMEOUT_COUNT * PINGTIME * time.Second):
 			log.Warning("pingpong timeout: %p.", p.s)
 			p.s.CloseFrame()
 			return
@@ -75,7 +78,7 @@ func (p *PingPong) loop() {
 
 		pingtime := PINGTIME + rand.Intn(2*PINGRANDOM) - PINGRANDOM
 		log.Debug("pingtime: %d", pingtime)
-		time.Sleep(time.Duration(pingtime) * time.Millisecond)
+		time.Sleep(time.Duration(pingtime) * time.Second)
 		p.pong()
 	}
 }

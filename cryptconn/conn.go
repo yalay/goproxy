@@ -7,10 +7,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"github.com/op/go-logging"
 	"io"
 	"net"
 	"time"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("")
@@ -48,48 +49,90 @@ type CryptConn struct {
 	out   cipher.Stream
 }
 
-func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
-	t := time.Now().Add(HANDSHAKE_TIMEOUT)
-	conn.SetReadDeadline(t)
-
-	iv := make([]byte, block.BlockSize())
-	_, err = io.ReadFull(conn, iv)
-	if err != nil {
-		return
-	}
-
-	conn.SetReadDeadline(time.Time{})
-
-	sc = CryptConn{
-		Conn:  conn,
-		block: block,
-		in:    cipher.NewCFBDecrypter(block, iv),
-		out:   cipher.NewCFBEncrypter(block, iv),
-	}
-	return
-}
-
-func NewServer(conn net.Conn, block cipher.Block) (sc *CryptConn, err error) {
-	iv := make([]byte, block.BlockSize())
+func SentIV(conn net.Conn, n int) (iv []byte, err error) {
+	iv = make([]byte, n)
 	_, err = rand.Read(iv)
 	if err != nil {
 		return
 	}
 
-	n, err := conn.Write(iv)
+	w, err := conn.Write(iv)
 	if err != nil {
 		return
 	}
-	if n != len(iv) {
+	if n != w {
 		err = io.ErrShortWrite
+		return
+	}
+
+	return
+}
+
+func RecvIV(conn net.Conn, n int) (iv []byte, err error) {
+	iv = make([]byte, n)
+	t := time.Now().Add(HANDSHAKE_TIMEOUT)
+	conn.SetReadDeadline(t)
+
+	_, err = io.ReadFull(conn, iv)
+	if err != nil {
+		return
+	}
+	conn.SetReadDeadline(time.Time{})
+	return
+}
+
+func XOR(n int, a []byte, b []byte) (r []byte) {
+	r = make([]byte, n)
+	for i := 0; i < n; i++ {
+		r[i] = a[i] ^ b[i]
+	}
+	return
+}
+
+func ExchangeIV(conn net.Conn, n int) (iv1 []byte, iv2 []byte, err error) {
+	ivs, err := SentIV(conn, 2*n)
+	if err != nil {
+		return
+	}
+
+	ivr, err := RecvIV(conn, 2*n)
+	if err != nil {
+		return
+	}
+
+	iv := XOR(2*n, ivs, ivr)
+	iv1, iv2 = iv[0:n], iv[n:2*n]
+	return
+}
+
+func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
+	n := block.BlockSize()
+	iv1, iv2, err := ExchangeIV(conn, n)
+	if err != nil {
+		return
+	}
+
+	sc = CryptConn{
+		Conn:  conn,
+		block: block,
+		in:    cipher.NewCFBDecrypter(block, iv1),
+		out:   cipher.NewCFBEncrypter(block, iv2),
+	}
+	return
+}
+
+func NewServer(conn net.Conn, block cipher.Block) (sc *CryptConn, err error) {
+	n := block.BlockSize()
+	iv1, iv2, err := ExchangeIV(conn, n)
+	if err != nil {
 		return
 	}
 
 	sc = &CryptConn{
 		Conn:  conn,
 		block: block,
-		in:    cipher.NewCFBDecrypter(block, iv),
-		out:   cipher.NewCFBEncrypter(block, iv),
+		in:    cipher.NewCFBDecrypter(block, iv2),
+		out:   cipher.NewCFBEncrypter(block, iv1),
 	}
 	return
 }

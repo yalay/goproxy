@@ -251,4 +251,5 @@ tar包内包含主程序，routes.list.gz示例。没有config.json示例。因�
 
 # TODO
 
-* Crypt握手改为双边发送IV
+* http协议加入proxy authentication
+* 增加dns对外服务？（其实可以用udp端口映射来完成）

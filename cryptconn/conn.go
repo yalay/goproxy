@@ -92,50 +92,46 @@ func XOR(n int, a []byte, b []byte) (r []byte) {
 	return
 }
 
-func ExchangeIV(conn net.Conn, n int) (iv1 []byte, iv2 []byte, err error) {
-	ivs, err := SentIV(conn, 2*n)
-	if err != nil {
-		return
-	}
-
-	ivr, err := RecvIV(conn, 2*n)
-	if err != nil {
-		return
-	}
-
-	iv := XOR(2*n, ivs, ivr)
-	iv1, iv2 = iv[0:n], iv[n:2*n]
-	return
-}
-
 func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 	n := block.BlockSize()
-	iv1, iv2, err := ExchangeIV(conn, n)
+	ivs, err := SentIV(conn, n)
 	if err != nil {
 		return
 	}
 
+	ivr, err := RecvIV(conn, n)
+	if err != nil {
+		return
+	}
+
+	iv := XOR(n, ivs, ivr)
 	sc = CryptConn{
 		Conn:  conn,
 		block: block,
-		in:    cipher.NewCFBDecrypter(block, iv1),
-		out:   cipher.NewCFBEncrypter(block, iv2),
+		in:    cipher.NewCFBDecrypter(block, iv),
+		out:   cipher.NewCFBEncrypter(block, iv),
 	}
 	return
 }
 
 func NewServer(conn net.Conn, block cipher.Block) (sc *CryptConn, err error) {
 	n := block.BlockSize()
-	iv1, iv2, err := ExchangeIV(conn, n)
+	ivr, err := RecvIV(conn, n)
 	if err != nil {
 		return
 	}
 
+	ivs, err := SentIV(conn, n)
+	if err != nil {
+		return
+	}
+
+	iv := XOR(n, ivs, ivr)
 	sc = &CryptConn{
 		Conn:  conn,
 		block: block,
-		in:    cipher.NewCFBDecrypter(block, iv2),
-		out:   cipher.NewCFBEncrypter(block, iv1),
+		in:    cipher.NewCFBDecrypter(block, iv),
+		out:   cipher.NewCFBEncrypter(block, iv),
 	}
 	return
 }

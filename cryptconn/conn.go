@@ -65,6 +65,7 @@ func SentIV(conn net.Conn, n int) (iv []byte, err error) {
 		return
 	}
 
+	log.Debug("sent iv: %x", iv)
 	return
 }
 
@@ -78,6 +79,7 @@ func RecvIV(conn net.Conn, n int) (iv []byte, err error) {
 		return
 	}
 	conn.SetReadDeadline(time.Time{})
+	log.Debug("recv iv: %x", iv)
 	return
 }
 
@@ -86,6 +88,7 @@ func XOR(n int, a []byte, b []byte) (r []byte) {
 	for i := 0; i < n; i++ {
 		r[i] = a[i] ^ b[i]
 	}
+	log.Debug("xor iv: %x", r)
 	return
 }
 

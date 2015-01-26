@@ -111,7 +111,7 @@ func (c *Conn) Final() {
 		log.Error("%s", err)
 	}
 
-	log.Info("connection %s closed.", c.GetId())
+	log.Notice("connection %s closed.", c.GetId())
 	c.status = ST_UNKNOWN
 	return
 }

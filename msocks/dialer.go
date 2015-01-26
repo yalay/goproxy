@@ -1,12 +1,13 @@
 package msocks
 
 import (
-	"github.com/shell909090/goproxy/sutils"
 	"net"
+
+	"github.com/shell909090/goproxy/sutils"
 )
 
 type Dialer struct {
-	SessionPool
+	*SessionPool
 	sutils.Dialer
 	serveraddr string
 	username   string
@@ -30,8 +31,8 @@ func NewDialer(dialer sutils.Dialer, serveraddr, username, password string) (d *
 // REMEMBER: don't modify net.ipv4.tcp_syn_retries, unless you know what you do.
 func (d *Dialer) MakeSess() (sess *Session, err error) {
 	var conn net.Conn
-	for i := uint(0); i < DIAL_RETRY; i++ {
-		log.Notice("create connect, serveraddr: %s.", d.serveraddr)
+	for i := 0; i < DIAL_RETRY; i++ {
+		log.Notice("msocks try to connect %s.", d.serveraddr)
 
 		conn, err = d.Dialer.Dial("tcp", d.serveraddr)
 		if err != nil {

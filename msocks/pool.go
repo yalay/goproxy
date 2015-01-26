@@ -16,8 +16,8 @@ type SessionPool struct {
 	sm   SessionMaker
 }
 
-func CreateSessionPool(sm SessionMaker) (sp SessionPool) {
-	sp = SessionPool{
+func CreateSessionPool(sm SessionMaker) (sp *SessionPool) {
+	sp = &SessionPool{
 		sess: make([]*Session, 0),
 		sm:   sm,
 	}

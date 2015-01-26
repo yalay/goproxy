@@ -25,10 +25,17 @@ func NewListener(listener net.Listener, method string, key string) (l *Listener,
 }
 
 func (l *Listener) Accept() (conn net.Conn, err error) {
-	conn, err = l.Listener.Accept()
-	if err != nil {
-		return
-	}
+	for {
+		conn, err = l.Listener.Accept()
+		if err != nil {
+			return
+		}
 
-	return NewServer(conn, l.block)
+		conn, err = NewServer(conn, l.block)
+		if err == nil {
+			return
+		}
+		log.Error("err in Crypt Listener: %s", err.Error())
+	}
+	return
 }

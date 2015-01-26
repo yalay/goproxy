@@ -89,32 +89,29 @@ func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
 	return
 }
 
-func (s *Session) on_dns(ft *FrameDns) bool {
+func (s *Session) on_dns(ft *FrameDns) (err error) {
 	m := new(dns.Msg)
-	err := m.Unpack(ft.Data)
+	err = m.Unpack(ft.Data)
 	if err != nil {
-		log.Error("%s", ErrDnsMsgIllegal.Error())
-		return false
+		return ErrDnsMsgIllegal
 	}
 
 	if m.Response {
 		// ignore send fail, maybe just timeout.
 		// should I log this ?
 		s.sendFrameInChan(ft)
-		return true
+		return
 	}
 
 	log.Info("got a dns query for %s.", m.Question[0].Name)
 
 	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
 	if !ok {
-		log.Error("got a dns query without a proper dns server")
-		return false
+		return ErrNoDnsServer
 	}
 	r, err := d.Exchange(m)
 	if err != nil {
-		log.Error("dns query error: %s", err.Error())
-		return true
+		return
 	}
 
 	straddr := ""
@@ -131,14 +128,10 @@ func (s *Session) on_dns(ft *FrameDns) bool {
 	// send response back from streamid
 	b, err := r.Pack()
 	if err != nil {
-		log.Error("dns pack failed, how that possible.")
-		return false
+		return ErrDnsMsgIllegal
 	}
 
 	fr := NewFrameDns(ft.GetStreamid(), b)
 	err = s.SendFrame(fr)
-	if err != nil {
-		return false
-	}
-	return true
+	return
 }

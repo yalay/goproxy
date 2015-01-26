@@ -73,49 +73,44 @@ func NewServer(auth map[string]string, dialer sutils.Dialer) (ms *MsocksServer, 
 	return
 }
 
-func (ms *MsocksServer) on_auth(stream io.ReadWriteCloser) bool {
+func (ms *MsocksServer) on_auth(stream io.ReadWriteCloser) (err error) {
 	f, err := ReadFrame(stream)
 	if err != nil {
-		log.Error("%s", err)
-		return false
+		return
 	}
 
 	ft, ok := f.(*FrameAuth)
 	if !ok {
-		log.Error("unexpected package type")
-		return false
+		return ErrUnexpectedPkg
 	}
 
-	log.Notice("auth with username: %s, password: %s.",
-		ft.Username, ft.Password)
+	log.Notice("auth with username: %s, password: %s.", ft.Username, ft.Password)
 	if ms.userpass != nil {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
-			log.Error("auth failed.")
 			fb := NewFrameResult(ft.Streamid, ERR_AUTH)
 			buf, err := fb.Packed()
 			_, err = stream.Write(buf.Bytes())
 			if err != nil {
-				log.Error("%s", err)
-				return false
+				return
 			}
-			return false
+			return ErrAuthFailed
 		}
 	}
+
 	fb := NewFrameResult(ft.Streamid, ERR_NONE)
 	buf, err := fb.Packed()
 	if err != nil {
-		log.Error("%s", err)
-		return false
+		return
 	}
+
 	_, err = stream.Write(buf.Bytes())
 	if err != nil {
-		log.Error("%s", err)
-		return false
+		return
 	}
 
 	log.Info("auth passed.")
-	return true
+	return
 }
 
 func (ms *MsocksServer) Handler(conn net.Conn) {
@@ -126,7 +121,9 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
 		conn.Close()
 	})
-	if !ms.on_auth(conn) {
+	err = ms.on_auth(conn)
+	if err != nil {
+		log.Error("%s", err.Error())
 		return
 	}
 	ti.Stop()

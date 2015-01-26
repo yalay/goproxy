@@ -113,7 +113,7 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	delete(s.ports, streamid)
-	log.Notice("%s remove ports %d.", s.GetId(), streamid)
+	log.Info("%s remove ports %d.", s.GetId(), streamid)
 	return
 }
 
@@ -166,7 +166,7 @@ func (s *Session) SendFrame(f Frame) (err error) {
 	if n != len(b) {
 		return io.ErrShortWrite
 	}
-	log.Debug("sess %s write len(%d).", s.GetId(), len(b))
+	log.Debug("sess %s write %d bytes.", s.GetId(), len(b))
 	return
 }
 
@@ -189,20 +189,27 @@ func (s *Session) Run() {
 
 		switch ft := f.(type) {
 		default:
-			log.Error("unexpected package")
+			log.Error("%s", ErrUnexpectedPkg.Error())
 			return
 		case *FrameResult, *FrameData, *FrameWnd, *FrameFin, *FrameRst:
-			if !s.sendFrameInChan(f) {
+			err = s.sendFrameInChan(f)
+			if err != nil {
+				log.Error("%s(%d) send failed, err: %s.",
+					s.GetId(), f.GetStreamid(), err.Error())
 				return
 			}
 			s.PingPong.Reset()
 		case *FrameSyn:
-			if !s.on_syn(ft) {
+			err = s.on_syn(ft)
+			if err != nil {
+				log.Error("syn failed: %s", err.Error())
 				return
 			}
 			s.PingPong.Reset()
 		case *FrameDns:
-			if !s.on_dns(ft) {
+			err = s.on_dns(ft)
+			if err != nil {
+				log.Error("dns failed: %s", err.Error())
 				return
 			}
 			s.PingPong.Reset()
@@ -213,19 +220,16 @@ func (s *Session) Run() {
 }
 
 // no drop, any error will reset main connection
-func (s *Session) sendFrameInChan(f Frame) (b bool) {
-	var err error
+func (s *Session) sendFrameInChan(f Frame) (err error) {
 	streamid := f.GetStreamid()
 	c, ok := s.ports[streamid]
 	if !ok || c == nil {
-		return false
+		return ErrStreamNotExist
 	}
 
 	err = c.SendFrame(f)
 	if err != nil {
-		log.Error("%s(%d) send failed, err: %s.",
-			s.GetId(), streamid, err)
-		return false
+		return
 	}
-	return true
+	return nil
 }

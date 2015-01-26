@@ -1,7 +1,6 @@
 package msocks
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -37,23 +36,17 @@ func DialSession(conn net.Conn, username, password string) (s *Session, err erro
 
 	ft, ok := f.(*FrameResult)
 	if !ok {
-		err = errors.New("unexpected package")
-		log.Error("%s", err)
-		return
+		return ErrUnexpectedPkg
 	}
 
 	if ft.Errno != ERR_NONE {
 		conn.Close()
-		err = fmt.Errorf("create connection failed with code: %d.",
-			ft.Errno)
-		log.Error("%s", err)
-		return
+		return fmt.Errorf("create connection failed with code: %d.", ft.Errno)
 	}
 
-	log.Notice("auth ok.")
+	log.Notice("auth ok, session created.")
 	s = NewSession(conn)
 	s.pong()
-
 	return
 }
 
@@ -75,20 +68,19 @@ func (s *Session) Dial(network, address string) (c *Conn, err error) {
 	return c, nil
 }
 
-func (s *Session) on_syn(ft *FrameSyn) bool {
+func (s *Session) on_syn(ft *FrameSyn) (err error) {
 	// lock streamid temporary, with status sync recved
 	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Network, ft.Address)
-	err := s.PutIntoId(ft.Streamid, c)
+	err = s.PutIntoId(ft.Streamid, c)
 	if err != nil {
 		log.Error("%s", err)
 
 		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
 		err := s.SendFrame(fb)
 		if err != nil {
-			log.Error("%s", err)
-			return false
+			return err
 		}
-		return true
+		return nil
 	}
 
 	// it may toke long time to connect with target address
@@ -123,5 +115,5 @@ func (s *Session) on_syn(ft *FrameSyn) bool {
 			s.GetId(), ft.Streamid, ft.Address)
 		return
 	}()
-	return true
+	return
 }

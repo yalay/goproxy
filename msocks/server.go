@@ -149,7 +149,7 @@ func (ms *MsocksServer) Serve(listener net.Listener) (err error) {
 		conn, err = listener.Accept()
 		if err != nil {
 			log.Error("%s", err)
-			return
+			continue
 		}
 		go func() {
 			defer conn.Close()

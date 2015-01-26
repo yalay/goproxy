@@ -226,8 +226,9 @@ tar包内包含主程序，routes.list.gz示例。没有config.json示例。因�
 
 # 鸣谢
 
-* dns污染后IP地址来源来自[ChinaDNS](https://github.com/clowwindy/ChinaDNS)，MIT license.
-* dns库来自golang1.2，BSD license.
+* 路由表来自[chnroutes](https://github.com/fivesheep/chnroutes)项目。
+
+在此表示感谢
 
 # 授权
 

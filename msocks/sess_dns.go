@@ -53,6 +53,11 @@ func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 }
 
 func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return []net.IP{ip}, nil
+	}
+
 	cfs := CreateChanFrameSender(0)
 	streamid, err := s.PutIntoNextId(&cfs)
 	if err != nil {

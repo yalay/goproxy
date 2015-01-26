@@ -251,5 +251,4 @@ tar包内包含主程序，routes.list.gz示例。没有config.json示例。因�
 
 # TODO
 
-* dns查询去远程前先解析是否是IP
 * Crypt握手改为双边发送IV

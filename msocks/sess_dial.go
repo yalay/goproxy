@@ -36,12 +36,12 @@ func DialSession(conn net.Conn, username, password string) (s *Session, err erro
 
 	ft, ok := f.(*FrameResult)
 	if !ok {
-		return ErrUnexpectedPkg
+		return nil, ErrUnexpectedPkg
 	}
 
 	if ft.Errno != ERR_NONE {
 		conn.Close()
-		return fmt.Errorf("create connection failed with code: %d.", ft.Errno)
+		return nil, fmt.Errorf("create connection failed with code: %d.", ft.Errno)
 	}
 
 	log.Notice("auth ok, session created.")

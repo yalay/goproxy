@@ -14,7 +14,7 @@ import (
 )
 
 type MsocksServer struct {
-	SessionPool
+	*SessionPool
 	userpass map[string]string
 	dialer   sutils.Dialer
 }
@@ -92,7 +92,7 @@ func (ms *MsocksServer) on_auth(stream io.ReadWriteCloser) (err error) {
 			buf, err := fb.Packed()
 			_, err = stream.Write(buf.Bytes())
 			if err != nil {
-				return
+				return err
 			}
 			return ErrAuthFailed
 		}
@@ -121,7 +121,7 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 		log.Notice("wait too long time for auth, close conn %s.", conn.RemoteAddr())
 		conn.Close()
 	})
-	err = ms.on_auth(conn)
+	err := ms.on_auth(conn)
 	if err != nil {
 		log.Error("%s", err.Error())
 		return

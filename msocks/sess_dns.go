@@ -112,8 +112,7 @@ func (s *Session) on_dns(ft *FrameDns) (err error) {
 	if req.Response {
 		// ignore send fail, maybe just timeout.
 		// should I log this ?
-		s.sendFrameInChan(ft)
-		return
+		return s.sendFrameInChan(ft)
 	}
 
 	log.Info("dns query for %s.", req.Question[0].Name)
@@ -124,7 +123,8 @@ func (s *Session) on_dns(ft *FrameDns) (err error) {
 	}
 	res, err := d.Exchange(req)
 	if err != nil {
-		return
+		log.Error("%s", err.Error())
+		return nil
 	}
 
 	if DEBUGDNS {
@@ -134,7 +134,8 @@ func (s *Session) on_dns(ft *FrameDns) (err error) {
 	// send response back from streamid
 	b, err := res.Pack()
 	if err != nil {
-		return ErrDnsMsgIllegal
+		log.Error("%s", ErrDnsMsgIllegal.Error())
+		return nil
 	}
 
 	fr := NewFrameDns(ft.GetStreamid(), b)

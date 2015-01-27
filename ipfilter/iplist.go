@@ -74,11 +74,11 @@ func ReadIPListFile(filename string) (iplist IPList, err error) {
 func (iplist IPList) Contain(ip net.IP) bool {
 	for _, ipnet := range iplist {
 		if ipnet.Contains(ip) {
-			log.Debug("%s matched %s", ipnet, ip)
+			log.Debug("%s matched %s.", ip.String(), ipnet.String())
 			return true
 		}
 	}
-	log.Debug("%s not matched.", ip)
+	log.Debug("%s not match anything.", ip.String())
 	return false
 }
 
@@ -127,7 +127,7 @@ func Getaddr(lookuper sutils.Lookuper, hostname string) (ip net.IP) {
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
-	log.Info("address: %s", address)
+	log.Info("filter dial: %s", address)
 	if fd.iplist == nil {
 		return fd.Dialer.Dial(network, address)
 	}

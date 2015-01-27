@@ -26,6 +26,7 @@ const (
 	MAX_CONN_PRE_SESS = 64
 
 	SHRINK_TIME = 3
+	DEBUGDNS    = false
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 
 var (
 	ErrAuthFailed      = errors.New("auth failed.")
+	ErrAuthTimeout     = errors.New("auth timeout %s.")
 	ErrNoSession       = errors.New("session in pool but can't pick one.")
 	ErrStreamNotExist  = errors.New("stream not exist.")
 	ErrQueueClosed     = errors.New("queue closed.")

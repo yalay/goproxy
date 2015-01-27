@@ -210,7 +210,7 @@ func TcpPortmap(pm PortMap, dialer sutils.Dialer) (err error) {
 	if err != nil {
 		return
 	}
-	log.Info("tcp listening in %s:%s", pm.Src)
+	log.Info("tcp listening in %s", pm.Src)
 
 	for {
 		var sconn, dconn net.Conn

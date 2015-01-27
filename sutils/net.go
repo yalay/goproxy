@@ -2,6 +2,7 @@ package sutils
 
 import (
 	"net"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -13,8 +14,12 @@ type Dialer interface {
 type TcpDialer struct {
 }
 
-func (td *TcpDialer) Dial(network, address string) (conn net.Conn, err error) {
+func (td *TcpDialer) Dial(network, address string) (net.Conn, error) {
 	return net.Dial(network, address)
+}
+
+func (td *TcpDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	return net.DialTimeout(network, address, timeout)
 }
 
 var DefaultTcpDialer = &TcpDialer{}

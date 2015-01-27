@@ -2,8 +2,9 @@ package cryptconn
 
 import (
 	"crypto/cipher"
-	"github.com/shell909090/goproxy/sutils"
 	"net"
+
+	"github.com/shell909090/goproxy/sutils"
 )
 
 type Dialer struct {
@@ -26,7 +27,7 @@ func NewDialer(dialer sutils.Dialer, method string, key string) (d *Dialer, err 
 }
 
 func (d *Dialer) Dial(network, addr string) (conn net.Conn, err error) {
-	log.Info("dailer connect: %s", addr)
+	log.Info("Ctypt Dailer connect %s", addr)
 	conn, err = d.Dialer.Dial(network, addr)
 	if err != nil {
 		return

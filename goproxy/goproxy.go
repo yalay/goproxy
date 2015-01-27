@@ -194,7 +194,7 @@ func main() {
 		log.Notice("http mode start.")
 		err = run_httproxy(&cfg)
 	default:
-		log.Info("server stopped in unknown mode")
+		log.Info("unknown mode")
 		return
 	}
 	if err != nil {

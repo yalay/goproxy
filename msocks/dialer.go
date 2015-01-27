@@ -1,7 +1,9 @@
 package msocks
 
 import (
+	"fmt"
 	"net"
+	"time"
 
 	"github.com/shell909090/goproxy/sutils"
 )
@@ -23,6 +25,15 @@ func NewDialer(dialer sutils.Dialer, serveraddr, username, password string) (d *
 	}
 	d.SessionPool = CreateSessionPool(d)
 	return
+}
+
+// Maybe we should take care of timeout.
+func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
+	sess, err := d.SessionPool.GetOrCreateSess()
+	if err != nil {
+		return
+	}
+	return sess.Dial(network, address)
 }
 
 // Do I really need sleep? When tcp connect, syn retris will took 2 min(127s).
@@ -51,15 +62,48 @@ func (d *Dialer) MakeSess() (sess *Session, err error) {
 		log.Critical("can't connect to host, quit.")
 		return
 	}
-	log.Notice("create session.")
+	log.Notice("session created.")
 	return
 }
 
-// Maybe we should take care of timeout.
-func (d *Dialer) Dial(network, address string) (conn net.Conn, err error) {
-	sess, err := d.SessionPool.GetOrCreateSess()
+func DialSession(conn net.Conn, username, password string) (s *Session, err error) {
+	ti := time.AfterFunc(AUTH_TIMEOUT*time.Second, func() {
+		log.Notice(ErrAuthFailed.Error(), conn.RemoteAddr())
+		conn.Close()
+	})
+	defer func() {
+		ti.Stop()
+	}()
+
+	log.Notice("auth with username: %s, password: %s.", username, password)
+	fb := NewFrameAuth(0, username, password)
+	buf, err := fb.Packed()
 	if err != nil {
 		return
 	}
-	return sess.Dial(network, address)
+
+	_, err = conn.Write(buf.Bytes())
+	if err != nil {
+		return
+	}
+
+	f, err := ReadFrame(conn)
+	if err != nil {
+		return
+	}
+
+	ft, ok := f.(*FrameResult)
+	if !ok {
+		return nil, ErrUnexpectedPkg
+	}
+
+	if ft.Errno != ERR_NONE {
+		conn.Close()
+		return nil, fmt.Errorf("create connection failed with code: %d.", ft.Errno)
+	}
+
+	log.Notice("auth passwd.")
+	s = NewSession(conn)
+	s.pong()
+	return
 }

@@ -50,7 +50,7 @@ type Frame interface {
 	GetSize() uint16
 	Packed() (buf *bytes.Buffer, err error)
 	Unpack(r io.Reader) error
-	Debug(prefix string)
+	Debug() string
 }
 
 func ReadFrame(r io.Reader) (f Frame, err error) {
@@ -114,9 +114,8 @@ func (f *FrameBase) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameBase) Debug(prefix string) {
-	log.Debug("%sframe: type(%d), stream(%d), len(%d).",
-		prefix, f.Type, f.Streamid, f.Length)
+func (f *FrameBase) Debug() string {
+	return fmt.Sprintf("frame: type(%d), stream(%d), len(%d).", f.Type, f.Streamid, f.Length)
 }
 
 type FrameResult struct {
@@ -282,9 +281,9 @@ func (f *FrameSyn) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameSyn) Debug(prefix string) {
-	log.Debug("%sframe syn: stream(%d), len(%d), net(%s), addr(%s).",
-		prefix, f.Streamid, f.Length, f.Network, f.Address)
+func (f *FrameSyn) Debug() string {
+	return fmt.Sprintf("frame syn: stream(%d), len(%d), net(%s), addr(%s).",
+		f.Streamid, f.Length, f.Network, f.Address)
 }
 
 type FrameWnd struct {
@@ -324,9 +323,9 @@ func (f *FrameWnd) Unpack(r io.Reader) (err error) {
 	return
 }
 
-func (f *FrameWnd) Debug(prefix string) {
-	log.Debug("%sframe wnd: stream(%d), len(%d), window(%d).",
-		prefix, f.Streamid, f.Length, f.Window)
+func (f *FrameWnd) Debug() string {
+	return fmt.Sprintf("frame wnd: stream(%d), len(%d), window(%d).",
+		f.Streamid, f.Length, f.Window)
 }
 
 type FrameFin struct {

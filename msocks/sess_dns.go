@@ -9,7 +9,7 @@ import (
 )
 
 func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame, err error) {
-	log.Info("make a dns query for %s.", host)
+	log.Debug("make a dns query for %s.", host)
 
 	req = new(dns.Msg)
 	req.Id = dns.Id()
@@ -25,6 +25,20 @@ func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame
 	return
 }
 
+func DebugDNS(r *dns.Msg, name string) {
+	straddr := ""
+	for _, a := range r.Answer {
+		switch ta := a.(type) {
+		case *dns.A:
+			straddr += ta.A.String() + ","
+		case *dns.AAAA:
+			straddr += ta.AAAA.String() + ","
+		}
+	}
+	log.Info("dns result for %s is %s.", name, straddr)
+	return
+}
+
 func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 	ft, ok := f.(*FrameDns)
 	if !ok {
@@ -37,18 +51,17 @@ func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
 		return nil, ErrDnsMsgIllegal
 	}
 
-	straddr := ""
+	if DEBUGDNS {
+		DebugDNS(res, req.Question[0].Name)
+	}
 	for _, a := range res.Answer {
 		switch ta := a.(type) {
 		case *dns.A:
 			addrs = append(addrs, ta.A)
-			straddr += ta.A.String() + ","
 		case *dns.AAAA:
 			addrs = append(addrs, ta.AAAA)
-			straddr += ta.AAAA.String() + ","
 		}
 	}
-	log.Info("dns result for %s is %s.", req.Question[0].Name, straddr)
 	return
 }
 
@@ -64,7 +77,7 @@ func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
 		return
 	}
 	defer func() {
-		err := s.RemovePorts(streamid)
+		err := s.RemovePort(streamid)
 		if err != nil {
 			log.Error("%s", err.Error())
 		}
@@ -90,43 +103,36 @@ func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
 }
 
 func (s *Session) on_dns(ft *FrameDns) (err error) {
-	m := new(dns.Msg)
-	err = m.Unpack(ft.Data)
+	req := new(dns.Msg)
+	err = req.Unpack(ft.Data)
 	if err != nil {
 		return ErrDnsMsgIllegal
 	}
 
-	if m.Response {
+	if req.Response {
 		// ignore send fail, maybe just timeout.
 		// should I log this ?
 		s.sendFrameInChan(ft)
 		return
 	}
 
-	log.Info("got a dns query for %s.", m.Question[0].Name)
+	log.Info("dns query for %s.", req.Question[0].Name)
 
 	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
 	if !ok {
 		return ErrNoDnsServer
 	}
-	r, err := d.Exchange(m)
+	res, err := d.Exchange(req)
 	if err != nil {
 		return
 	}
 
-	straddr := ""
-	for _, a := range r.Answer {
-		switch ta := a.(type) {
-		case *dns.A:
-			straddr += ta.A.String() + ","
-		case *dns.AAAA:
-			straddr += ta.AAAA.String() + ","
-		}
+	if DEBUGDNS {
+		DebugDNS(res, req.Question[0].Name)
 	}
-	log.Info("dns result for %s is %s.", m.Question[0].Name, straddr)
 
 	// send response back from streamid
-	b, err := r.Pack()
+	b, err := res.Pack()
 	if err != nil {
 		return ErrDnsMsgIllegal
 	}

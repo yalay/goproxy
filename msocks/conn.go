@@ -94,7 +94,7 @@ func (c *Conn) WaitForConn() (err error) {
 		log.Error("remote connect %s failed for %d.", c.String(), errno)
 		c.Final()
 	} else {
-		log.Notice("%s connect successed: %s => %s.", c.Network, c.String(), c.Address)
+		log.Notice("%s connected: %s => %s.", c.Network, c.String(), c.Address)
 	}
 
 	c.ch = nil
@@ -104,7 +104,7 @@ func (c *Conn) WaitForConn() (err error) {
 func (c *Conn) Final() {
 	c.rqueue.Close()
 
-	err := c.sess.RemovePorts(c.streamid)
+	err := c.sess.RemovePort(c.streamid)
 	if err != nil {
 		log.Error("%s", err)
 	}
@@ -285,7 +285,6 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 	if err != nil {
 		log.Error("%s", err)
 	}
-	// TODO: 合并
 	return
 }
 
@@ -314,7 +313,7 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		data = data[size:]
 		n += int(size)
 	}
-	log.Info("%s send size %d.", c.String(), n)
+	log.Info("%s sent %d bytes.", c.String(), n)
 	return
 }
 

@@ -104,7 +104,7 @@ func (s *Session) PutIntoId(id uint16, fs FrameSender) (err error) {
 	return
 }
 
-func (s *Session) RemovePorts(streamid uint16) (err error) {
+func (s *Session) RemovePort(streamid uint16) (err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -113,7 +113,7 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	delete(s.ports, streamid)
-	log.Info("%s remove ports %d.", s.String(), streamid)
+	log.Info("%s remove port %d.", s.String(), streamid)
 	return
 }
 
@@ -148,7 +148,7 @@ func (s *Session) LocalPort() int {
 }
 
 func (s *Session) SendFrame(f Frame) (err error) {
-	f.Debug("send ")
+	log.Debug("sent %s", f.Debug())
 	s.WriteBytes(uint32(f.GetSize()))
 
 	buf, err := f.Packed()
@@ -184,7 +184,7 @@ func (s *Session) Run() {
 			return
 		}
 
-		f.Debug("recv ")
+		log.Debug("recv %s", f.Debug())
 		s.ReadBytes(uint32(f.GetSize()))
 
 		switch ft := f.(type) {

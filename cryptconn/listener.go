@@ -35,7 +35,7 @@ func (l *Listener) Accept() (conn net.Conn, err error) {
 		if err == nil {
 			return
 		}
-		log.Error("err in Crypt Listener: %s", err.Error())
+		log.Error("%s", err.Error())
 	}
 	return
 }

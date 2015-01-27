@@ -47,6 +47,7 @@ var (
 	ErrFinState        = errors.New("status not est or fin wait when get fin.")
 	ErrIdExist         = errors.New("frame sync stream id exist.")
 	ErrState           = errors.New("status error.")
+	ErrUnknownState    = errors.New("unknown status.")
 	ErrSessionNotFound = errors.New("session not found.")
 	ErrChanClosed      = errors.New("chan closed.")
 	ErrDnsTimeOut      = errors.New("dns timeout.")

@@ -66,16 +66,16 @@ func RecvWithTimeout(ch chan uint32, t time.Duration) (errno uint32) {
 	return
 }
 
-func (c *Conn) GetId() (s string) {
-	return fmt.Sprintf("%d(%d)", c.sess.LocalPort(), c.streamid)
-}
-
 func (c *Conn) GetStreamId() uint16 {
 	return c.streamid
 }
 
+func (c *Conn) GetAddress() (s string) {
+	return fmt.Sprintf("%s(%s)", c.Network, c.Address)
+}
+
 func (c *Conn) String() (s string) {
-	return fmt.Sprintf("%s:%s", c.Network, c.Address)
+	return fmt.Sprintf("%d(%d)", c.sess.LocalPort(), c.streamid)
 }
 
 func (c *Conn) WaitForConn() (err error) {
@@ -91,12 +91,10 @@ func (c *Conn) WaitForConn() (err error) {
 
 	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Second)
 	if errno != ERR_NONE {
-		log.Error("connection failed for remote failed(%d): %d.",
-			c.streamid, errno)
+		log.Error("remote connect %s failed for %d.", c.String(), errno)
 		c.Final()
 	} else {
-		log.Notice("%s connect successed: %s => %s.",
-			c.Network, c.GetId(), c.Address)
+		log.Notice("%s connect successed: %s => %s.", c.Network, c.String(), c.Address)
 	}
 
 	c.ch = nil
@@ -111,13 +109,13 @@ func (c *Conn) Final() {
 		log.Error("%s", err)
 	}
 
-	log.Notice("connection %s closed.", c.GetId())
+	log.Notice("%s final.", c.String())
 	c.status = ST_UNKNOWN
 	return
 }
 
 func (c *Conn) Close() (err error) {
-	log.Info("close connection %s.", c.GetId())
+	log.Info("close %s.", c.String())
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -126,8 +124,7 @@ func (c *Conn) Close() (err error) {
 		// maybe call close twice
 		return
 	case ST_EST:
-		log.Info("connection %s closed from local.",
-			c.GetId())
+		log.Info("%s closed from local.", c.String())
 		fb := NewFrameFin(c.streamid)
 		err = c.sender.SendFrame(fb)
 		if err != nil {
@@ -144,7 +141,7 @@ func (c *Conn) Close() (err error) {
 		}
 		c.Final()
 	default:
-		log.Error("unknown status %d called close.", c.status)
+		log.Error("%s", ErrUnknownState.Error())
 	}
 
 	return
@@ -166,7 +163,7 @@ func (c *Conn) SendFrame(f Frame) (err error) {
 	case *FrameFin:
 		return c.InFin(ft)
 	case *FrameRst:
-		log.Debug("reset %s, sender %s.", c.GetId(), c.GetId())
+		log.Debug("reset %s.", c.String())
 		c.Final()
 	}
 	return
@@ -194,8 +191,7 @@ func (c *Conn) InConnect(errno uint32) (err error) {
 }
 
 func (c *Conn) InData(ft *FrameData) (err error) {
-	log.Info("%s recved %d bytes from remote.",
-		c.GetId(), len(ft.Data))
+	log.Info("%s recved %d bytes.", c.String(), len(ft.Data))
 	err = c.rqueue.Push(ft.Data)
 	if err != nil {
 		return
@@ -224,8 +220,7 @@ func (c *Conn) InFin(ft *FrameFin) (err error) {
 
 	switch c.status {
 	case ST_EST:
-		log.Info("connection %s closed from remote.",
-			c.GetId())
+		log.Info("%s closed from remote.", c.String())
 		// close read pipe but not sent fin back
 		// wait reader to close
 		c.status = ST_CLOSE_WAIT
@@ -314,13 +309,12 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 			log.Error("%s", err)
 			return
 		}
-		log.Debug("%s send chunk size %d at %d.",
-			c.GetId(), size, n)
+		log.Debug("%s send chunk size %d at %d.", c.String(), size, n)
 
 		data = data[size:]
 		n += int(size)
 	}
-	log.Info("%s send size %d.", c.GetId(), n)
+	log.Info("%s send size %d.", c.String(), n)
 	return
 }
 
@@ -403,5 +397,5 @@ type Addr struct {
 }
 
 func (a *Addr) String() (s string) {
-	return fmt.Sprintf("%s:%d:", a.Addr.String(), a.streamid)
+	return fmt.Sprintf("%s:%d", a.Addr.String(), a.streamid)
 }

@@ -39,7 +39,7 @@ const (
       {{if .GetSize}}
       {{range $sess := .GetSess}}
       <tr>
-	<td>{{$sess.GetId}}</td>
+	<td>{{$sess.String}}</td>
 	<td></td>
 	<td>{{$sess.GetSize}}/{{printf "%0.2fs" $sess.GetLastPing.Seconds}}</td>
 	<td>{{$sess.GetReadSpeed}}</td>
@@ -54,7 +54,7 @@ const (
 	<td>{{$conn.GetStatus}}</td>
 	<td>{{$conn.GetReadBufSize}}</td>
 	<td>{{$conn.GetWriteBufSize}}</td>
-	<td>{{$conn.String}}</td>
+	<td>{{$conn.GetAddress}}</td>
 	{{else}}
 	<td></td>
 	<td>half closed</td>

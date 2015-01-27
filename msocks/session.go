@@ -33,11 +33,11 @@ func NewSession(conn net.Conn) (s *Session) {
 	}
 	s.PingPong = NewPingPong(s)
 	s.SpeedCounter = NewSpeedCounter(s)
-	log.Notice("session %s created.", s.GetId())
+	log.Notice("session %s created.", s.String())
 	return
 }
 
-func (s *Session) GetId() string {
+func (s *Session) String() string {
 	return fmt.Sprintf("%d", s.LocalPort())
 }
 
@@ -84,14 +84,14 @@ func (s *Session) PutIntoNextId(fs FrameSender) (id uint16, err error) {
 	}
 	id = s.next_id
 	s.next_id += 2
-	log.Debug("%s put into next id %d: %p.", s.GetId(), id, fs)
+	log.Debug("%s put into next id %d: %p.", s.String(), id, fs)
 
 	s.ports[id] = fs
 	return
 }
 
 func (s *Session) PutIntoId(id uint16, fs FrameSender) (err error) {
-	log.Debug("%s put into id %d: %p.", s.GetId(), id, fs)
+	log.Debug("%s put into id %d: %p.", s.String(), id, fs)
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
@@ -113,13 +113,13 @@ func (s *Session) RemovePorts(streamid uint16) (err error) {
 		return fmt.Errorf("streamid(%d) not exist.", streamid)
 	}
 	delete(s.ports, streamid)
-	log.Info("%s remove ports %d.", s.GetId(), streamid)
+	log.Info("%s remove ports %d.", s.String(), streamid)
 	return
 }
 
 func (s *Session) Close() (err error) {
 	log.Warning("close all connects (%d) for session: %s.",
-		len(s.ports), s.GetId())
+		len(s.ports), s.String())
 	defer s.conn.Close()
 	s.plock.Lock()
 	defer s.plock.Unlock()
@@ -166,7 +166,7 @@ func (s *Session) SendFrame(f Frame) (err error) {
 	if n != len(b) {
 		return io.ErrShortWrite
 	}
-	log.Debug("sess %s write %d bytes.", s.GetId(), len(b))
+	log.Debug("sess %s write %d bytes.", s.String(), len(b))
 	return
 }
 
@@ -195,7 +195,7 @@ func (s *Session) Run() {
 			err = s.sendFrameInChan(f)
 			if err != nil {
 				log.Error("%s(%d) send failed, err: %s.",
-					s.GetId(), f.GetStreamid(), err.Error())
+					s.String(), f.GetStreamid(), err.Error())
 				return
 			}
 			s.PingPong.Reset()

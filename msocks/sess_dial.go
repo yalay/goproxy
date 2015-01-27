@@ -87,7 +87,7 @@ func (s *Session) on_syn(ft *FrameSyn) (err error) {
 	// so we use goroutine to return back loop
 	go func() {
 		log.Debug("%s(%d) try to connect: %s:%s.",
-			s.GetId(), ft.Streamid, ft.Network, ft.Address)
+			s.String(), ft.Streamid, ft.Network, ft.Address)
 
 		// TODO: timeout
 		conn, err := s.dialer.Dial(ft.Network, ft.Address)
@@ -111,8 +111,7 @@ func (s *Session) on_syn(ft *FrameSyn) (err error) {
 		c.status = ST_EST
 
 		go sutils.CopyLink(conn, c)
-		log.Notice("server side %s(%d) connected %s.",
-			s.GetId(), ft.Streamid, ft.Address)
+		log.Notice("server side %s connected %s.", c.String(), ft.Address)
 		return
 	}()
 	return

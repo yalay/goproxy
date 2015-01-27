@@ -92,8 +92,7 @@ func XOR(n int, a []byte, b []byte) (r []byte) {
 	return
 }
 
-func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
-	n := block.BlockSize()
+func ExchangeIV(conn net.Conn, n int) (iv []byte, err error) {
 	ivs, err := SentIV(conn, n)
 	if err != nil {
 		return
@@ -104,7 +103,17 @@ func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 		return
 	}
 
-	iv := XOR(n, ivs, ivr)
+	iv = XOR(n, ivs, ivr)
+	log.Notice("Exchange IV for %s: %x", conn.RemoteAddr().String(), iv)
+	return
+}
+
+func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
+	iv, err := ExchangeIV(conn, block.BlockSize())
+	if err != nil {
+		return
+	}
+
 	sc = CryptConn{
 		Conn:  conn,
 		block: block,
@@ -115,18 +124,11 @@ func NewClient(conn net.Conn, block cipher.Block) (sc CryptConn, err error) {
 }
 
 func NewServer(conn net.Conn, block cipher.Block) (sc *CryptConn, err error) {
-	n := block.BlockSize()
-	ivr, err := RecvIV(conn, n)
+	iv, err := ExchangeIV(conn, block.BlockSize())
 	if err != nil {
 		return
 	}
 
-	ivs, err := SentIV(conn, n)
-	if err != nil {
-		return
-	}
-
-	iv := XOR(n, ivs, ivr)
 	sc = &CryptConn{
 		Conn:  conn,
 		block: block,

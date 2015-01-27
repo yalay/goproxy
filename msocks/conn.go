@@ -71,7 +71,7 @@ func (c *Conn) GetStreamId() uint16 {
 }
 
 func (c *Conn) GetAddress() (s string) {
-	return fmt.Sprintf("%s(%s)", c.Network, c.Address)
+	return fmt.Sprintf("%s:%s", c.Network, c.Address)
 }
 
 func (c *Conn) String() (s string) {

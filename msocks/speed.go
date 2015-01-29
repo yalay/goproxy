@@ -22,7 +22,7 @@ func NewSpeedCounter(s *Session) (sc *SpeedCounter) {
 func (sc *SpeedCounter) loop_count() {
 	for !sc.s.closed {
 		sc.readbps = atomic.SwapUint32(&sc.readcnt, 0) / SHRINK_TIME
-		sc.writebps = atomic.SwapUint32(&sc.writebps, 0) / SHRINK_TIME
+		sc.writebps = atomic.SwapUint32(&sc.writecnt, 0) / SHRINK_TIME
 		time.Sleep(SHRINK_TIME * time.Second)
 	}
 }

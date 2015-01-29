@@ -7,8 +7,12 @@ key
 *.key
 *.log
 *.pyc
-*.pwd
 *.json
 *.html
 *.prof
-*.debhelper
+
+debian/*.debhelper
+debian/files
+debian/goproxy.substvars
+debian/goproxy/
+obj*

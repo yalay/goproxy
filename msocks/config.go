@@ -23,7 +23,7 @@ const (
 
 	AUTH_TIMEOUT      = 10
 	MIN_SESS_NUM      = 1
-	MAX_CONN_PRE_SESS = 64
+	MAX_CONN_PRE_SESS = 16
 
 	SHRINK_TIME = 3
 	DEBUGDNS    = false

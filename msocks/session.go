@@ -149,7 +149,7 @@ func (s *Session) LocalPort() int {
 
 func (s *Session) SendFrame(f Frame) (err error) {
 	log.Debug("sent %s", f.Debug())
-	s.WriteBytes(uint32(f.GetSize()))
+	s.WriteBytes(uint32(f.GetSize() + len(FrameBase)))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -185,7 +185,7 @@ func (s *Session) Run() {
 		}
 
 		log.Debug("recv %s", f.Debug())
-		s.ReadBytes(uint32(f.GetSize()))
+		s.ReadBytes(uint32(f.GetSize() + len(FrameBase)))
 
 		switch ft := f.(type) {
 		default:

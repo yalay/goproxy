@@ -55,6 +55,8 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * cipher: 加密算法，可以为aes/des/tripledes，默认aes。
 * key: 密钥。16个随机数据base64后的结果。
 * blackfile: 黑名单文件，http模式下可选。
+* minsess: 最小session数，默认为1。
+* maxconn: 一个session的最大connection数，超过这个数值会启动新session。默认为16。
 * username: 连接用户名，http模式下需要。
 * password: 连接密码，http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。

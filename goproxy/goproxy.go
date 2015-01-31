@@ -42,6 +42,9 @@ type Config struct {
 	Key       string
 	Blackfile string
 
+	MinSess int
+	MaxConn int
+
 	Username string
 	Password string
 	Auth     map[string]string
@@ -97,6 +100,13 @@ func run_httproxy(cfg *Config) (err error) {
 		return
 	}
 	ndialer := dialer.(*msocks.Dialer)
+
+	if cfg.MinSess != 0 {
+		ndialer.SessionPool.MinSess = cfg.MinSess
+	}
+	if cfg.MaxConn != 0 {
+		ndialer.SessionPool.MaxConn = cfg.MaxConn
+	}
 
 	if cfg.DnsNet == TypeInternal {
 		sutils.DefaultLookuper = ndialer

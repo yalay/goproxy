@@ -10,16 +10,20 @@ type SessionMaker interface {
 }
 
 type SessionPool struct {
-	mu   sync.Mutex // sess pool locker
-	mud  sync.Mutex // dailer's locker
-	sess []*Session
-	sm   SessionMaker
+	mu      sync.Mutex // sess pool locker
+	mud     sync.Mutex // dailer's locker
+	sess    []*Session
+	sm      SessionMaker
+	MinSess int
+	MaxConn int
 }
 
 func CreateSessionPool(sm SessionMaker) (sp *SessionPool) {
 	sp = &SessionPool{
-		sess: make([]*Session, 0),
-		sm:   sm,
+		sess:    make([]*Session, 0),
+		sm:      sm,
+		MinSess: 1,
+		MaxConn: 16,
 	}
 	return
 }
@@ -84,14 +88,14 @@ func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
 		return nil, ErrNoSession
 	}
 
-	if size > MAX_CONN_PRE_SESS || len(sp.sess) < MIN_SESS_NUM {
+	if size > sp.MaxConn || len(sp.sess) < sp.MinSess {
 		go sp.createSession(func() bool {
-			if len(sp.sess) < MIN_SESS_NUM {
+			if len(sp.sess) < sp.MinSess {
 				return true
 			}
 			// normally, size == -1 should never happen
 			_, size := sp.getLessSess()
-			return size > MAX_CONN_PRE_SESS
+			return size > sp.MaxConn
 		})
 	}
 	return
@@ -135,16 +139,16 @@ func (sp *SessionPool) sessRun(sess *Session) {
 			return
 		}
 
-		if n < MIN_SESS_NUM && !sess.IsGameOver() {
+		if n < sp.MinSess && !sess.IsGameOver() {
 			sp.createSession(func() bool {
-				return len(sp.sess) < MIN_SESS_NUM
+				return len(sp.sess) < sp.MinSess
 			})
 		}
 		// Don't need to check less session here.
 		// Mostly, less sess counter in here will not more then the counter in GetOrCreateSess.
 		// The only exception is that the closing session is the one and only one
-		// lower then MAX_CONN_PRE_SESS.
-		// but we can think that as over MAX_CONN_PRE_SESS line just happened.
+		// lower then max_conn
+		// but we can think that as over max_conn line just happened.
 	}()
 
 	sess.Run()

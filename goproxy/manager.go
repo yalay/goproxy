@@ -41,7 +41,7 @@ const (
       <tr>
 	<td>{{$sess.String}}</td>
 	<td></td>
-	<td>{{$sess.GetSize}}/{{printf "%0.2fs" $sess.GetLastPing.Seconds}}</td>
+	<td>{{$sess.GetSize}}</td>
 	<td>{{$sess.GetReadSpeed}}</td>
 	<td>{{$sess.GetWriteSpeed}}</td>
 	<td>{{$sess.RemoteAddr}}</td>

@@ -133,17 +133,18 @@ func (sp *SessionPool) getLessSess() (sess *Session, size int) {
 
 func (sp *SessionPool) sessRun(sess *Session) {
 	defer func() {
-		n, err := sp.Remove(sess)
+		_, err := sp.Remove(sess)
 		if err != nil {
 			log.Error("%s", err)
 			return
 		}
 
-		if n < sp.MinSess && !sess.IsGameOver() {
-			sp.createSession(func() bool {
-				return len(sp.sess) < sp.MinSess
-			})
-		}
+		// if n < sp.MinSess && !sess.IsGameOver() {
+		// 	sp.createSession(func() bool {
+		// 		return len(sp.sess) < sp.MinSess
+		// 	})
+		// }
+
 		// Don't need to check less session here.
 		// Mostly, less sess counter in here will not more then the counter in GetOrCreateSess.
 		// The only exception is that the closing session is the one and only one

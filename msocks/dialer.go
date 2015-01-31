@@ -104,6 +104,6 @@ func DialSession(conn net.Conn, username, password string) (s *Session, err erro
 
 	log.Notice("auth passwd.")
 	s = NewSession(conn)
-	s.pong()
+	// s.pong()
 	return
 }

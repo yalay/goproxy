@@ -21,7 +21,7 @@ type Session struct {
 	ports   map[uint16]FrameSender
 
 	dialer sutils.Dialer
-	*PingPong
+	// *PingPong
 	*SpeedCounter
 }
 
@@ -31,7 +31,7 @@ func NewSession(conn net.Conn) (s *Session) {
 		closed: false,
 		ports:  make(map[uint16]FrameSender, 0),
 	}
-	s.PingPong = NewPingPong(s)
+	// s.PingPong = NewPingPong(s)
 	s.SpeedCounter = NewSpeedCounter(s)
 	log.Notice("session %s created.", s.String())
 	return
@@ -198,23 +198,23 @@ func (s *Session) Run() {
 					s.String(), f.GetStreamid(), err.Error())
 				return
 			}
-			s.PingPong.Reset()
+			// s.PingPong.Reset()
 		case *FrameSyn:
 			err = s.on_syn(ft)
 			if err != nil {
 				log.Error("syn failed: %s", err.Error())
 				return
 			}
-			s.PingPong.Reset()
+			// s.PingPong.Reset()
 		case *FrameDns:
 			err = s.on_dns(ft)
 			if err != nil {
 				log.Error("dns failed: %s", err.Error())
 				return
 			}
-			s.PingPong.Reset()
+			// s.PingPong.Reset()
 		case *FramePing:
-			s.PingPong.ping()
+			// s.PingPong.ping()
 		}
 	}
 }

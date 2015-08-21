@@ -19,15 +19,39 @@ var log = logging.MustGetLogger("")
 var ErrDNSNotFound = errors.New("dns not found")
 
 type IPFilter struct {
-	rest []net.IPNet
-	idx  map[byte][]net.IPNet
+	rest []*net.IPNet
+	idx  map[byte][]*net.IPNet
+}
+
+func ParseLine(line string) (ipnet *net.IPNet, err error) {
+	_, ipnet, err = net.ParseCIDR(line)
+	if err == nil {
+		return
+	}
+	err = nil
+
+	addrs := strings.Split(line, " ")
+
+	ip := net.ParseIP(addrs[0])
+	if x := ip.To4(); x != nil {
+		ip = x
+	}
+
+	mask := net.ParseIP(addrs[1])
+	if x := mask.To4(); x != nil {
+		mask = x
+	}
+
+	ipnet = &net.IPNet{IP: ip, Mask: net.IPMask(mask)}
+	return
 }
 
 func ReadIPList(f io.Reader) (filter *IPFilter, err error) {
 	reader := bufio.NewReader(f)
-	filter = &IPFilter{idx: make(map[byte][]net.IPNet)}
+	filter = &IPFilter{idx: make(map[byte][]*net.IPNet)}
 	counter := 0
 
+	var ipnet *net.IPNet
 QUIT:
 	for {
 		line, err := reader.ReadString('\n')
@@ -41,13 +65,15 @@ QUIT:
 			log.Error("%s", err)
 			return nil, err
 		}
-		addrs := strings.Split(strings.Trim(line, "\r\n "), " ")
-		ipnet := net.IPNet{
-			IP:   net.ParseIP(addrs[0]),
-			Mask: net.IPMask(net.ParseIP(addrs[1])),
+		line = strings.Trim(line, "\r\n ")
+
+		ipnet, err = ParseLine(line)
+		if err != nil {
+			log.Error("%s", err)
+			return nil, err
 		}
 
-		if ipnet.Mask[0] == 255 {
+		if ones, _ := ipnet.Mask.Size(); ones >= 8 {
 			prefix := ipnet.IP[0]
 			filter.idx[prefix] = append(filter.idx[prefix], ipnet)
 		} else {
@@ -62,7 +88,11 @@ QUIT:
 }
 
 func (f IPFilter) Contain(ip net.IP) bool {
+	if x := ip.To4(); x != nil {
+		ip = x
+	}
 	prefix := ip[0]
+
 	if iplist, ok := f.idx[prefix]; ok {
 		for _, ipnet := range iplist {
 			if ipnet.Contains(ip) {
@@ -104,70 +134,6 @@ func ReadIPListFile(filename string) (filter *IPFilter, err error) {
 
 	return ReadIPList(f)
 }
-
-// type IPList []net.IPNet
-
-// func ReadIPList(f io.Reader) (iplist IPList, err error) {
-// 	reader := bufio.NewReader(f)
-
-// QUIT:
-// 	for {
-// 		line, err := reader.ReadString('\n')
-// 		switch err {
-// 		case io.EOF:
-// 			if len(line) == 0 {
-// 				break QUIT
-// 			}
-// 		case nil:
-// 		default:
-// 			log.Error("%s", err)
-// 			return nil, err
-// 		}
-// 		addrs := strings.Split(strings.Trim(line, "\r\n "), " ")
-// 		ipnet := net.IPNet{
-// 			IP:   net.ParseIP(addrs[0]),
-// 			Mask: net.IPMask(net.ParseIP(addrs[1])),
-// 		}
-// 		iplist = append(iplist, ipnet)
-// 	}
-
-// 	log.Info("blacklist loaded %d record(s).", len(iplist))
-// 	return
-// }
-
-// func ReadIPListFile(filename string) (iplist IPList, err error) {
-// 	log.Info("load iplist from file %s.", filename)
-
-// 	var f io.ReadCloser
-// 	f, err = os.Open(filename)
-// 	if err != nil {
-// 		log.Error("%s", err)
-// 		return
-// 	}
-// 	defer f.Close()
-
-// 	if strings.HasSuffix(filename, ".gz") {
-// 		f, err = gzip.NewReader(f)
-// 		if err != nil {
-// 			log.Error("%s", err)
-// 			return
-// 		}
-// 	}
-
-// 	return ReadIPList(f)
-// }
-
-// // FIXME: can be better?
-// func (iplist IPList) Contain(ip net.IP) bool {
-// 	for _, ipnet := range iplist {
-// 		if ipnet.Contains(ip) {
-// 			log.Debug("%s matched %s.", ip.String(), ipnet.String())
-// 			return true
-// 		}
-// 	}
-// 	log.Debug("%s not match anything.", ip.String())
-// 	return false
-// }
 
 type FilteredDialer struct {
 	sutils.Dialer

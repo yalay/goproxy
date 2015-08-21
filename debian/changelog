@@ -1,8 +1,8 @@
-goproxy (2.4.1) UNRELEASED; urgency=medium
+goproxy (2.4.1) unstable; urgency=medium
 
-  * new ip filter system
+  * new ip filter system.
 
- -- Shell.Xu <shell909090@gmail.com>  Fri, 21 Aug 2015 14:39:14 +0800
+ -- Shell.Xu <shell909090@gmail.com>  Fri, 21 Aug 2015 15:34:24 +0800
 
 goproxy (2.4.0) unstable; urgency=low
 

@@ -3,6 +3,7 @@ package ipfilter
 import (
 	"bufio"
 	"compress/gzip"
+	"encoding/binary"
 	"errors"
 	"io"
 	"math/rand"
@@ -20,7 +21,8 @@ var ErrDNSNotFound = errors.New("dns not found")
 
 type IPFilter struct {
 	rest []*net.IPNet
-	idx  map[byte][]*net.IPNet
+	idx1 map[byte][]*net.IPNet
+	idx2 map[uint16][]*net.IPNet
 }
 
 func ParseLine(line string) (ipnet *net.IPNet, err error) {
@@ -48,7 +50,10 @@ func ParseLine(line string) (ipnet *net.IPNet, err error) {
 
 func ReadIPList(f io.Reader) (filter *IPFilter, err error) {
 	reader := bufio.NewReader(f)
-	filter = &IPFilter{idx: make(map[byte][]*net.IPNet)}
+	filter = &IPFilter{
+		idx1: make(map[byte][]*net.IPNet),
+		idx2: make(map[uint16][]*net.IPNet),
+	}
 	counter := 0
 
 	var ipnet *net.IPNet
@@ -73,40 +78,56 @@ QUIT:
 			return nil, err
 		}
 
-		if ones, _ := ipnet.Mask.Size(); ones >= 8 {
-			prefix := ipnet.IP[0]
-			filter.idx[prefix] = append(filter.idx[prefix], ipnet)
-		} else {
+		ones, _ := ipnet.Mask.Size()
+		switch {
+		case ones < 8:
 			filter.rest = append(filter.rest, ipnet)
+		case ones >= 8 && ones < 16:
+			prefix := ipnet.IP[0]
+			filter.idx1[prefix] = append(filter.idx1[prefix], ipnet)
+		default:
+			prefix := binary.BigEndian.Uint16(ipnet.IP[:2])
+			filter.idx2[prefix] = append(filter.idx2[prefix], ipnet)
 		}
 		counter++
 	}
 
-	log.Info("blacklist loaded %d record(s), %d indexed and %d no indexed.",
-		counter, len(filter.idx), len(filter.rest))
+	log.Info("blacklist loaded %d record(s), %d index1, %d index2 and %d no indexed.",
+		counter, len(filter.idx1), len(filter.idx2), len(filter.rest))
 	return
+}
+
+func ListConatins(iplist []*net.IPNet, ip net.IP) bool {
+	for _, ipnet := range iplist {
+		if ipnet.Contains(ip) {
+			log.Debug("%s matched %s.", ip.String(), ipnet.String())
+			return true
+		}
+	}
+	return false
 }
 
 func (f IPFilter) Contain(ip net.IP) bool {
 	if x := ip.To4(); x != nil {
 		ip = x
 	}
-	prefix := ip[0]
 
-	if iplist, ok := f.idx[prefix]; ok {
-		for _, ipnet := range iplist {
-			if ipnet.Contains(ip) {
-				log.Debug("%s matched %s.", ip.String(), ipnet.String())
-				return true
-			}
+	prefix2 := binary.BigEndian.Uint16(ip[:2])
+	if iplist, ok := f.idx2[prefix2]; ok {
+		if ListConatins(iplist, ip) {
+			return true
 		}
 	}
 
-	for _, ipnet := range f.rest {
-		if ipnet.Contains(ip) {
-			log.Debug("%s matched %s.", ip.String(), ipnet.String())
+	prefix1 := ip[0]
+	if iplist, ok := f.idx1[prefix1]; ok {
+		if ListConatins(iplist, ip) {
 			return true
 		}
+	}
+
+	if ListConatins(f.rest, ip) {
+		return true
 	}
 
 	log.Debug("%s not match anything.", ip.String())

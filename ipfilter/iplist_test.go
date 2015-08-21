@@ -2,6 +2,7 @@ package ipfilter
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"testing"
 )
@@ -19,7 +20,11 @@ func TestIPList(t *testing.T) {
 		t.Fatalf("Contain wrong1.")
 	}
 
+	if !filter.Contain(net.ParseIP("10.8.0.1")) {
+		fmt.Println("Contain wrong2.")
+	}
+
 	if filter.Contain(net.ParseIP("211.80.90.25")) {
-		t.Fatalf("Contain wrong2.")
+		t.Fatalf("Contain wrong3.")
 	}
 }

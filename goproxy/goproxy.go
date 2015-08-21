@@ -118,11 +118,13 @@ func run_httproxy(cfg *Config) (err error) {
 	}
 
 	if cfg.Blackfile != "" {
-		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
+		fdialer := ipfilter.NewFilteredDialer(dialer)
+		err = fdialer.LoadFilter(sutils.DefaultTcpDialer, cfg.Blackfile)
 		if err != nil {
+			log.Error("%s", err.Error())
 			return
 		}
+		dialer = fdialer
 	}
 
 	for _, pm := range cfg.Portmaps {

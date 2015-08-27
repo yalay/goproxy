@@ -49,6 +49,8 @@ type Config struct {
 	Password string
 	Auth     map[string]string
 
+	HttpUser string
+	HttpPassword string
 	Portmaps []PortMap
 }
 
@@ -129,7 +131,7 @@ func run_httproxy(cfg *Config) (err error) {
 		go CreatePortmap(pm, dialer)
 	}
 
-	return http.ListenAndServe(cfg.Listen, NewProxy(dialer))
+	return http.ListenAndServe(cfg.Listen, NewProxy(dialer,cfg.HttpUser,cfg.HttpPassword))
 }
 
 func LoadConfig() (cfg Config, err error) {

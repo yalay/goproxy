@@ -3,6 +3,9 @@
     "listen": ":5234",
     "server": "localhost:5233",
 
+	"httpuser":"",
+	"httppassword":"",
+
     "logfile": "client.log",
     "loglevel": "INFO",
     "adminiface": "127.0.0.1:8888",

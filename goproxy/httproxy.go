@@ -21,12 +21,19 @@ var hopHeaders = []string{
 type Proxy struct {
 	transport http.Transport
 	dialer    sutils.Dialer
+	username  string
+	password  string
 }
 
-func NewProxy(dialer sutils.Dialer) (p *Proxy) {
+func NewProxy(dialer sutils.Dialer, username string, password string) (p *Proxy) {
 	p = &Proxy{
+		username:  username,
+		password:  password,
 		dialer:    dialer,
 		transport: http.Transport{Dial: dialer.Dial},
+	}
+	if username !="" && password !="" {
+		log.Info("proxy-auth required")
 	}
 	return
 }
@@ -41,6 +48,16 @@ func copyHeader(dst, src http.Header) {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Info("http: %s %s", req.Method, req.URL)
+
+	if p.username != "" && p.password != "" {
+
+		if !BasicAuth(w, req, p.username, p.password) {
+			log.Error("Http Auth Required")
+			w.Header().Set("Proxy-Authenticate", "Basic realm=\"GoProxy\"")
+			http.Error(w, http.StatusText(407), 407)
+			return
+		}
+	}
 
 	if req.Method == "CONNECT" {
 		p.Connect(w, req)

@@ -275,3 +275,35 @@ func TestFrameDnsWrite(t *testing.T) {
 		t.Fatalf("FrameDns write wrong")
 	}
 }
+
+func TestFrameSpamRead(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{MSG_SPAM, 0x00, 0x03, 0x0A, 0x0A,
+		0x01, 0x05, 0x07})
+
+	f, err := ReadFrame(buf)
+	if err != nil {
+		t.Fatalf("Read FrameSpam failed")
+	}
+
+	ft, ok := f.(*FrameSpam)
+	if !ok || ft.Streamid != 0x0a0a {
+		t.Fatalf("FrameSpam format wrong")
+	}
+
+	if bytes.Compare(ft.Data, []byte{0x01, 0x05, 0x07}) != 0 {
+		t.Fatalf("FrameSpam body wrong")
+	}
+}
+
+func TestFrameSpamWrite(t *testing.T) {
+	f := NewFrameSpam(10, []byte{0x01, 0x02, 0x03})
+	buf, err := f.Packed()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if bytes.Compare(buf.Bytes(), []byte{MSG_SPAM, 0x00, 0x03, 0x00, 0x0A,
+		0x01, 0x02, 0x03}) != 0 {
+		t.Fatalf("FrameSpam write wrong")
+	}
+}

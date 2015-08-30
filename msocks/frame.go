@@ -20,6 +20,7 @@ const (
 	MSG_RST
 	MSG_PING
 	MSG_DNS
+	MSG_SPAM
 )
 
 func ReadString(r io.Reader) (s string, err error) {
@@ -83,6 +84,8 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		f = &FramePing{FrameBase: *fb}
 	case MSG_DNS:
 		f = &FrameDns{FrameBase: *fb}
+	case MSG_SPAM:
+		f = &FrameSpam{FrameBase: *fb}
 	}
 	err = f.Unpack(r)
 	return
@@ -417,6 +420,37 @@ func (f *FrameDns) Packed() (buf *bytes.Buffer, err error) {
 }
 
 func (f *FrameDns) Unpack(r io.Reader) (err error) {
+	f.Data = make([]byte, f.Length)
+	_, err = io.ReadFull(r, f.Data)
+	return
+}
+
+type FrameSpam struct {
+	FrameBase
+	Data []byte
+}
+
+func NewFrameSpam(streamid uint16, data []byte) (f *FrameData) {
+	return &FrameData{
+		FrameBase: FrameBase{
+			Type:     MSG_SPAM,
+			Streamid: streamid,
+			Length:   uint16(len(data)),
+		},
+		Data: data,
+	}
+}
+
+func (f *FrameSpam) Packed() (buf *bytes.Buffer, err error) {
+	buf, err = f.FrameBase.Packed()
+	if err != nil {
+		return
+	}
+	_, err = buf.Write(f.Data)
+	return
+}
+
+func (f *FrameSpam) Unpack(r io.Reader) (err error) {
 	f.Data = make([]byte, f.Length)
 	_, err = io.ReadFull(r, f.Data)
 	return

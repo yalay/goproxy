@@ -32,7 +32,7 @@ func NewProxy(dialer sutils.Dialer, username string, password string) (p *Proxy)
 		dialer:    dialer,
 		transport: http.Transport{Dial: dialer.Dial},
 	}
-	if username !="" && password !="" {
+	if username != "" && password != "" {
 		log.Info("proxy-auth required")
 	}
 	return
@@ -50,7 +50,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Info("http: %s %s", req.Method, req.URL)
 
 	if p.username != "" && p.password != "" {
-
 		if !BasicAuth(w, req, p.username, p.password) {
 			log.Error("Http Auth Required")
 			w.Header().Set("Proxy-Authenticate", "Basic realm=\"GoProxy\"")

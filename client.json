@@ -3,8 +3,8 @@
     "listen": ":5234",
     "server": "localhost:5233",
 
-	"httpuser":"",
-	"httppassword":"",
+    "httpuser":"",
+    "httppassword":"",
 
     "logfile": "client.log",
     "loglevel": "INFO",

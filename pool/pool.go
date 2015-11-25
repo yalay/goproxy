@@ -1,19 +1,26 @@
-package msocks
+package pool
 
 import (
-	"net"
 	"sync"
+
+	"github.com/op/go-logging"
+	"github.com/shell909090/goproxy/msocks"
 )
 
-type SessionMaker interface {
-	MakeSess() (*Session, error)
+var (
+	log        = logging.MustGetLogger("msocks")
+	frame_ping = NewFramePing()
+)
+
+type AbstractSessionFactory interface {
+	CreateSession() (*msocks.Session, error)
 }
 
 type SessionPool struct {
 	mu      sync.Mutex // sess pool locker
 	mud     sync.Mutex // dailer's locker
-	sess    []*Session
-	sm      SessionMaker
+	sess    []*msocks.Session
+	asfs    []AbstractSessionFactory
 	MinSess int
 	MaxConn int
 }
@@ -28,30 +35,32 @@ func CreateSessionPool(sm SessionMaker) (sp *SessionPool) {
 	return
 }
 
+// TODO: add, remove session factory
+
 func (sp *SessionPool) CutAll() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for _, s := range sp.sess {
 		s.Close()
 	}
-	sp.sess = make([]*Session, 0)
+	sp.sess = make([]*msocks.Session, 0)
 }
 
 func (sp *SessionPool) GetSize() int {
 	return len(sp.sess)
 }
 
-func (sp *SessionPool) GetSess() (sess []*Session) {
+func (sp *SessionPool) GetSess() (sess []*msocks.Session) {
 	return sp.sess
 }
 
-func (sp *SessionPool) Add(s *Session) {
+func (sp *SessionPool) Add(s *msocks.Session) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	sp.sess = append(sp.sess, s)
 }
 
-func (sp *SessionPool) Remove(s *Session) (n int, err error) {
+func (sp *SessionPool) Remove(s *msocks.Session) (n int, err error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for i, sess := range sp.sess {
@@ -65,15 +74,7 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
-func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
-	sess, err := sp.GetOrCreateSess()
-	if err != nil {
-		return
-	}
-	return sess.LookupIP(host)
-}
-
-func (sp *SessionPool) GetOrCreateSess() (sess *Session, err error) {
+func (sp *SessionPool) GetOrCreateSess() (sess *msocks.Session, err error) {
 	if len(sp.sess) == 0 {
 		err = sp.createSession(func() bool {
 			return len(sp.sess) == 0
@@ -120,7 +121,7 @@ func (sp *SessionPool) createSession(checker func() bool) (err error) {
 	return
 }
 
-func (sp *SessionPool) getLessSess() (sess *Session, size int) {
+func (sp *SessionPool) getLessSess() (sess *msocks.Session, size int) {
 	size = -1
 	for _, s := range sp.sess {
 		if size == -1 || s.GetSize() < size {
@@ -131,7 +132,7 @@ func (sp *SessionPool) getLessSess() (sess *Session, size int) {
 	return
 }
 
-func (sp *SessionPool) sessRun(sess *Session) {
+func (sp *SessionPool) sessRun(sess *msocks.Session) {
 	defer func() {
 		_, err := sp.Remove(sess)
 		if err != nil {

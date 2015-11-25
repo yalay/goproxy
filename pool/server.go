@@ -1,4 +1,4 @@
-package msocks
+package pool
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 
 	"time"
 
+	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -23,8 +24,7 @@ func NewServer(auth map[string]string, dialer sutils.Dialer) (ms *MsocksServer, 
 		return
 	}
 	ms = &MsocksServer{
-		dialer:      dialer,
-		SessionPool: CreateSessionPool(nil),
+		dialer: dialer,
 	}
 
 	if auth != nil {
@@ -87,7 +87,7 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 	}
 	ti.Stop()
 
-	sess := NewSession(conn)
+	sess := msocks.NewSession(conn)
 	sess.next_id = 1
 	sess.dialer = ms.dialer
 	ms.Add(sess)

@@ -40,7 +40,7 @@ press: build press-clean
 	bin/goproxy -config=server.json &
 	bin/goproxy -config=client.json &
 	sleep 1
-	curl -x http://localhost:5234 http://localhost:6060/ > /dev/null
+	# curl -x http://localhost:5234 http://localhost:6060/ > /dev/null
 	curl -x http://localhost:5234 http://www.microsoft.com > /dev/null
 	killall goproxy
 

@@ -92,6 +92,11 @@ func XOR(n int, a []byte, b []byte) (r []byte) {
 	return
 }
 
+// TODO: enhance
+// It is not safe to do like this. Each time session's security key should be
+// generated and used just for one time. So we can make sure that attacker
+// who recorded everything will never recover data back even he cracked key.
+
 func ExchangeIV(conn net.Conn, n int) (iv []byte, err error) {
 	ivs, err := SentIV(conn, n)
 	if err != nil {

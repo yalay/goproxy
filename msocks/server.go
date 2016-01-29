@@ -22,7 +22,8 @@ func NewServer(auth map[string]string, dialer sutils.Dialer) (ms *MsocksServer, 
 		return
 	}
 	ms = &MsocksServer{
-		dialer: dialer,
+		SessionPool: CreateSessionPool(0, 0),
+		dialer:      dialer,
 	}
 
 	if auth != nil {

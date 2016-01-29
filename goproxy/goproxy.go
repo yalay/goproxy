@@ -103,6 +103,7 @@ func run_httproxy(cfg *Config) (err error) {
 	sp := msocks.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
 	sp.AddSessionFactory(sf)
 	ndialer := sp
+	dialer = ndialer
 
 	// dialer, err = msocks.NewDialer(dialer, cfg.Server, cfg.Username, cfg.Password)
 	// if err != nil {

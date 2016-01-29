@@ -4,7 +4,7 @@
     "server": "localhost:5233",
 
     "logfile": "client.log",
-    "loglevel": "INFO",
+    "loglevel": "Info",
     "adminiface": "127.0.0.1:8888",
 
     "dnsnet": "internal",

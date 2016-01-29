@@ -13,7 +13,6 @@ import (
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
-	"github.com/shell909090/goproxy/pool"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -74,7 +73,7 @@ func run_server(cfg *Config) (err error) {
 		return
 	}
 
-	svr, err := pool.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
+	svr, err := msocks.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
 	}
@@ -101,7 +100,7 @@ func run_httproxy(cfg *Config) (err error) {
 		return
 	}
 
-	sp := pool.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
+	sp := msocks.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
 	sp.AddSessionFactory(sf)
 	ndialer := sp
 

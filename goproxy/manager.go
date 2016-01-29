@@ -6,7 +6,7 @@ import (
 	"net/http/pprof"
 	"text/template"
 
-	"github.com/shell909090/goproxy/pool"
+	"github.com/shell909090/goproxy/msocks"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -37,7 +37,7 @@ const (
         <th>Recv-Q</th><th>Send-Q</th><th width="50%">Target</th>
       </tr>
       {{if .GetSize}}
-      {{range $sess := .GetSess}}
+      {{range $sess := .GetSessions}}
       <tr>
 	<td>{{$sess.String}}</td>
 	<td></td>
@@ -106,10 +106,10 @@ func init() {
 }
 
 type MsocksManager struct {
-	sp *pool.SessionPool
+	sp *msocks.SessionPool
 }
 
-func NewMsocksManager(sp *pool.SessionPool) (mm *MsocksManager) {
+func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
 	mm = &MsocksManager{
 		sp: sp,
 	}

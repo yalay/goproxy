@@ -1,24 +1,18 @@
-package pool
+package msocks
 
 import (
+	"net"
 	"sync"
-
-	"github.com/op/go-logging"
-	"github.com/shell909090/goproxy/msocks"
-)
-
-var (
-	log = logging.MustGetLogger("pool")
 )
 
 type AbstractSessionFactory interface {
-	CreateSession() (*msocks.Session, error)
+	CreateSession() (*Session, error)
 }
 
 type SessionPool struct {
 	mu      sync.Mutex // sess pool & factory locker
 	mud     sync.Mutex // dailer's locker
-	sess    []*msocks.Session
+	sess    []*Session
 	asfs    []AbstractSessionFactory
 	MinSess int
 	MaxConn int
@@ -32,7 +26,7 @@ func CreateSessionPool(MinSess, MaxConn int) (sp *SessionPool) {
 		MaxConn = 16
 	}
 	sp = &SessionPool{
-		sess:    make([]*msocks.Session, 0),
+		sess:    make([]*Session, 0),
 		MinSess: MinSess,
 		MaxConn: MaxConn,
 	}
@@ -45,32 +39,30 @@ func (sp *SessionPool) AddSessionFactory(sf AbstractSessionFactory) {
 	sp.asfs = append(sp.asfs, sf)
 }
 
-// TODO: add, remove session factory
-
 func (sp *SessionPool) CutAll() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for _, s := range sp.sess {
 		s.Close()
 	}
-	sp.sess = make([]*msocks.Session, 0)
+	sp.sess = make([]*Session, 0)
 }
 
 func (sp *SessionPool) GetSize() int {
 	return len(sp.sess)
 }
 
-func (sp *SessionPool) GetSess() (sess []*msocks.Session) {
+func (sp *SessionPool) GetSessions() (sess []*Session) {
 	return sp.sess
 }
 
-func (sp *SessionPool) Add(s *msocks.Session) {
+func (sp *SessionPool) Add(s *Session) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	sp.sess = append(sp.sess, s)
 }
 
-func (sp *SessionPool) Remove(s *msocks.Session) (n int, err error) {
+func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for i, sess := range sp.sess {
@@ -84,7 +76,7 @@ func (sp *SessionPool) Remove(s *msocks.Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
-func (sp *SessionPool) GetOrCreateSess() (sess *msocks.Session, err error) {
+func (sp *SessionPool) GetSess() (sess *Session, err error) {
 	if len(sp.sess) == 0 {
 		err = sp.createSession(func() bool {
 			return len(sp.sess) == 0
@@ -131,7 +123,7 @@ func (sp *SessionPool) createSession(checker func() bool) (err error) {
 	return
 }
 
-func (sp *SessionPool) getLessSess() (sess *msocks.Session, size int) {
+func (sp *SessionPool) getLessSess() (sess *Session, size int) {
 	size = -1
 	for _, s := range sp.sess {
 		if size == -1 || s.GetSize() < size {
@@ -142,7 +134,7 @@ func (sp *SessionPool) getLessSess() (sess *msocks.Session, size int) {
 	return
 }
 
-func (sp *SessionPool) sessRun(sess *msocks.Session) {
+func (sp *SessionPool) sessRun(sess *Session) {
 	defer func() {
 		_, err := sp.Remove(sess)
 		if err != nil {
@@ -167,4 +159,20 @@ func (sp *SessionPool) sessRun(sess *msocks.Session) {
 	// that's mean session is dead
 	log.Warning("session runtime quit, reboot from connect.")
 	return
+}
+
+func (sp *SessionPool) Dial(network, address string) (net.Conn, error) {
+	sess, err := sp.GetSess()
+	if err != nil {
+		return nil, nil
+	}
+	return sess.Dial(network, address)
+}
+
+func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
+	sess, err := sp.GetSess()
+	if err != nil {
+		return
+	}
+	return sess.LookupIP(host)
 }

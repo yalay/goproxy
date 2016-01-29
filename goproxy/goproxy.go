@@ -13,6 +13,7 @@ import (
 	"github.com/shell909090/goproxy/cryptconn"
 	"github.com/shell909090/goproxy/ipfilter"
 	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/pool"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -73,7 +74,7 @@ func run_server(cfg *Config) (err error) {
 		return
 	}
 
-	svr, err := msocks.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
+	svr, err := pool.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
 	if err != nil {
 		return
 	}
@@ -95,25 +96,28 @@ func run_httproxy(cfg *Config) (err error) {
 		return
 	}
 
-	dialer, err = msocks.NewDialer(dialer, cfg.Server, cfg.Username, cfg.Password)
+	sf, err := msocks.NewSessionFactory(dialer, cfg.Server, cfg.Username, cfg.Password)
 	if err != nil {
 		return
 	}
-	ndialer := dialer.(*msocks.Dialer)
 
-	if cfg.MinSess != 0 {
-		ndialer.SessionPool.MinSess = cfg.MinSess
-	}
-	if cfg.MaxConn != 0 {
-		ndialer.SessionPool.MaxConn = cfg.MaxConn
-	}
+	sp := pool.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
+	sp.AddSessionFactory(sf)
+	ndialer := sp
+
+	// dialer, err = msocks.NewDialer(dialer, cfg.Server, cfg.Username, cfg.Password)
+	// if err != nil {
+	// 	return
+	// }
+	// ndialer := dialer.(*msocks.Dialer)
 
 	if cfg.DnsNet == TypeInternal {
 		sutils.DefaultLookuper = ndialer
 	}
+
 	if cfg.AdminIface != "" {
 		mux := http.NewServeMux()
-		NewMsocksManager(ndialer.SessionPool).Register(mux)
+		NewMsocksManager(sp).Register(mux)
 		go httpserver(cfg.AdminIface, mux)
 	}
 

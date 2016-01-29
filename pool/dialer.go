@@ -67,19 +67,15 @@ import "net"
 // 	return
 // }
 
-type Dialer struct {
-	SessionPool
-}
-
-func (d *Dialer) Dial(string, string) (net.Conn, error) {
+func (sp *SessionPool) Dial(network, address string) (net.Conn, error) {
 	sess, err := sp.GetOrCreateSess()
 	if err != nil {
-		return
+		return nil, nil
 	}
 	return sess.Dial(network, address)
 }
 
-func (d *Dialer) LookupIP(host string) (addrs []net.IP, err error) {
+func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
 	sess, err := sp.GetOrCreateSess()
 	if err != nil {
 		return

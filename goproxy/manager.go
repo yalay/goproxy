@@ -6,7 +6,7 @@ import (
 	"net/http/pprof"
 	"text/template"
 
-	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/pool"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -106,10 +106,10 @@ func init() {
 }
 
 type MsocksManager struct {
-	sp *msocks.SessionPool
+	sp *pool.SessionPool
 }
 
-func NewMsocksManager(sp *msocks.SessionPool) (mm *MsocksManager) {
+func NewMsocksManager(sp *pool.SessionPool) (mm *MsocksManager) {
 	mm = &MsocksManager{
 		sp: sp,
 	}

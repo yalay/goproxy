@@ -8,8 +8,7 @@ import (
 )
 
 var (
-	log        = logging.MustGetLogger("msocks")
-	frame_ping = NewFramePing()
+	log = logging.MustGetLogger("pool")
 )
 
 type AbstractSessionFactory interface {
@@ -17,7 +16,7 @@ type AbstractSessionFactory interface {
 }
 
 type SessionPool struct {
-	mu      sync.Mutex // sess pool locker
+	mu      sync.Mutex // sess pool & factory locker
 	mud     sync.Mutex // dailer's locker
 	sess    []*msocks.Session
 	asfs    []AbstractSessionFactory
@@ -25,14 +24,25 @@ type SessionPool struct {
 	MaxConn int
 }
 
-func CreateSessionPool(sm SessionMaker) (sp *SessionPool) {
+func CreateSessionPool(MinSess, MaxConn int) (sp *SessionPool) {
+	if MinSess == 0 {
+		MinSess = 1
+	}
+	if MaxConn == 0 {
+		MaxConn = 16
+	}
 	sp = &SessionPool{
-		sess:    make([]*Session, 0),
-		sm:      sm,
-		MinSess: 1,
-		MaxConn: 16,
+		sess:    make([]*msocks.Session, 0),
+		MinSess: MinSess,
+		MaxConn: MaxConn,
 	}
 	return
+}
+
+func (sp *SessionPool) AddSessionFactory(sf AbstractSessionFactory) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.asfs = append(sp.asfs, sf)
 }
 
 // TODO: add, remove session factory
@@ -110,7 +120,7 @@ func (sp *SessionPool) createSession(checker func() bool) (err error) {
 		return
 	}
 
-	sess, err := sp.sm.MakeSess()
+	sess, err := sp.asfs[0].CreateSession()
 	if err != nil {
 		log.Error("%s", err)
 		return

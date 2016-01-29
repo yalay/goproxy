@@ -26,15 +26,15 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 
 ## 连接池规则
 
-在msocks的客户端，一次会主动发起一个连接。当连接数低于一定个数时会主动补充(目前编译时设定为1)，除非连接被ping-pong game关闭。
+在msocks的客户端，一次会主动发起一个连接。当连接数低于一定个数时会主动补充(目前编译时设定为1)。
 
-在连接时，会寻找承载tcp最少的一根去用。如果所有连接中，承载tcp最小的连接数大于一定值(目前是32)，那么会在后台再增加一根tcp。
+在连接时，会寻找承载tcp最少的一根去用。如果所有连接中，承载tcp最小的连接数大于一定值(目前是16)，那么会在后台再增加一根tcp。
 
 当msocks连接断开时，在上面承载的tcp不会主动迁移到其他msocks上，而是会跟着断开。如果连接池满足一定规则(如上所述)，那么断开的连接会重新发起。
 
 连接池不会主动释放链接。但是在断开时不满足规则的链接不会被重建。这使得连接池可以借助链接的主动断开回收msocks连接。
 
-总体来说，连接池使得每个tcp承载的最大连接数保持在30-40左右。避免大量连接堵塞在一个tcp上，同时也尽力避免频繁的tcp连接握手和释放。
+总体来说，连接池使得每个tcp承载的最大连接数保持在15-25左右。避免大量连接堵塞在一个tcp上，同时也尽力避免频繁的tcp连接握手和释放。
 
 # 用法和配置说明
 
@@ -60,6 +60,8 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 * username: 连接用户名，http模式下需要。
 * password: 连接密码，http模式下需要。
 * auth: 认证用户名/密码对，server模式下需要。
+* httpuser: http authentication username.
+* httppassword: http authentication password.
 * portmaps: 端口映射配置，将本地端口映射到远程任意一个端口。
 
 其中portmaps的配置应当是一个列表，每个成员都应设定如下的值。
@@ -88,15 +90,21 @@ http模式运行在本地，需要一个境外的server服务器做支撑，对�
 
 黑名单文件使用文本格式，每个子网一行。行内以空格分割，第一段为IP地址，第二段为子网掩码。允许使用gzip压缩，后缀名必须为gz，可以直接读取。routes.list.gz为样例。
 
+CIDR style ip range definition is acceptable.
+
 ## port mapping
 
 通过portmaps项，可以将本地的tcp/udp端口转发到远程任意端口。
+
+UDP support not tested yet.
 
 ## dns配置
 
 dns是goproxy中很特殊的一个功能。由于代理经常接到连接某域名的指令，因此为了进行ip匹配，需要先进行dns查询。
 
 在老版本goproxy中，使用的是修改过的golang内置的dns系统。由于过滤系统依赖于污染返回地址仅限于特定地址的假定，所以当污染系统升级后，这个方案就不再可行。在新版goproxy中，建议使用内置方案。
+
+If dns response get multiple result, one of them matched blacklist will made goproxy connect target directly.
 
 ## dns over msocks
 
@@ -254,5 +262,10 @@ tar包内包含主程序，routes.list.gz示例。没有config.json示例。因�
 
 # TODO
 
-* http协议加入proxy authentication
 * 增加dns对外服务？（其实可以用udp端口映射来完成）
+* Upgrade IV exchange mode.
+  * Maybe mix IV with junk data will helpful, size of junk data can be defined in config file.
+  * Or maybe we can fix the size of junk data, send some of them (larger then IV). Before send real data, concat rest of it with the real data. So it will looks like a random size packet (IV) and another random size packet (handshake).
+  * Send time in handshake is helpful to defence the reply attack. Of cause, time in server and client must close enough.
+* Encapsulate tcp into http.
+* Speed control, low speed go first?

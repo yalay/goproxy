@@ -5,15 +5,10 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
 )
 
 const (
-	PINGTIME       = 30
-	PINGRANDOM     = 10
-	TIMEOUT_COUNT  = 4
-	GAMEOVER_COUNT = 20
-
 	DIAL_RETRY   = 3
 	DIAL_TIMEOUT = 30
 	AUTH_TIMEOUT = 10

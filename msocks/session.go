@@ -7,7 +7,9 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"time"
 
+	"github.com/miekg/dns"
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -147,7 +149,7 @@ func (s *Session) LocalPort() int {
 
 func (s *Session) SendFrame(f Frame) (err error) {
 	log.Debug("sent %s", f.Debug())
-	s.WriteBytes(uint32(f.GetSize() + 5))
+	s.SpeedCounter.WriteBytes(uint32(f.GetSize() + 5))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -183,7 +185,7 @@ func (s *Session) Run() {
 		}
 
 		log.Debug("recv %s", f.Debug())
-		s.ReadBytes(uint32(f.GetSize() + 5))
+		s.SpeedCounter.ReadBytes(uint32(f.GetSize() + 5))
 
 		switch ft := f.(type) {
 		default:
@@ -228,3 +230,217 @@ func (s *Session) sendFrameInChan(f Frame) (err error) {
 	}
 	return nil
 }
+
+// ---- syn part ----
+
+func (s *Session) Dial(network, address string) (c *Conn, err error) {
+	c = NewConn(ST_SYN_SENT, 0, s, network, address)
+	streamid, err := s.PutIntoNextId(c)
+	if err != nil {
+		return
+	}
+	c.streamid = streamid
+
+	log.Info("try dial %s => %s.", s.conn.RemoteAddr().String(), address)
+	err = c.WaitForConn()
+	if err != nil {
+		return
+	}
+
+	return c, nil
+}
+
+func (s *Session) on_syn(ft *FrameSyn) (err error) {
+	// lock streamid temporary, with status sync recved
+	c := NewConn(ST_SYN_RECV, ft.Streamid, s, ft.Network, ft.Address)
+	err = s.PutIntoId(ft.Streamid, c)
+	if err != nil {
+		log.Error("%s", err)
+
+		fb := NewFrameResult(ft.Streamid, ERR_IDEXIST)
+		err := s.SendFrame(fb)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// it may toke long time to connect with target address
+	// so we use goroutine to return back loop
+	go func() {
+		var err error
+		var conn net.Conn
+		log.Debug("try to connect %s => %s:%s.", c.String(), ft.Network, ft.Address)
+
+		if dialer, ok := s.dialer.(*sutils.TcpDialer); ok {
+			conn, err = dialer.DialTimeout(ft.Network, ft.Address, DIAL_TIMEOUT*time.Second)
+		} else {
+			conn, err = s.dialer.Dial(ft.Network, ft.Address)
+		}
+
+		if err != nil {
+			log.Error("%s", err)
+			fb := NewFrameResult(ft.Streamid, ERR_CONNFAILED)
+			err = s.SendFrame(fb)
+			if err != nil {
+				log.Error("%s", err)
+			}
+			c.Final()
+			return
+		}
+
+		fb := NewFrameResult(ft.Streamid, ERR_NONE)
+		err = s.SendFrame(fb)
+		if err != nil {
+			log.Error("%s", err)
+			return
+		}
+		c.status = ST_EST
+
+		go sutils.CopyLink(conn, c)
+		log.Notice("connected %s => %s:%s.", c.String(), ft.Network, ft.Address)
+		return
+	}()
+	return
+}
+
+// ---- syn part ended ----
+
+// ---- dns part ----
+
+func MakeDnsFrame(host string, t uint16, streamid uint16) (req *dns.Msg, f Frame, err error) {
+	log.Debug("make a dns query for %s.", host)
+
+	req = new(dns.Msg)
+	req.Id = dns.Id()
+	req.SetQuestion(dns.Fqdn(host), t)
+	req.RecursionDesired = true
+
+	b, err := req.Pack()
+	if err != nil {
+		return
+	}
+
+	f = NewFrameDns(streamid, b)
+	return
+}
+
+func DebugDNS(r *dns.Msg, name string) {
+	straddr := ""
+	for _, a := range r.Answer {
+		switch ta := a.(type) {
+		case *dns.A:
+			straddr += ta.A.String() + ","
+		case *dns.AAAA:
+			straddr += ta.AAAA.String() + ","
+		}
+	}
+	log.Info("dns result for %s is %s.", name, straddr)
+	return
+}
+
+func ParseDnsFrame(f Frame, req *dns.Msg) (addrs []net.IP, err error) {
+	ft, ok := f.(*FrameDns)
+	if !ok {
+		return nil, ErrDnsMsgIllegal
+	}
+
+	res := new(dns.Msg)
+	err = res.Unpack(ft.Data)
+	if err != nil || !res.Response || res.Id != req.Id {
+		return nil, ErrDnsMsgIllegal
+	}
+
+	if DEBUGDNS {
+		DebugDNS(res, req.Question[0].Name)
+	}
+	for _, a := range res.Answer {
+		switch ta := a.(type) {
+		case *dns.A:
+			addrs = append(addrs, ta.A)
+		case *dns.AAAA:
+			addrs = append(addrs, ta.AAAA)
+		}
+	}
+	return
+}
+
+func (s *Session) LookupIP(host string) (addrs []net.IP, err error) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return []net.IP{ip}, nil
+	}
+
+	cfs := CreateChanFrameSender(0)
+	streamid, err := s.PutIntoNextId(&cfs)
+	if err != nil {
+		return
+	}
+	defer func() {
+		err := s.RemovePort(streamid)
+		if err != nil {
+			log.Error("%s", err.Error())
+		}
+	}()
+
+	req, freq, err := MakeDnsFrame(host, dns.TypeA, streamid)
+	if err != nil {
+		return
+	}
+
+	err = s.SendFrame(freq)
+	if err != nil {
+		return
+	}
+
+	fres, err := cfs.RecvWithTimeout(DNS_TIMEOUT * time.Second)
+	if err != nil {
+		return
+	}
+
+	addrs, err = ParseDnsFrame(fres, req)
+	return
+}
+
+func (s *Session) on_dns(ft *FrameDns) (err error) {
+	req := new(dns.Msg)
+	err = req.Unpack(ft.Data)
+	if err != nil {
+		return ErrDnsMsgIllegal
+	}
+
+	if req.Response {
+		// ignore send fail, maybe just timeout.
+		// should I log this ?
+		return s.sendFrameInChan(ft)
+	}
+
+	log.Info("dns query for %s.", req.Question[0].Name)
+
+	d, ok := sutils.DefaultLookuper.(*sutils.DnsLookup)
+	if !ok {
+		return ErrNoDnsServer
+	}
+	res, err := d.Exchange(req)
+	if err != nil {
+		log.Error("%s", err.Error())
+		return nil
+	}
+
+	if DEBUGDNS {
+		DebugDNS(res, req.Question[0].Name)
+	}
+
+	// send response back from streamid
+	b, err := res.Pack()
+	if err != nil {
+		log.Error("%s", ErrDnsMsgIllegal.Error())
+		return nil
+	}
+
+	fr := NewFrameDns(ft.GetStreamid(), b)
+	err = s.SendFrame(fr)
+	return
+}
+
+// ---- dns part ended ----

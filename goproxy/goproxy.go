@@ -5,14 +5,10 @@ import (
 	"flag"
 	"fmt"
 	stdlog "log"
-	"net"
-	"net/http"
 	"os"
 
 	logging "github.com/op/go-logging"
-	"github.com/shell909090/goproxy/cryptconn"
-	"github.com/shell909090/goproxy/ipfilter"
-	"github.com/shell909090/goproxy/msocks"
+
 	"github.com/shell909090/goproxy/sutils"
 )
 
@@ -20,16 +16,13 @@ var log = logging.MustGetLogger("")
 
 const TypeInternal = "internal"
 
-type PortMap struct {
-	Net string
-	Src string
-	Dst string
-}
+var (
+	ConfigFile string
+)
 
 type Config struct {
 	Mode   string
 	Listen string
-	Server string
 
 	Logfile    string
 	Loglevel   string
@@ -38,111 +31,49 @@ type Config struct {
 	DnsAddrs []string
 	DnsNet   string
 
-	Cipher    string
-	Key       string
+	Cipher string
+}
+
+type ServerConfig struct {
+	Config
+	Key  string
+	Auth map[string]string
+}
+
+type ServerDefine struct {
+	Server   string
+	Cipher   string
+	Key      string
+	Username string
+	Password string
+}
+
+type PortMap struct {
+	Net string
+	Src string
+	Dst string
+}
+
+type ClientConfig struct {
+	Config
 	Blackfile string
 
 	MinSess int
 	MaxConn int
-
-	Username string
-	Password string
-	Auth     map[string]string
+	Servers []*ServerDefine
 
 	HttpUser     string
 	HttpPassword string
-	Portmaps     []PortMap
+
+	Portmaps []PortMap
 }
 
-func httpserver(addr string, handler http.Handler) {
-	for {
-		err := http.ListenAndServe(addr, handler)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
-	}
-}
-
-func run_server(cfg *Config) (err error) {
-	listener, err := net.Listen("tcp", cfg.Listen)
-	if err != nil {
-		return
-	}
-
-	listener, err = cryptconn.NewListener(listener, cfg.Cipher, cfg.Key)
-	if err != nil {
-		return
-	}
-
-	svr, err := msocks.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
-	if err != nil {
-		return
-	}
-
-	if cfg.AdminIface != "" {
-		mux := http.NewServeMux()
-		NewMsocksManager(svr.SessionPool).Register(mux)
-		go httpserver(cfg.AdminIface, mux)
-	}
-
-	return svr.Serve(listener)
-}
-
-func run_httproxy(cfg *Config) (err error) {
-	var dialer sutils.Dialer
-
-	dialer, err = cryptconn.NewDialer(sutils.DefaultTcpDialer, cfg.Cipher, cfg.Key)
-	if err != nil {
-		return
-	}
-
-	sf, err := msocks.NewSessionFactory(dialer, cfg.Server, cfg.Username, cfg.Password)
-	if err != nil {
-		return
-	}
-
-	sp := msocks.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
-	sp.AddSessionFactory(sf)
-	ndialer := sp
-	dialer = ndialer
-
-	// dialer, err = msocks.NewDialer(dialer, cfg.Server, cfg.Username, cfg.Password)
-	// if err != nil {
-	// 	return
-	// }
-	// ndialer := dialer.(*msocks.Dialer)
-
-	if cfg.DnsNet == TypeInternal {
-		sutils.DefaultLookuper = ndialer
-	}
-
-	if cfg.AdminIface != "" {
-		mux := http.NewServeMux()
-		NewMsocksManager(sp).Register(mux)
-		go httpserver(cfg.AdminIface, mux)
-	}
-
-	if cfg.Blackfile != "" {
-		dialer, err = ipfilter.NewFilteredDialer(
-			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
-		if err != nil {
-			return
-		}
-	}
-
-	for _, pm := range cfg.Portmaps {
-		go CreatePortmap(pm, dialer)
-	}
-
-	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, cfg.HttpUser, cfg.HttpPassword))
-}
-
-func LoadConfig() (cfg Config, err error) {
-	var configfile string
-	flag.StringVar(&configfile, "config", "/etc/goproxy/config.json", "config file")
+func init() {
+	flag.StringVar(&ConfigFile, "config", "/etc/goproxy/config.json", "config file")
 	flag.Parse()
+}
 
+func LoadJson(configfile string, cfg interface{}) (err error) {
 	file, err := os.Open(configfile)
 	if err != nil {
 		return
@@ -151,6 +82,35 @@ func LoadConfig() (cfg Config, err error) {
 
 	dec := json.NewDecoder(file)
 	err = dec.Decode(&cfg)
+	return
+}
+
+func LoadServerConfig(basecfg *Config) (cfg ServerConfig, err error) {
+	err = LoadJson(ConfigFile, &cfg)
+	if err != nil {
+		return
+	}
+	cfg.Config = *basecfg
+	return
+}
+
+func LoadClientConfig(basecfg *Config) (cfg ClientConfig, err error) {
+	err = LoadJson(ConfigFile, &cfg)
+	if err != nil {
+		return
+	}
+	cfg.Config = *basecfg
+	if cfg.MinSess == 0 {
+		cfg.MinSess = 1
+	}
+	if cfg.MaxConn == 0 {
+		cfg.MaxConn = 16
+	}
+	return
+}
+
+func LoadConfig() (cfg Config, err error) {
+	err = LoadJson(ConfigFile, &cfg)
 	if err != nil {
 		return
 	}

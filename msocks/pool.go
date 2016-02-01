@@ -10,8 +10,8 @@ type AbstractSessionFactory interface {
 }
 
 type SessionPool struct {
-	mu      sync.Mutex // sess pool & factory locker
-	mud     sync.Mutex // dailer's locker
+	mu      sync.Mutex // sess pool locker
+	muf     sync.Mutex // factory locker
 	sess    []*Session
 	asfs    []AbstractSessionFactory
 	MinSess int
@@ -34,8 +34,8 @@ func CreateSessionPool(MinSess, MaxConn int) (sp *SessionPool) {
 }
 
 func (sp *SessionPool) AddSessionFactory(sf AbstractSessionFactory) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.muf.Lock()
+	defer sp.muf.Unlock()
 	sp.asfs = append(sp.asfs, sf)
 }
 
@@ -76,7 +76,7 @@ func (sp *SessionPool) Remove(s *Session) (n int, err error) {
 	return 0, ErrSessionNotFound
 }
 
-func (sp *SessionPool) GetSess() (sess *Session, err error) {
+func (sp *SessionPool) Get() (sess *Session, err error) {
 	if len(sp.sess) == 0 {
 		err = sp.createSession(func() bool {
 			return len(sp.sess) == 0
@@ -105,13 +105,14 @@ func (sp *SessionPool) GetSess() (sess *Session, err error) {
 }
 
 func (sp *SessionPool) createSession(checker func() bool) (err error) {
-	sp.mud.Lock()
-	defer sp.mud.Unlock()
+	sp.muf.Lock()
+	defer sp.muf.Unlock()
 
 	if checker != nil && !checker() {
 		return
 	}
 
+	// FIXME: which one is right?
 	sess, err := sp.asfs[0].CreateSession()
 	if err != nil {
 		log.Error("%s", err)
@@ -162,7 +163,7 @@ func (sp *SessionPool) sessRun(sess *Session) {
 }
 
 func (sp *SessionPool) Dial(network, address string) (net.Conn, error) {
-	sess, err := sp.GetSess()
+	sess, err := sp.Get()
 	if err != nil {
 		return nil, nil
 	}
@@ -170,7 +171,7 @@ func (sp *SessionPool) Dial(network, address string) (net.Conn, error) {
 }
 
 func (sp *SessionPool) LookupIP(host string) (addrs []net.IP, err error) {
-	sess, err := sp.GetSess()
+	sess, err := sp.Get()
 	if err != nil {
 		return
 	}

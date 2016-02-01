@@ -1,0 +1,104 @@
+package main
+
+import (
+	"net"
+	"net/http"
+
+	"github.com/shell909090/goproxy/cryptconn"
+	"github.com/shell909090/goproxy/ipfilter"
+	"github.com/shell909090/goproxy/msocks"
+	"github.com/shell909090/goproxy/sutils"
+)
+
+func httpserver(addr string, handler http.Handler) {
+	for {
+		err := http.ListenAndServe(addr, handler)
+		if err != nil {
+			log.Error("%s", err.Error())
+			return
+		}
+	}
+}
+
+func run_server(basecfg *Config) (err error) {
+	cfg, err := LoadServerConfig(basecfg)
+	if err != nil {
+		return
+	}
+
+	listener, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return
+	}
+
+	listener, err = cryptconn.NewListener(listener, cfg.Cipher, cfg.Key)
+	if err != nil {
+		return
+	}
+
+	svr, err := msocks.NewServer(cfg.Auth, sutils.DefaultTcpDialer)
+	if err != nil {
+		return
+	}
+
+	if cfg.AdminIface != "" {
+		mux := http.NewServeMux()
+		NewMsocksManager(svr.SessionPool).Register(mux)
+		go httpserver(cfg.AdminIface, mux)
+	}
+
+	return svr.Serve(listener)
+}
+
+func run_httproxy(basecfg *Config) (err error) {
+	cfg, err := LoadClientConfig(basecfg)
+	if err != nil {
+		return
+	}
+
+	var dialer sutils.Dialer
+	sp := msocks.CreateSessionPool(cfg.MinSess, cfg.MaxConn)
+
+	for _, srv := range cfg.Servers {
+		cipher := srv.Cipher
+		if cipher == "" {
+			cipher = cfg.Cipher
+		}
+		dialer, err = cryptconn.NewDialer(sutils.DefaultTcpDialer, cipher, srv.Key)
+		if err != nil {
+			return
+		}
+		var sf msocks.AbstractSessionFactory
+		sf, err = msocks.NewSessionFactory(dialer, srv.Server, srv.Username, srv.Password)
+		if err != nil {
+			return
+		}
+		sp.AddSessionFactory(sf)
+	}
+
+	dialer = sp
+
+	if cfg.DnsNet == TypeInternal {
+		sutils.DefaultLookuper = sp
+	}
+
+	if cfg.AdminIface != "" {
+		mux := http.NewServeMux()
+		NewMsocksManager(sp).Register(mux)
+		go httpserver(cfg.AdminIface, mux)
+	}
+
+	if cfg.Blackfile != "" {
+		dialer, err = ipfilter.NewFilteredDialer(
+			dialer, sutils.DefaultTcpDialer, cfg.Blackfile)
+		if err != nil {
+			return
+		}
+	}
+
+	for _, pm := range cfg.Portmaps {
+		go CreatePortmap(pm, dialer)
+	}
+
+	return http.ListenAndServe(cfg.Listen, NewProxy(dialer, cfg.HttpUser, cfg.HttpPassword))
+}

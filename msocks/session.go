@@ -22,17 +22,19 @@ type Session struct {
 	next_id uint16
 	ports   map[uint16]FrameSender
 
-	dialer sutils.Dialer
-	*SpeedCounter
+	dialer   sutils.Dialer
+	Readcnt  *sutils.SpeedCounter
+	Writecnt *sutils.SpeedCounter
 }
 
 func NewSession(conn net.Conn) (s *Session) {
 	s = &Session{
-		conn:   conn,
-		closed: false,
-		ports:  make(map[uint16]FrameSender, 0),
+		conn:     conn,
+		closed:   false,
+		ports:    make(map[uint16]FrameSender, 0),
+		Readcnt:  sutils.NewSpeedCounter(),
+		Writecnt: sutils.NewSpeedCounter(),
 	}
-	s.SpeedCounter = NewSpeedCounter(s)
 	log.Notice("session %s created.", s.String())
 	return
 }
@@ -124,6 +126,9 @@ func (s *Session) Close() (err error) {
 	s.plock.Lock()
 	defer s.plock.Unlock()
 
+	s.Readcnt.Close()
+	s.Writecnt.Close()
+
 	for _, v := range s.ports {
 		v.CloseFrame()
 	}
@@ -149,7 +154,7 @@ func (s *Session) LocalPort() int {
 
 func (s *Session) SendFrame(f Frame) (err error) {
 	log.Debug("sent %s", f.Debug())
-	s.SpeedCounter.WriteBytes(uint32(f.GetSize() + 5))
+	s.Writecnt.Add(uint32(f.GetSize() + 5))
 
 	buf, err := f.Packed()
 	if err != nil {
@@ -185,7 +190,7 @@ func (s *Session) Run() {
 		}
 
 		log.Debug("recv %s", f.Debug())
-		s.SpeedCounter.ReadBytes(uint32(f.GetSize() + 5))
+		s.Readcnt.Add(uint32(f.GetSize() + 5))
 
 		switch ft := f.(type) {
 		default:

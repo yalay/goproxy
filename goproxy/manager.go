@@ -37,13 +37,13 @@ const (
         <th>Recv-Q</th><th>Send-Q</th><th width="50%">Target</th>
       </tr>
       {{if .GetSize}}
-      {{range $sess := .GetSessions}}
+      {{range $sess, $non := .GetSessions}}
       <tr>
 	<td>{{$sess.String}}</td>
 	<td></td>
 	<td>{{$sess.GetSize}}</td>
-	<td>{{$sess.GetReadSpeed}}</td>
-	<td>{{$sess.GetWriteSpeed}}</td>
+	<td>{{$sess.Readcnt.Spd}}</td>
+	<td>{{$sess.Writecnt.Spd}}</td>
 	<td>{{$sess.RemoteAddr}}</td>
       </tr>
       {{range $conn := $sess.GetSortedPorts}}

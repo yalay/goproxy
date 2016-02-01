@@ -80,6 +80,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
+
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
 		log.Error("%s", err)

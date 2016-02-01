@@ -69,7 +69,7 @@ func (sf *SessionFactory) CreateSession() (s *Session, err error) {
 type SessionPool struct {
 	mu      sync.Mutex // sess pool locker
 	muf     sync.Mutex // factory locker
-	sess    []*Session
+	sess    map[*Session]struct{}
 	asfs    []*SessionFactory
 	MinSess int
 	MaxConn int
@@ -83,7 +83,7 @@ func CreateSessionPool(MinSess, MaxConn int) (sp *SessionPool) {
 		MaxConn = 16
 	}
 	sp = &SessionPool{
-		sess:    make([]*Session, 0),
+		sess:    make(map[*Session]struct{}, 0),
 		MinSess: MinSess,
 		MaxConn: MaxConn,
 	}
@@ -106,38 +106,34 @@ func (sp *SessionPool) AddSessionFactory(dialer sutils.Dialer, serveraddr, usern
 func (sp *SessionPool) CutAll() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	for _, s := range sp.sess {
+	for s, _ := range sp.sess {
 		s.Close()
 	}
-	sp.sess = make([]*Session, 0)
+	sp.sess = make(map[*Session]struct{}, 0)
 }
 
 func (sp *SessionPool) GetSize() int {
 	return len(sp.sess)
 }
 
-func (sp *SessionPool) GetSessions() (sess []*Session) {
+func (sp *SessionPool) GetSessions() (sess map[*Session]struct{}) {
 	return sp.sess
 }
 
 func (sp *SessionPool) Add(s *Session) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	sp.sess = append(sp.sess, s)
+	sp.sess[s] = struct{}{}
 }
 
-func (sp *SessionPool) Remove(s *Session) (n int, err error) {
+func (sp *SessionPool) Remove(s *Session) (err error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	for i, sess := range sp.sess {
-		if s == sess {
-			n := len(sp.sess)
-			sp.sess[i], sp.sess[n-1] = sp.sess[n-1], sp.sess[i]
-			sp.sess = sp.sess[:n-1]
-			return len(sp.sess), nil
-		}
+	if _, ok := sp.sess[s]; !ok {
+		return ErrSessionNotFound
 	}
-	return 0, ErrSessionNotFound
+	delete(sp.sess, s)
+	return
 }
 
 func (sp *SessionPool) Get() (sess *Session, err error) {
@@ -207,7 +203,7 @@ func (sp *SessionPool) createSession(checker func() bool) (err error) {
 
 func (sp *SessionPool) getLessSess() (sess *Session, size int) {
 	size = -1
-	for _, s := range sp.sess {
+	for s, _ := range sp.sess {
 		if size == -1 || s.GetSize() < size {
 			sess = s
 			size = s.GetSize()
@@ -218,7 +214,7 @@ func (sp *SessionPool) getLessSess() (sess *Session, size int) {
 
 func (sp *SessionPool) sessRun(sess *Session) {
 	defer func() {
-		_, err := sp.Remove(sess)
+		err := sp.Remove(sess)
 		if err != nil {
 			log.Error("%s", err)
 			return

@@ -3,7 +3,7 @@
     "listen": ":5234",
 
     "logfile": "client.log",
-    "loglevel": "INFO",
+    "loglevel": "NOTICE",
     "adminiface": "127.0.0.1:8888",
 
     "dnsnet": "internal",

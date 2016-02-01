@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DIAL_RETRY   = 3
+	DIAL_RETRY   = 2
 	DIAL_TIMEOUT = 30
 	AUTH_TIMEOUT = 10
 	DNS_TIMEOUT  = 30

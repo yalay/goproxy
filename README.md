@@ -10,6 +10,12 @@ goproxy是基于go写的隧道代理服务器，主要用于翻墙。
 
 注意，新版本不再内置dns清洗，建议采用其他dns清理方案。但带有udp port forward和dns over msocks的功能。
 
+## 加密协议
+
+协议（一般）使用AES-CBC来加密数据，在服务器-客户端间预先共享一个key。在连接时互相交换IV。
+
+如果使用AES，双方需要先保持16bytes的随机数用做密钥。这些随机数被base64编码放在key字段中。服务器和客户端需要保持一致。
+
 ## msocks协议
 
 msocks协议最大的改进是增加了连接复用能力，这个功能允许你在一个TCP连接上封装多个tcp连接。由于qsocks协议非常快速的建立和释放连接，并且每次连接时必然是连接方向目标方发送大量数据，目标方再反向发送。因此有可能被流量模型发现。msocks保持这个连接，因此连接建立速度更快，没有大量的打开和关闭开销，而且流量模型很难发现。
@@ -28,13 +34,17 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 
 在msocks的客户端，一次会主动发起一个连接。当连接数低于一定个数时会主动补充(目前编译时设定为1)。
 
-在连接时，会寻找承载tcp最少的一根去用。如果所有连接中，承载tcp最小的连接数大于一定值(目前是16)，那么会在后台再增加一根tcp。
+在连接时，会寻找承载tcp最少的一根去用。如果所有连接中，承载tcp最小的连接数大于一定值(配置中的maxconn)，那么会在后台再增加一根tcp（不影响当前连接的选择）。
 
 当msocks连接断开时，在上面承载的tcp不会主动迁移到其他msocks上，而是会跟着断开。如果连接池满足一定规则(如上所述)，那么断开的连接会重新发起。
 
 连接池不会主动释放链接。但是在断开时不满足规则的链接不会被重建。这使得连接池可以借助链接的主动断开回收msocks连接。
 
 总体来说，连接池使得每个tcp承载的最大连接数保持在15-25左右。避免大量连接堵塞在一个tcp上，同时也尽力避免频繁的tcp连接握手和释放。
+
+## 服务器选择规则
+
+当链接数不足时，会发起新连接。由于配置允许写入多个服务器端，因此程序会随机选择一个配置尝试连接。如果尝试失败（无法握手或者超时），会选择下一个配置。如此重复两轮，如果都无法连接，则连接发起失败。
 
 # 用法和配置说明
 
@@ -46,35 +56,23 @@ msocks协议最大的改进是增加了连接复用能力，这个功能允许�
 
 * mode: 运行模式，可以为server/http/留空。留空是个特殊模式，表示不要启动。
 * listen: 监听地址，一般是:port，表示监听所有interface的该端口。
-* server: 服务地址，在http模式下需要，表示需要连接的目标地址。
 * logfile: log文件路径，留空表示输出到stdout。在deb包中建议留空，用init脚本的机制来生成日志文件。
 * loglevel: 日志级别，必须设定。支持EMERG/ALERT/CRIT/ERROR/WARNING/NOTICE/INFO/DEBUG。
 * adminiface: 服务器端的控制端口，可以看到服务器端有多少个连接，分别是谁。
 * dnsaddrs: dns查询的目标地址列表。如不定义则采用系统自带的dns系统，会读取默认配置并使用。
 * dnsnet: dns的网络模式，默认为udp模式，设定为tcp可以采用tcp模式，设定为internal采用内置模式。
 * cipher: 加密算法，可以为aes/des/tripledes，默认aes。
-* key: 密钥。16个随机数据base64后的结果。
-* blackfile: 黑名单文件，http模式下可选。
-* minsess: 最小session数，默认为1。
-* maxconn: 一个session的最大connection数，超过这个数值会启动新session。默认为16。
-* username: 连接用户名，http模式下需要。
-* password: 连接密码，http模式下需要。
-* auth: 认证用户名/密码对，server模式下需要。
-* httpuser: http authentication username.
-* httppassword: http authentication password.
-* portmaps: 端口映射配置，将本地端口映射到远程任意一个端口。
-
-其中portmaps的配置应当是一个列表，每个成员都应设定如下的值。
-
-* net: 映射模式，支持tcp/tcp4/tcp6/udp/udp4/udp6。注意：6没测试过。
-* src: 源地址。
-* dst: 目标地址。
 
 ## server模式
 
 服务器模式运行在境外机器上，监听某个端口提供服务。客户端可以连接服务器端，通过他连接目标tcp。中间所用的协议是tcp级的。
 
 服务器模式一般需要定义用户名/密码对以验证客户端身份。用户名/密码对在配置文件的auth项目下定义。
+
+## server模式专用配置
+
+* key: 密钥。16个随机数据base64后的结果。
+* auth: dict类型。认证用户名/密码对。
 
 ## http模式
 
@@ -83,6 +81,30 @@ http模式运行在本地，需要一个境外的server服务器做支撑，对�
 连接到http模式的服务上，可以按照http代理协议访问某个目标。服务首先会对目标做DNS查询，然后根据IP地址区分，如果在国内，直接连接。如果国外，使用server去连接。区分的基础是IP段分配列表。
 
 地址黑名单（直接访问的项）在配置文件blackfile下定义。
+
+## http模式专用配置
+
+* blackfile: 黑名单文件，http模式下可选。
+* minsess: 最小session数，默认为1。
+* maxconn: 一个session的最大connection数，超过这个数值会启动新session。默认为16。
+* servers: 服务器列表。
+* httpuser: 客户端访问此http代理服务时的用户名。
+* httppassword: 客户端访问此http代理服务时的密码。
+* portmaps: 端口映射配置，将本地端口映射到远程任意一个端口。
+
+其中servers是一个列表，成员定义如下：
+
+* server: 中间代理服务器地址。
+* cipher: 加密算法，可以为aes/des/tripledes。如果未定义，则以config层中的配置为准。
+* key: 密钥。16个随机数据base64后的结果。
+* username: 连接用户名。
+* password: 连接密码。
+
+其中portmaps的配置应当是一个列表，每个成员都应设定如下的值。
+
+* net: 映射模式，支持tcp/tcp4/tcp6/udp/udp4/udp6。注意：6没测试过。
+* src: 源地址。
+* dst: 目标地址。
 
 ## 黑名单文件
 
@@ -148,20 +170,24 @@ If dns response get multiple result, one of them matched blacklist will made gop
 	{
 		"mode": "http",
 		"listen": ":5233",
-		"server": "srv:5233",
 	 
 		"logfile": "",
 		"loglevel": "WARNING",
 		"adminiface": "127.0.0.1:5234"
 
 		"dnsnet": "internal",
-
 		"cipher": "aes",
-		"key": "[your key]",
+
 		"blackfile": "/usr/share/goproxy/routes.list.gz",
-	 
-		"username": "username",
-		"password": "password"
+
+        "servers": [
+		    {
+			    "server": "srv:5233",
+				"key": "[your key]",
+			    "username": "username",
+				"password": "password"
+			}
+		]
 	}
 
 ## port mapping样例

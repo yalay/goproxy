@@ -68,12 +68,7 @@ func run_httproxy(basecfg *Config) (err error) {
 		if err != nil {
 			return
 		}
-		var sf msocks.AbstractSessionFactory
-		sf, err = msocks.NewSessionFactory(dialer, srv.Server, srv.Username, srv.Password)
-		if err != nil {
-			return
-		}
-		sp.AddSessionFactory(sf)
+		sp.AddSessionFactory(dialer, srv.Server, srv.Username, srv.Password)
 	}
 
 	dialer = sp

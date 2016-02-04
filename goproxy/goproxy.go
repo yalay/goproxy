@@ -100,9 +100,6 @@ func LoadClientConfig(basecfg *Config) (cfg ClientConfig, err error) {
 		return
 	}
 	cfg.Config = *basecfg
-	if cfg.MinSess == 0 {
-		cfg.MinSess = 1
-	}
 	if cfg.MaxConn == 0 {
 		cfg.MaxConn = 16
 	}

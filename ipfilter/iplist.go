@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -25,6 +24,42 @@ type IPFilter struct {
 	idx2 map[uint16][]*net.IPNet
 }
 
+func ListConatins(iplist []*net.IPNet, ip net.IP) bool {
+	for _, ipnet := range iplist {
+		if ipnet.Contains(ip) {
+			log.Debug("%s matched %s.", ip.String(), ipnet.String())
+			return true
+		}
+	}
+	return false
+}
+
+func (f IPFilter) Contain(ip net.IP) bool {
+	if x := ip.To4(); x != nil {
+		ip = x
+	}
+
+	prefix2 := binary.BigEndian.Uint16(ip[:2])
+	if iplist, ok := f.idx2[prefix2]; ok {
+		if ListConatins(iplist, ip) {
+			return true
+		}
+	}
+
+	prefix1 := ip[0]
+	if iplist, ok := f.idx1[prefix1]; ok {
+		if ListConatins(iplist, ip) {
+			return true
+		}
+	}
+
+	if ListConatins(f.rest, ip) {
+		return true
+	}
+
+	log.Debug("%s not match anything.", ip.String())
+	return false
+}
 func ParseLine(line string) (ipnet *net.IPNet, err error) {
 	_, ipnet, err = net.ParseCIDR(line)
 	if err == nil {
@@ -92,46 +127,9 @@ QUIT:
 		counter++
 	}
 
-	log.Info("blacklist loaded %d record(s), %d index1, %d index2 and %d no indexed.",
+	log.Notice("blacklist loaded %d record(s), %d index1, %d index2 and %d no indexed.",
 		counter, len(filter.idx1), len(filter.idx2), len(filter.rest))
 	return
-}
-
-func ListConatins(iplist []*net.IPNet, ip net.IP) bool {
-	for _, ipnet := range iplist {
-		if ipnet.Contains(ip) {
-			log.Debug("%s matched %s.", ip.String(), ipnet.String())
-			return true
-		}
-	}
-	return false
-}
-
-func (f IPFilter) Contain(ip net.IP) bool {
-	if x := ip.To4(); x != nil {
-		ip = x
-	}
-
-	prefix2 := binary.BigEndian.Uint16(ip[:2])
-	if iplist, ok := f.idx2[prefix2]; ok {
-		if ListConatins(iplist, ip) {
-			return true
-		}
-	}
-
-	prefix1 := ip[0]
-	if iplist, ok := f.idx1[prefix1]; ok {
-		if ListConatins(iplist, ip) {
-			return true
-		}
-	}
-
-	if ListConatins(f.rest, ip) {
-		return true
-	}
-
-	log.Debug("%s not match anything.", ip.String())
-	return false
 }
 
 func ReadIPListFile(filename string) (filter *IPFilter, err error) {
@@ -156,54 +154,49 @@ func ReadIPListFile(filename string) (filter *IPFilter, err error) {
 	return ReadIPList(f)
 }
 
-type FilteredDialer struct {
-	sutils.Dialer
-	dialer   sutils.Dialer
-	lookuper sutils.Lookuper
-	filter   *IPFilter
+type FilterPair struct {
+	dialer sutils.Dialer
+	filter *IPFilter
 }
 
-func NewFilteredDialer(dialer sutils.Dialer, dialer2 sutils.Dialer,
-	filename string) (fd *FilteredDialer, err error) {
+type FilteredDialer struct {
+	dialer   sutils.Dialer
+	fps      []*FilterPair
+	lookuper sutils.Lookuper
+}
 
+func NewFilteredDialer(dialer sutils.Dialer) (fd *FilteredDialer) {
 	fd = &FilteredDialer{
-		Dialer:   dialer,
-		dialer:   dialer2,
+		dialer:   dialer,
 		lookuper: CreateDNSCache(),
-	}
-
-	if filename != "" {
-		fd.filter, err = ReadIPListFile(filename)
-		return
 	}
 	return
 }
 
-func Getaddr(lookuper sutils.Lookuper, hostname string) (ip net.IP) {
-	ip = net.ParseIP(hostname)
+func (fd *FilteredDialer) LoadFilter(dialer sutils.Dialer, filename string) (err error) {
+	fp := &FilterPair{dialer: dialer}
+	fp.filter, err = ReadIPListFile(filename)
+	fd.fps = append(fd.fps, fp)
+	return
+}
+
+func Getaddrs(lookuper sutils.Lookuper, hostname string) (ips []net.IP) {
+	ip := net.ParseIP(hostname)
 	if ip != nil {
+		ips = append(ips, ip)
 		return
 	}
-	addrs, err := lookuper.LookupIP(hostname)
-
-	n := len(addrs)
+	ips, err := lookuper.LookupIP(hostname)
 	if err != nil {
-		return nil
+		log.Error("%s", err.Error())
 	}
-	switch n {
-	case 0:
-		return nil
-	case 1:
-		return addrs[0]
-	default:
-		return addrs[rand.Intn(n)]
-	}
+	return
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
 	log.Info("filter dial: %s", address)
-	if fd.filter == nil {
-		return fd.Dialer.Dial(network, address)
+	if len(fd.fps) == 0 {
+		return fd.dialer.Dial(network, address)
 	}
 
 	hostname, _, err := net.SplitHostPort(address)
@@ -212,14 +205,18 @@ func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err erro
 		return
 	}
 
-	addr := Getaddr(fd.lookuper, hostname)
-	if addr == nil {
+	addrs := Getaddrs(fd.lookuper, hostname)
+	if addrs == nil {
 		return nil, ErrDNSNotFound
 	}
 
-	if fd.filter.Contain(addr) {
-		return fd.dialer.Dial(network, address)
+	for _, fp := range fd.fps {
+		for _, addr := range addrs {
+			if fp.filter.Contain(addr) {
+				return fp.dialer.Dial(network, address)
+			}
+		}
 	}
 
-	return fd.Dialer.Dial(network, address)
+	return fd.dialer.Dial(network, address)
 }

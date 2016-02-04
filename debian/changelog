@@ -1,3 +1,9 @@
+goproxy (2.4.2) unstable; urgency=medium
+
+  * support multi server.
+
+ -- Shell.Xu <shell909090@gmail.com>  Thu, 04 Feb 2016 14:38:45 +0800
+
 goproxy (2.4.1) unstable; urgency=medium
 
   * new ip filter system.

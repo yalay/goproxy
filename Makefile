@@ -14,11 +14,16 @@ buildtar: build
 
 clean:
 	rm -rf bin pkg
-	debian/rules clean
+	debclean
 
 test:
 	go test github.com/shell909090/goproxy/ipfilter
 	go test github.com/shell909090/goproxy/msocks
+
+install-dep:
+	go get github.com/shell909090/goproxy
+	go get github.com/op/go-logging
+	go get github.com/miekg/dns
 
 build:
 	mkdir -p bin
@@ -29,7 +34,6 @@ install: build
 	install -m 755 -s bin/goproxy $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/usr/share/goproxy/
 	install -m 644 debian/routes.list.gz $(DESTDIR)/usr/share/goproxy/
-	install -m 644 README.html $(DESTDIR)/usr/share/goproxy/
 	install -d $(DESTDIR)/etc/goproxy/
 	install -m 644 debian/config.json $(DESTDIR)/etc/goproxy/
 

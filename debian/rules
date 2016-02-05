@@ -6,6 +6,8 @@
 
 export DH_OPTIONS
 export DH_GOPKG := github.com/shell909090/goproxy
+export GOPATH := $(shell realpath `pwd`"/../../../.."):/usr/share/gocode
 
 %:
-	dh $@ --buildsystem=golang --with=golang
+	dh $@
+ # --buildsystem=golang --with=golang

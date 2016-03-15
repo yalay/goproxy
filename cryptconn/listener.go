@@ -11,7 +11,7 @@ type Listener struct {
 }
 
 func NewListener(listener net.Listener, method string, key string) (l *Listener, err error) {
-	log.Info("Crypt Listener with %s preparing.", method)
+	log.Infof("Crypt Listener with %s preparing.", method)
 	c, err := NewBlock(method, key)
 	if err != nil {
 		return
@@ -35,7 +35,7 @@ func (l *Listener) Accept() (conn net.Conn, err error) {
 		if err == nil {
 			return
 		}
-		log.Error("%s", err.Error())
+		log.Errorf("%s", err.Error())
 	}
 	return
 }

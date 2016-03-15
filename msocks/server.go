@@ -18,7 +18,7 @@ type MsocksServer struct {
 func NewServer(auth map[string]string, dialer sutils.Dialer) (ms *MsocksServer, err error) {
 	if dialer == nil {
 		err = errors.New("empty dialer")
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		return
 	}
 	ms = &MsocksServer{
@@ -43,7 +43,7 @@ func (ms *MsocksServer) OnAuth(stream io.ReadWriteCloser) (err error) {
 		return ErrUnexpectedPkg
 	}
 
-	log.Notice("auth with username: %s, password: %s.", ft.Username, ft.Password)
+	log.Noticef("auth with username: %s, password: %s.", ft.Username, ft.Password)
 	if ms.userpass != nil {
 		password1, ok := ms.userpass[ft.Username]
 		if !ok || (ft.Password != password1) {
@@ -73,7 +73,7 @@ func (ms *MsocksServer) OnAuth(stream io.ReadWriteCloser) (err error) {
 }
 
 func (ms *MsocksServer) Handler(conn net.Conn) {
-	log.Notice("connection come from: %s => %s.", conn.RemoteAddr(), conn.LocalAddr())
+	log.Noticef("connection come from: %s => %s.", conn.RemoteAddr(), conn.LocalAddr())
 
 	ti := time.AfterFunc(AUTH_TIMEOUT*time.Second, func() {
 		log.Notice(ErrAuthFailed.Error(), conn.RemoteAddr())
@@ -95,7 +95,7 @@ func (ms *MsocksServer) Handler(conn net.Conn) {
 	defer ms.Remove(sess)
 	sess.Run()
 
-	log.Notice("server session %d quit: %s => %s.",
+	log.Noticef("server session %d quit: %s => %s.",
 		sess.LocalPort(), conn.RemoteAddr(), conn.LocalAddr())
 }
 

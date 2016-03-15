@@ -171,7 +171,7 @@ func main() {
 		return
 	}
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 	}
 	log.Info("server stopped")
 }

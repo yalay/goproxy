@@ -47,7 +47,7 @@ func copyHeader(dst, src http.Header) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	log.Info("http: %s %s", req.Method, req.URL)
+	log.Infof("http: %s %s", req.Method, req.URL)
 
 	if p.username != "" && p.password != "" {
 		if !BasicAuth(w, req, p.username, p.password) {
@@ -72,7 +72,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	resp, err := p.transport.RoundTrip(req)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -83,7 +83,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	_, err = sutils.CoreCopy(w, resp.Body)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		return
 	}
 	return
@@ -108,7 +108,7 @@ func (p *Proxy) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 	dstconn, err := p.dialer.Dial("tcp", host)
 	if err != nil {
-		log.Error("dial failed: %s", err.Error())
+		log.Errorf("dial failed: %s", err.Error())
 		srcconn.Write([]byte("HTTP/1.0 502 OK\r\n\r\n"))
 		return
 	}

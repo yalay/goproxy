@@ -23,7 +23,7 @@ const (
 )
 
 func NewBlock(method string, key string) (c cipher.Block, err error) {
-	log.Debug("Crypt Wrapper with %s preparing.", method)
+	log.Debugf("Crypt Wrapper with %s preparing.", method)
 	byteKey, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
 		return
@@ -65,7 +65,7 @@ func SentIV(conn net.Conn, n int) (iv []byte, err error) {
 		return
 	}
 
-	log.Debug("sent iv: %x", iv)
+	log.Debugf("sent iv: %x", iv)
 	return
 }
 
@@ -79,7 +79,7 @@ func RecvIV(conn net.Conn, n int) (iv []byte, err error) {
 		return
 	}
 	conn.SetReadDeadline(time.Time{})
-	log.Debug("recv iv: %x", iv)
+	log.Debugf("recv iv: %x", iv)
 	return
 }
 
@@ -88,7 +88,7 @@ func XOR(n int, a []byte, b []byte) (r []byte) {
 	for i := 0; i < n; i++ {
 		r[i] = a[i] ^ b[i]
 	}
-	log.Debug("xor iv: %x", r)
+	log.Debugf("xor iv: %x", r)
 	return
 }
 
@@ -109,7 +109,7 @@ func ExchangeIV(conn net.Conn, n int) (iv []byte, err error) {
 	}
 
 	iv = XOR(n, ivs, ivr)
-	log.Notice("Exchange IV for %s: %x", conn.RemoteAddr().String(), iv)
+	log.Noticef("Exchange IV for %s: %x", conn.RemoteAddr().String(), iv)
 	return
 }
 

@@ -84,17 +84,17 @@ func (c *Conn) WaitForConn() (err error) {
 	fb := NewFrameSyn(c.streamid, c.Network, c.Address)
 	err = c.sess.SendFrame(fb)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		c.Final()
 		return
 	}
 
 	errno := RecvWithTimeout(c.ch, DIAL_TIMEOUT*time.Second)
 	if errno != ERR_NONE {
-		log.Error("remote connect %s failed for %d.", c.String(), errno)
+		log.Errorf("remote connect %s failed for %d.", c.String(), errno)
 		c.Final()
 	} else {
-		log.Notice("%s connected: %s => %s.", c.Network, c.String(), c.Address)
+		log.Noticef("%s connected: %s => %s.", c.Network, c.String(), c.Address)
 	}
 
 	c.ch = nil
@@ -106,16 +106,16 @@ func (c *Conn) Final() {
 
 	err := c.sess.RemovePort(c.streamid)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 	}
 
-	log.Notice("%s final.", c.String())
+	log.Noticef("%s final.", c.String())
 	c.status = ST_UNKNOWN
 	return
 }
 
 func (c *Conn) Close() (err error) {
-	log.Info("close %s.", c.String())
+	log.Infof("close %s.", c.String())
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -124,11 +124,11 @@ func (c *Conn) Close() (err error) {
 		// maybe call close twice
 		return
 	case ST_EST:
-		log.Info("%s closed from local.", c.String())
+		log.Infof("%s closed from local.", c.String())
 		fb := NewFrameFin(c.streamid)
 		err = c.sender.SendFrame(fb)
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return
 		}
 		c.status = ST_FIN_WAIT
@@ -136,12 +136,12 @@ func (c *Conn) Close() (err error) {
 		fb := NewFrameFin(c.streamid)
 		err = c.sender.SendFrame(fb)
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return
 		}
 		c.Final()
 	default:
-		log.Error("%s", ErrUnknownState.Error())
+		log.Errorf("%s", ErrUnknownState.Error())
 	}
 
 	return
@@ -151,7 +151,7 @@ func (c *Conn) SendFrame(f Frame) (err error) {
 	switch ft := f.(type) {
 	default:
 		err = ErrUnexpectedPkg
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		c.Close()
 		return
 	case *FrameResult:
@@ -163,7 +163,7 @@ func (c *Conn) SendFrame(f Frame) (err error) {
 	case *FrameFin:
 		return c.InFin(ft)
 	case *FrameRst:
-		log.Debug("reset %s.", c.String())
+		log.Debugf("reset %s.", c.String())
 		c.Final()
 	}
 	return
@@ -191,7 +191,7 @@ func (c *Conn) InConnect(errno uint32) (err error) {
 }
 
 func (c *Conn) InData(ft *FrameData) (err error) {
-	log.Info("%s recved %d bytes.", c.String(), len(ft.Data))
+	log.Infof("%s recved %d bytes.", c.String(), len(ft.Data))
 	err = c.rqueue.Push(ft.Data)
 	if err != nil {
 		return
@@ -205,7 +205,7 @@ func (c *Conn) InWnd(ft *FrameWnd) (err error) {
 	defer c.wlock.Unlock()
 	c.wbufsize -= ft.Window
 	c.wev.Signal()
-	log.Debug("remote readed %d, write buffer size: %d.",
+	log.Debugf("remote readed %d, write buffer size: %d.",
 		ft.Window, c.wbufsize)
 	return nil
 }
@@ -220,7 +220,7 @@ func (c *Conn) InFin(ft *FrameFin) (err error) {
 
 	switch c.status {
 	case ST_EST:
-		log.Info("%s closed from remote.", c.String())
+		log.Infof("%s closed from remote.", c.String())
 		// close read pipe but not sent fin back
 		// wait reader to close
 		c.status = ST_CLOSE_WAIT
@@ -283,7 +283,7 @@ func (c *Conn) Read(data []byte) (n int, err error) {
 	fb := NewFrameWnd(c.streamid, uint32(n))
 	err = c.sender.SendFrame(fb)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 	}
 	return
 }
@@ -305,15 +305,15 @@ func (c *Conn) Write(data []byte) (n int, err error) {
 		err = c.WriteSlice(data[:size])
 
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return
 		}
-		log.Debug("%s send chunk size %d at %d.", c.String(), size, n)
+		log.Debugf("%s send chunk size %d at %d.", c.String(), size, n)
 
 		data = data[size:]
 		n += int(size)
 	}
-	log.Info("%s sent %d bytes.", c.String(), n)
+	log.Infof("%s sent %d bytes.", c.String(), n)
 	return
 }
 
@@ -321,18 +321,18 @@ func (c *Conn) WriteSlice(data []byte) (err error) {
 	f := NewFrameData(c.streamid, data)
 
 	if c.status != ST_EST && c.status != ST_CLOSE_WAIT {
-		log.Error("status %d found in write slice", c.status)
+		log.Errorf("status %d found in write slice", c.status)
 		return ErrState
 	}
 
-	log.Debug("write buffer size: %d, write len: %d", c.wbufsize, len(data))
+	log.Debugf("write buffer size: %d, write len: %d", c.wbufsize, len(data))
 	for c.wbufsize+uint32(len(data)) > WINDOWSIZE {
 		c.wev.Wait()
 	}
 
 	err = c.sender.SendFrame(f)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		return
 	}
 	c.wbufsize += uint32(len(data))

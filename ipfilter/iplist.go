@@ -109,7 +109,7 @@ QUIT:
 
 		ipnet, err = ParseLine(line)
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return nil, err
 		}
 
@@ -133,12 +133,12 @@ QUIT:
 }
 
 func ReadIPListFile(filename string) (filter *IPFilter, err error) {
-	log.Info("load iplist from file %s.", filename)
+	log.Infof("load iplist from file %s.", filename)
 
 	var f io.ReadCloser
 	f, err = os.Open(filename)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 		return
 	}
 	defer f.Close()
@@ -146,7 +146,7 @@ func ReadIPListFile(filename string) (filter *IPFilter, err error) {
 	if strings.HasSuffix(filename, ".gz") {
 		f, err = gzip.NewReader(f)
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return
 		}
 	}
@@ -188,20 +188,20 @@ func Getaddrs(lookuper sutils.Lookuper, hostname string) (ips []net.IP) {
 	}
 	ips, err := lookuper.LookupIP(hostname)
 	if err != nil {
-		log.Error("%s", err.Error())
+		log.Errorf("%s", err.Error())
 	}
 	return
 }
 
 func (fd *FilteredDialer) Dial(network, address string) (conn net.Conn, err error) {
-	log.Info("filter dial: %s", address)
+	log.Infof("filter dial: %s", address)
 	if len(fd.fps) == 0 {
 		return fd.dialer.Dial(network, address)
 	}
 
 	hostname, _, err := net.SplitHostPort(address)
 	if err != nil {
-		log.Error("%s", err.Error())
+		log.Errorf("%s", err.Error())
 		return
 	}
 

@@ -18,7 +18,7 @@ type SessionFactory struct {
 }
 
 func (sf *SessionFactory) CreateSession() (s *Session, err error) {
-	log.Notice("msocks try to connect %s.", sf.serveraddr)
+	log.Noticef("msocks try to connect %s.", sf.serveraddr)
 
 	conn, err := sf.Dialer.Dial("tcp", sf.serveraddr)
 	if err != nil {
@@ -33,7 +33,7 @@ func (sf *SessionFactory) CreateSession() (s *Session, err error) {
 		ti.Stop()
 	}()
 
-	log.Notice("auth with username: %s, password: %s.", sf.username, sf.password)
+	log.Noticef("auth with username: %s, password: %s.", sf.username, sf.password)
 	fb := NewFrameAuth(0, sf.username, sf.password)
 	buf, err := fb.Packed()
 	if err != nil {
@@ -184,7 +184,7 @@ func (sp *SessionPool) createSession(checker func() bool) (err error) {
 		asf := sp.asfs[i%len(sp.asfs)]
 		sess, err = asf.CreateSession()
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			continue
 		}
 		break
@@ -216,7 +216,7 @@ func (sp *SessionPool) sessRun(sess *Session) {
 	defer func() {
 		err := sp.Remove(sess)
 		if err != nil {
-			log.Error("%s", err)
+			log.Errorf("%s", err)
 			return
 		}
 

@@ -129,7 +129,7 @@ func (mm *MsocksManager) Register(mux *http.ServeMux) {
 func (mm *MsocksManager) HandlerMain(w http.ResponseWriter, req *http.Request) {
 	err := tmpl_sess.Execute(w, mm.sp)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 	}
 	return
 }
@@ -152,7 +152,7 @@ func (mm *MsocksManager) HandlerLookup(w http.ResponseWriter, req *http.Request)
 
 	err = tmpl_addr.Execute(w, addrs)
 	if err != nil {
-		log.Error("%s", err)
+		log.Errorf("%s", err)
 	}
 	return
 }

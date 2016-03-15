@@ -22,7 +22,7 @@ func NewQueue() (q *Queue) {
 }
 
 func (q *Queue) Push(v interface{}) (err error) {
-	log.Debug("push queue: %p", q)
+	log.Debugf("push queue: %p", q)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if q.closed {
@@ -34,7 +34,7 @@ func (q *Queue) Push(v interface{}) (err error) {
 }
 
 func (q *Queue) Pop(block bool) (v interface{}, err error) {
-	log.Debug("pop queue: %p, block: %t", q, block)
+	log.Debugf("pop queue: %p, block: %t", q, block)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	var e *list.Element
@@ -53,7 +53,7 @@ func (q *Queue) Pop(block bool) (v interface{}, err error) {
 }
 
 func (q *Queue) Close() (err error) {
-	log.Debug("close queue: %p", q)
+	log.Debugf("close queue: %p", q)
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if q.closed {

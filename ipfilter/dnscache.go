@@ -34,7 +34,7 @@ func (dc DNSCache) LookupIP(hostname string) (addrs []net.IP, err error) {
 		if !ok {
 			err = errType
 		}
-		log.Debug("hostname %s cached.", hostname)
+		log.Debugf("hostname %s cached.", hostname)
 		return
 	}
 

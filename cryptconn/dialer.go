@@ -13,7 +13,7 @@ type Dialer struct {
 }
 
 func NewDialer(dialer sutils.Dialer, method string, key string) (d *Dialer, err error) {
-	log.Info("Crypt Dialer with %s preparing.", method)
+	log.Infof("Crypt Dialer with %s preparing.", method)
 	c, err := NewBlock(method, key)
 	if err != nil {
 		return
@@ -27,7 +27,7 @@ func NewDialer(dialer sutils.Dialer, method string, key string) (d *Dialer, err 
 }
 
 func (d *Dialer) Dial(network, addr string) (conn net.Conn, err error) {
-	log.Info("Ctypt Dailer connect %s", addr)
+	log.Infof("Ctypt Dailer connect %s", addr)
 	conn, err = d.Dialer.Dial(network, addr)
 	if err != nil {
 		return

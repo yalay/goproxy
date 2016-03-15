@@ -14,7 +14,7 @@ func httpserver(addr string, handler http.Handler) {
 	for {
 		err := http.ListenAndServe(addr, handler)
 		if err != nil {
-			log.Error("%s", err.Error())
+			log.Errorf("%s", err.Error())
 			return
 		}
 	}
@@ -87,7 +87,7 @@ func run_httproxy(basecfg *Config) (err error) {
 		fdialer := ipfilter.NewFilteredDialer(dialer)
 		err = fdialer.LoadFilter(sutils.DefaultTcpDialer, cfg.Blackfile)
 		if err != nil {
-			log.Error("%s", err.Error())
+			log.Errorf("%s", err.Error())
 			return
 		}
 		dialer = fdialer

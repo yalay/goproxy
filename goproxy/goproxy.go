@@ -69,7 +69,7 @@ type ClientConfig struct {
 }
 
 func init() {
-	flag.StringVar(&ConfigFile, "config", "/etc/goproxy/config.json", "config file")
+	flag.StringVar(&ConfigFile, "config", "config.json", "config file")
 	flag.Parse()
 }
 
